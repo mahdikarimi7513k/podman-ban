@@ -11,6 +11,9 @@ uploads/*
 # agent workspace (local-only)
 .agents/
 
+# local lint plugin (not needed to build/run/test/deploy)
+tools/
+
 # install output
 node_modules/
 client/dist/
