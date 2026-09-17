@@ -1,0 +1,58 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "آدرس واقعی سرور (بدون اسلش آخر)"
+        required: true
+        default: "https://ms.payam-coder.ir"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install client deps
+        working-directory: client
+        run: npm install
+
+      - name: Build web assets
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_API_BASE: ${{ inputs.api_base }}
+
+      - name: Add Android platform
+        working-directory: client
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        working-directory: client
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: client/android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-ban-debug-apk
+          path: client/android/app/build/outputs/apk/debug/app-debug.apk
