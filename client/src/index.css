@@ -1,0 +1,439 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ============================================================
+   Vazirmatn — self-hosted variable font (woff2, weight 400–700).
+   Mirrors the Google Fonts subsetting: the browser only downloads
+   the subset(s) whose unicode-range matches the page content.
+   ============================================================ */
+@font-face {
+  font-family: "Vazirmatn";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/vazirmatn-arabic.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/vazirmatn-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/vazirmatn-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Extra-small breakpoint used by the top-bar badge and admin tab labels.
+   Without it the `xs:` variant generates no CSS and elements stay hidden. */
+@theme {
+  --breakpoint-xs: 22rem;
+}
+
+/* ============================================================
+   PODMAN-BAN DESIGN SYSTEM
+   Neutral surfaces + a blue brand ramp for interaction.
+   Color carries meaning or action — never decoration.
+   Light is the default theme; dark is fully specified too.
+   ============================================================ */
+
+:root {
+  /* base radius */
+  --radius: 0.75rem;
+
+  /* ---- BRAND PRIMITIVES — blue, hue 255 constant ----
+     Only steps a role consumes exist. Measured pairs:
+     blue-600 fill + white label = 4.8:1 · ring vs white = 3.6:1 ·
+     blue-400 fill + near-black label = 7.6:1.
+     C=0.181 is the max chroma before sRGB clamping at L0.55. */
+  --blue-600: oklch(0.55 0.181 255);     /* #006EDC-ish — light-theme fill */
+  --blue-500: oklch(0.62 0.18 255);      /* #2885EF — focus ring on light */
+  --blue-400: oklch(0.71 0.14 255);      /* #62A4F7 — dark-theme fill/ring */
+
+  /* ---- LIGHT THEME (default) ---- */
+  --background: oklch(0.99 0 0);        /* #FAFAFA off-white */
+  --foreground: oklch(0.16 0 0);        /* #0A0A0A near-black */
+  --card: oklch(1 0 0);                 /* #FFFFFF */
+  --card-foreground: oklch(0.16 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: var(--blue-600);           /* brand action — solid blue */
+  --primary-foreground: oklch(0.99 0 0); /* 4.8:1 on the fill */
+  --secondary: oklch(0.965 0 0);        /* #F4F4F4 */
+  --secondary-foreground: oklch(0.16 0 0);
+  --muted: oklch(0.965 0 0);
+  --muted-foreground: oklch(0.46 0 0);  /* #5C5C5C — AA contrast on white */
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: oklch(0.16 0 0);
+
+  /* Semantic colors — meaning only, never decoration.
+     Chroma caps = max before sRGB clamping (declared == rendered).
+     All text pairs pass AA on background/card/secondary/accent. */
+  --destructive: oklch(0.535 0.217 25.5);  /* wrong — red */
+  /* text on solid destructive fill (#ce001c): near-white, 5.6:1 */
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.515 0.158 145);       /* correct — green, 4.6:1 on accent */
+  --warning: oklch(0.535 0.118 67);        /* amber — chroma-capped for sRGB */
+
+  /* Print-report palette: fixed output for paper, independent of the active
+     theme (defined on :root only so .dark never overrides them). Hues mirror
+     --success / --destructive so print matches on-screen semantics. */
+  --print-border: oklch(0.845 0 0);            /* ≈ #ccc hairlines */
+  --print-muted-foreground: oklch(0.56 0 0);   /* ≥4.5:1 on white paper */
+  --print-success: oklch(0.52 0.158 145);
+  --print-destructive: oklch(0.535 0.22 25.5);
+
+  --border: oklch(0.9 0 0);
+  /* Input outlines are a meaningful boundary → 3:1 vs card (#929292 = 3.1:1).
+     Decorative separators stay on the softer --border. */
+  --input: oklch(0.66 0 0);
+  --ring: var(--blue-500);
+
+  /* charts: semantic-first so the report card reads by meaning */
+  --chart-1: var(--success);
+  --chart-2: var(--warning);
+  --chart-3: var(--destructive);
+  --chart-4: var(--primary);
+  --chart-5: oklch(0.75 0 0);
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: var(--blue-600);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent-foreground: oklch(0.16 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.4 0 0);
+}
+
+.dark {
+  /* ---- DARK THEME ---- */
+  --background: oklch(0.165 0 0);      /* #0A0A0A — avoids OLED halation */
+  --foreground: oklch(0.97 0 0);       /* near-white #F5F5F5 */
+  --card: oklch(0.2 0 0);              /* lifted surface #161616 */
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: var(--blue-400);          /* lighter fill carries on dark */
+  --primary-foreground: oklch(0.165 0 0); /* 7.6:1 on the fill */
+  --secondary: oklch(0.24 0 0);        /* #1C1C1C */
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.64 0 0); /* #9A9A9A — AA contrast on #0A0A0A */
+  --accent: oklch(0.27 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+
+  /* Semantic — tuned for dark surfaces.
+     destructive lifted to L0.665 so it passes 4.5:1 even on secondary/accent;
+     near-black label on the fill stays 5.8:1. */
+  --destructive: oklch(0.665 0.191 25.5);
+  --destructive-foreground: oklch(0.165 0 0);
+  --success: oklch(0.695 0.155 145);
+  --warning: oklch(0.755 0.155 67);
+
+  --border: oklch(1 0 0 / 10%);
+  /* Meaningful form boundary → 3:1 vs the darkest surface it sits on (card). */
+  --input: oklch(1 0 0 / 33%);
+  --ring: var(--blue-400);
+
+  --chart-1: var(--success);
+  --chart-2: var(--warning);
+  --chart-3: var(--destructive);
+  --chart-4: var(--primary);
+  --chart-5: oklch(0.45 0 0);
+
+  --sidebar: oklch(0.2 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: var(--blue-400);
+  --sidebar-primary-foreground: oklch(0.165 0 0);
+  --sidebar-accent: oklch(0.27 0 0);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.62 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    /* prevent iOS text size adjust; respect user zoom (WCAG 1.4.4 / 1.4.10) */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* Persian needs more vertical rhythm than Latin */
+    line-height: 1.75;
+    font-feature-settings: "ss01", "ss02";
+    /* Smooth theme transition */
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  /* Persian digits helper — opt-in via .fa-num */
+  .fa-num {
+    font-feature-settings: "ss01";
+    font-variant-numeric: lining-nums;
+  }
+  /* Focus ring never removed */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* ============================================================
+   Motion: opt-in. Users with reduced motion get the static layer.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  .motion-safe-transition {
+    transition-property: transform, opacity, color, background-color, border-color;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   Custom scrollbar — restrained, monochrome
+   ============================================================ */
+.scroll-mono {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-mono::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-mono::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-mono::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+.scroll-mono::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+
+/* Safe-area aware bottom padding for the fixed bottom nav */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* RTL: mirror only direction-dependent icons */
+[dir="rtl"] .icon-directional {
+  scale: -1 1;
+}
+
+/* Numbers in timers use tabular figures for stable width */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Check-mark draw-in animation for the Checkbox component */
+@keyframes pb-check-draw {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+    stroke-dashoffset: 14;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ARIA-busy shimmer for skeleton-like loading rows */
+@keyframes pb-shimmer {
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+/* Subtle card elevation — monochrome shadow, never colored */
+.card-elevated {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 1px 3px oklch(0 0 0 / 0.06);
+  transition: box-shadow 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+.card-elevated:hover {
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.06),
+    0 4px 8px oklch(0 0 0 / 0.08);
+}
+.dark .card-elevated {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.3),
+    0 1px 3px oklch(0 0 0 / 0.2);
+}
+.dark .card-elevated:hover {
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.4),
+    0 4px 8px oklch(0 0 0 / 0.25);
+}
+
+/* Pressable button feedback — scale down on active (Material Design) */
+.pressable {
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.pressable:active {
+  transform: scale(0.96);
+}
+
+/* Smooth entrance for views */
+@keyframes pb-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* List stagger */
+@keyframes pb-list-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Success/error feedback */
+@keyframes pb-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+/* Skeleton loading */
+@keyframes pb-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.pb-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--secondary) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: pb-skeleton 1.5s ease-in-out infinite;
+}
+
+/* Focus ring that works on both light and dark */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--ring);
+}
+
+/* Print styles — hide app chrome, show only the print report */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print\:block,
+  .print\:block * {
+    visibility: visible;
+  }
+  .print\:block {
+    display: block !important;
+  }
+}

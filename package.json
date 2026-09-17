@@ -1,0 +1,20 @@
+{
+  "name": "podman-ban-deploy",
+  "private": true,
+  "description": "Runtime dependency manifest for cPanel Passenger (bundled server.cjs resolves deps from here)",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "drizzle-orm": "0.44.7",
+    "express": "^5.1.0",
+    "jose": "^6.2.10",
+    "socket.io": "^4.8.3",
+    "zod": "^4.0.2"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.82.0",
+    "oxlint": "1.82.0"
+  }
+}

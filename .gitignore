@@ -1,0 +1,23 @@
+# secrets — never commit
+.env
+
+# local databases + backups + journals (anything sqlite under prisma/)
+server/prisma/*.db*
+server/tests/data/
+
+# uploads (user content)
+uploads/*
+
+# agent workspace (local-only)
+.agents/
+
+# install output
+node_modules/
+client/dist/
+server/dist-server/
+*.tsbuildinfo
+
+# production deploy bundle: prod.db holds a REAL admin hash, zips are
+# redundant binaries (git is the source archive) — never commit either
+deploy/prisma/*.db*
+*.zip

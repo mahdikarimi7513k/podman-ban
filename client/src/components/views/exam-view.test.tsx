@@ -1,0 +1,147 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
+import { ExamView } from "@/components/views/exam-view"
+import { useApp } from "@/lib/store"
+
+/**
+ * Seam: ExamView rendered behavior (DOM after user actions), with the
+ * API client mocked at module boundary.
+ *
+ * Regression target: navigating between questions (رد شدن / سوال بعدی)
+ * must swap the question card synchronously — the content region must
+ * never be empty and the next question must appear in the same commit
+ * as the click. This is the "page refresh feel" bug.
+ */
+
+const apiFetchMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  ApiError: class ApiError extends Error {
+    status: number
+    body: unknown
+    constructor(message: string, status: number, body: unknown) {
+      super(message)
+      this.status = status
+      this.body = body
+    }
+  },
+}))
+
+const QUESTIONS = [
+  { id: "q1", text: "متن سوال شماره یک", options: ["الف", "ب"], imageBase64: null, order: 1 },
+  { id: "q2", text: "متن سوال شماره دو", options: ["الف", "ب", "ج"], imageBase64: null, order: 2 },
+  { id: "q3", text: "متن سوال شماره سه", options: ["الف", "ب"], imageBase64: null, order: 3 },
+]
+
+function sessionResponse() {
+  return {
+    session: {
+      id: "s1",
+      moduleId: "m1",
+      moduleTitle: "پودمان تست",
+      bookTitle: "کتاب تست",
+      status: "IN_PROGRESS",
+      totalQuestions: 3,
+      durationSec: 0,
+      negativeMarking: false,
+      isPractice: true,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      scorePercent: 0,
+    },
+    questions: QUESTIONS,
+    answers: {},
+  }
+}
+
+function mockApi() {
+  apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === "/api/exam/s1" && !init?.method) return sessionResponse()
+    if (url === "/api/exam/s1/answer") return { ok: true }
+    throw new Error(`unexpected fetch ${url}`)
+  })
+}
+
+beforeEach(() => {
+  cleanup()
+  apiFetchMock.mockReset()
+  mockApi()
+  useApp.setState({
+    booted: true,
+    user: {
+      id: "u1",
+      name: "تست",
+      username: "test",
+      field: "FANI_HERFEI",
+      role: "STUDENT",
+      totalTests: 0,
+    },
+    view: "exam",
+    examSessionId: "s1",
+    startExamModuleId: "m1",
+  })
+})
+
+afterEach(() => {
+  cleanup()
+  useApp.setState({ examSessionId: null, startExamModuleId: null })
+})
+
+describe("ExamView question navigation stability", () => {
+  it("renders the first question after session load", async () => {
+    render(<ExamView />)
+    expect(await screen.findByText("متن سوال شماره یک")).toBeInTheDocument()
+  })
+
+  it("shows the next question synchronously when رد شدن is clicked (no empty gap)", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    // The assertion is synchronous on purpose: with AnimatePresence
+    // mode="wait" the new card only mounts after the old one finishes
+    // its exit animation, leaving the content region empty (~150ms).
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    expect(screen.getByText("متن سوال شماره دو")).toBeInTheDocument()
+  })
+
+  it("keeps exactly one question visible through rapid successive skips", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    // second rapid click before any animation could settle
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    expect(screen.getByText("متن سوال شماره سه")).toBeInTheDocument()
+    expect(screen.queryByText("متن سوال شماره یک")).not.toBeInTheDocument()
+  })
+
+  it("shows the next question synchronously when سوال بعدی is clicked", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /سوال بعدی/ }))
+    })
+    expect(screen.getByText("متن سوال شماره دو")).toBeInTheDocument()
+  })
+
+  it("goes back to the previous question with سوال قبلی", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /سوال بعدی/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /سوال قبلی/ }))
+    })
+    expect(screen.getByText("متن سوال شماره یک")).toBeInTheDocument()
+  })
+})

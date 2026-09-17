@@ -1,0 +1,38 @@
+{
+    "name": "podman-ban-server",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "bun --hot src/index.ts",
+        "start": "bun src/index.ts",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "db:generate": "drizzle-kit generate",
+        "db:migrate": "drizzle-kit migrate",
+        "db:seed": "bun prisma/seed.ts",
+        "build:server": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist-server/server.cjs --packages=external"
+    },
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "better-sqlite3": "^13.0.3",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.5",
+        "drizzle-orm": "0.44.7",
+        "express": "^5.1.0",
+        "jose": "^6.2.10",
+        "socket.io": "^4.8.3",
+        "zod": "^4.0.2"
+    },
+    "devDependencies": {
+        "@types/better-sqlite3": "^9.6.0",
+        "@types/cookie-parser": "^1.4.7",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "drizzle-kit": "0.31.7",
+        "esbuild": "^0.28.2",
+        "socket.io-client": "4.8.3",
+        "supertest": "^7.2.2",
+        "typescript": "^5",
+        "vitest": "^4.1.11"
+    }
+}

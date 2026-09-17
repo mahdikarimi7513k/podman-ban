@@ -1,0 +1,10 @@
+# Uploaded archive files must never execute as scripts.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .cgi .pl .py
+RemoveType .php .phtml .cgi .pl .py
+<FilesMatch "\.(?i:php.?|phtml|cgi|pl|py|sh|exe)$">
+  Require all denied
+</FilesMatch>
+Require all denied

@@ -1,0 +1,2 @@
+# Database directory — never serve over HTTP.
+Require all denied
