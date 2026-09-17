@@ -35,6 +35,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install client deps
+        working-directory: client
+        run: npm install
 
       - name: Install client deps
         working-directory: client
