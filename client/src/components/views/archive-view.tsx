@@ -2,7 +2,7 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { Archive, FileText, Download, CalendarDays, Building2, FolderOpen, ChevronLeft } from "lucide-react"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, API_BASE } from "@/lib/api-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import {
@@ -193,7 +193,7 @@ function FileItem({ file: f }: { file: ArchiveFile }) {
         {(f.questionPath || f.fileUrl) && (
           <Button asChild size="sm" variant="default" className="cursor-pointer flex-1">
             <a
-              href={f.questionPath ? `/api/archive/file/${f.id}/question` : (f.fileUrl ?? "#")}
+              href={f.questionPath ? `${API_BASE}/api/archive/file/${f.id}/question` : (f.fileUrl ?? "#")}
               {...(f.questionPath ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
             >
               <Download className="size-3.5" strokeWidth={2.25} />
@@ -205,7 +205,7 @@ function FileItem({ file: f }: { file: ArchiveFile }) {
         {(f.answerPath || f.answerUrl) && (
           <Button asChild size="sm" variant="outline" className="cursor-pointer flex-1">
             <a
-              href={f.answerPath ? `/api/archive/file/${f.id}/answer` : (f.answerUrl ?? "#")}
+              href={f.answerPath ? `${API_BASE}/api/archive/file/${f.id}/answer` : (f.answerUrl ?? "#")}
               {...(f.answerPath ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
             >
               <FileText className="size-3.5" strokeWidth={2.25} />

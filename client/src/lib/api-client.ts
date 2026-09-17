@@ -20,6 +20,8 @@
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
+export { API_BASE }
+
 function readCsrfCookie(): string | null {
   const raw = document.cookie
   for (const part of raw.split(";")) {

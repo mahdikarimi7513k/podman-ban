@@ -1,7 +1,7 @@
 
 import * as React from "react"
 import { io, type Socket } from "socket.io-client"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, API_BASE } from "@/lib/api-client"
 
 export interface ChatMessage {
   id: string
@@ -70,11 +70,10 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
 
   // ---- socket (the live channel — retries forever, catches up on reconnect) ----
   React.useEffect(() => {
-    // Same-origin connection — the main API server proxies /socket.io/* to
-    // the chat mini-service (see server/src/index.ts). No explicit url/port
-    // needed: this works identically in dev (Vite proxy) and production
-    // (cPanel, single public domain).
-    const socket = io({
+    // Same-origin on web (API_BASE === "" → undefined = current origin);
+    // absolute API origin inside the Capacitor APK, whose own origin
+    // (https://localhost) serves no socket.io endpoint.
+    const socket = io(API_BASE || undefined, {
       transports: ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
