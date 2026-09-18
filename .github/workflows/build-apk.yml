@@ -48,6 +48,11 @@ jobs:
             "platforms;android-35" \
             "build-tools;34.0.0" >/dev/null
 
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y imagemagick
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
