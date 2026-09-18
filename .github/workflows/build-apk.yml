@@ -42,11 +42,7 @@ jobs:
 
       - name: Install required SDK packages
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "platforms;android-35" \
-            "build-tools;34.0.0" >/dev/null
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" >/dev/null
 
       - name: Install ImageMagick
         run: |
@@ -106,7 +102,6 @@ jobs:
           server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
           server.pop('cleartext', None)
           if os.environ['LOAD_MODE'] == 'remote':
-              # لود مستقیم سایت داخل WebView → کوکی‌ها مثل مرورگر کار می‌کنند
               server['url'] = os.environ['API_BASE']
           else:
               server.pop('url', None)
@@ -157,33 +152,218 @@ jobs:
       - name: Prepare signing keystore + fingerprint
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SEC_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SEC_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SEC_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -e
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
-            echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
-            echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > /tmp/release.keystore
+            STORE_PASS="$SEC_STORE_PASS"
+            ALIAS_NAME="$SEC_ALIAS"
+            KEY_PASS_VAL="$SEC_KEY_PASS"
             echo "✅ Using keystore from secrets"
           else
-            keytool -genkeypair -v \
-              -keystore /tmp/release.keystore \
-              -alias ms-app \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass msSecret2024 \
-              -keypass msSecret2024 \
-              -dname "CN=MS, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
-            echo "KEYSTORE_PASS=msSecret2024" >> $GITHUB_ENV
-            echo "KEY_ALIAS=ms-app" >> $GITHUB_ENV
-            echo "KEY_PASS=msSecret2024" >> $GITHUB_ENV
+            keytool -genkeypair -v -keystore /tmp/release.keystore -alias ms-app -keyalg RSA -keysize 2048 -validity 10000 -storepass msSecret2024 -keypass msSecret2024 -dname "CN=MS, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
+            STORE_PASS="msSecret2024"
+            ALIAS_NAME="ms-app"
+            KEY_PASS_VAL="msSecret2024"
             echo "⚠️ Temporary keystore generated"
           fi
-          echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
 
-          FP=$(keytool -list -v \
-                 -keystore /tmp/release.keystore \
-                 -storepass "$KEYSTORE_PASS" \
-                 -alias "$KEY_ALIAS" 2>/dev/null \
-                 | grep -m1 "SHA256:" \
-                 | sed 's/.*SHA256: *//' \
-                 | tr -d ' :' | tr '[:lower:]' '[:upper:]')
-          if [ ${#FP}
+          LIST_OUT=$(keytool -list -v -keystore /tmp/release.keystore -storepass "$STORE_PASS" -alias "$ALIAS_NAME" 2>&1 || true)
+          FP=$(printf '%s' "$LIST_OUT" | grep -m1 'SHA256:' | sed 's/.*SHA256:[[:space:]]*//' | tr -d ' :' | tr '[:lower:]' '[:upper:]')
+
+          if [ "${#FP}" -ne 64 ]; then
+            echo "❌ Could not read certificate fingerprint"
+            printf '%s\n' "$LIST_OUT" | head -5 || true
+            echo "→ اگر پیام password دیدی: ANDROID_KEYSTORE_PASSWORD اشتباه است"
+            echo "→ وگرنه ANDROID_KEY_ALIAS را چک کن (الان: '$ALIAS_NAME')"
+            exit 1
+          fi
+
+          {
+            echo "KEYSTORE_PATH=/tmp/release.keystore"
+            echo "KEYSTORE_PASS=$STORE_PASS"
+            echo "KEY_ALIAS=$ALIAS_NAME"
+            echo "KEY_PASS=$KEY_PASS_VAL"
+            echo "CERT_FP=$FP"
+          } >> "$GITHUB_ENV"
+
+          echo "🔐 Cert fingerprint: $FP"
+
+      - name: Inject anti-tamper signature guard
+        working-directory: client
+        env:
+          APP_ID: ${{ inputs.app_id }}
+          CERT_FP: ${{ env.CERT_FP }}
+        run: |
+          python3 <<'PYEOF'
+          import os, glob
+
+          fp = os.environ['CERT_FP'].replace(':', '').strip().upper()
+          if len(fp) != 64:
+              raise SystemExit('❌ fingerprint invalid')
+          pkg = os.environ['APP_ID'].strip()
+          digest = bytes.fromhex(fp)
+          arr = ', '.join(str((b ^ 0x5A) & 0xFF) for b in digest)
+
+          base = 'android/app/src/main/java/' + pkg.replace('.', '/')
+          os.makedirs(base, exist_ok=True)
+          for f in glob.glob(base + '/MainActivity.*'):
+              os.remove(f)
+
+          java = r'''
+          package __PKG__;
+
+          import android.content.pm.PackageInfo;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.os.Process;
+          import java.security.MessageDigest;
+
+          public class MainActivity extends com.getcapacitor.BridgeActivity {
+
+              private static final int XOR = 0x5A;
+              private static final int[] FP = {__ARR__};
+
+              private boolean ok() {
+                  try {
+                      byte[] raw;
+                      if (Build.VERSION.SDK_INT >= 28) {
+                          PackageInfo p = getPackageManager().getPackageInfo(
+                                  getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+                          raw = p.signingInfo.getApkContentsSigners()[0].toByteArray();
+                      } else {
+                          PackageInfo p = getPackageManager().getPackageInfo(
+                                  getPackageName(), PackageManager.GET_SIGNATURES);
+                          raw = p.signatures[0].toByteArray();
+                      }
+                      byte[] d = MessageDigest.getInstance("SHA-256").digest(raw);
+                      if (d.length != FP.length) return false;
+                      for (int i = 0; i < d.length; i++) {
+                          if (((d[i] ^ XOR) & 0xFF) != FP[i]) return false;
+                      }
+                      return true;
+                  } catch (Throwable t) {
+                      return false;
+                  }
+              }
+
+              private void die() {
+                  finishAffinity();
+                  Process.killProcess(Process.myPid());
+              }
+
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  if (!ok()) { die(); return; }
+                  super.onCreate(savedInstanceState);
+                  new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                      @Override
+                      public void run() { if (!ok()) die(); }
+                  }, 5000);
+              }
+
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  if (!ok()) { die(); }
+              }
+          }
+          '''
+          java = java.replace('__PKG__', pkg).replace('__ARR__', arr)
+          path = os.path.join(base, 'MainActivity.java')
+          with open(path, 'w', encoding='utf-8') as f:
+              f.write(java.strip() + '\n')
+          print('🛡️ Signature guard injected →', path)
+          PYEOF
+
+      - name: Sync Capacitor
+        working-directory: client
+        run: npx cap sync android
+
+      - name: Generate Android icons & splash (ImageMagick)
+        working-directory: client
+        run: |
+          set -e
+          if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
+          RES=android/app/src/main/res
+          ICON=assets/icon.png
+
+          $MX "$ICON" -resize 1024x1024 \
+            \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
+            -alpha set -compose DstIn -composite /tmp/icon_rounded.png
+
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            den=${pair%%:*}; px=${pair##*:}
+            dir="$RES/mipmap-$den"
+            [ -d "$dir" ] || continue
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher.png"
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher_round.png"
+            fp=$(( px * 225 / 100 ))
+            inner=$(( fp * 66 / 100 ))
+            $MX -size ${fp}x${fp} xc:none \
+              \( /tmp/icon_rounded.png -resize ${inner}x${inner} \) \
+              -gravity center -compose over -composite "$dir/ic_launcher_foreground.png"
+            echo "  ✔ mipmap-$den"
+          done
+
+          grep -rl "ic_launcher_background" "$RES/values" 2>/dev/null | while read -r bg; do
+            sed -i -E 's/(name="ic_launcher_background">)#[0-9A-Fa-f]+(<)/\1#1B7FF0\2/g' "$bg"
+          done
+
+          find "$RES" -name "splash.png" -type f | while read -r f; do
+            dims=$($MX "$f" -format "%wx%h" info:)
+            W=${dims%x*}; H=${dims#*x}
+            S=$(( ( W < H ? W : H ) * 45 / 100 ))
+            $MX -size ${W}x${H} xc:black \
+              \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
+              -gravity center -compose over -composite "$f"
+            echo "  ✔ $f (${W}x${H})"
+          done
+          echo "✅ All icons & splash generated"
+
+      - name: Set versionName / versionCode
+        working-directory: client/android
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 -c "
+          import re, os
+          p = 'app/build.gradle'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'versionName\s+\"[^\"]*\"', 'versionName \"%s\"' % os.environ['VERSION_NAME'], s)
+          s = re.sub(r'versionCode\s+\d+', 'versionCode %s' % os.environ['VERSION_CODE'], s)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('version:', os.environ['VERSION_NAME'], '| code:', os.environ['VERSION_CODE'])
+          "
+
+      - name: Build release APK
+        working-directory: client/android
+        run: ./gradlew clean assembleRelease
+
+      - name: Sign APK
+        working-directory: client/android
+        run: |
+          set -e
+          APK=$(find app/build/outputs/apk/release -name "*unsigned*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          fi
+          echo "Signing: $APK"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          "$BT/zipalign" -f 4 "$APK" aligned.apk
+          "$BT/apksigner" sign --ks "$KEYSTORE_PATH" --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEY_PASS" --out signed.apk aligned.apk
+          "$BT/apksigner" verify signed.apk
+          echo "✅ Signed: $(du -h signed.apk | cut -f1)"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ms-app-release-apk
+          path: client/android/signed.apk
