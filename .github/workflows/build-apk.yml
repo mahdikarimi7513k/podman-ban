@@ -19,10 +19,10 @@ on:
         description: "شماره نسخه"
         required: false
         default: "1.0.0"
-      crypto_key:
-        description: "کلید رمزنگاری (اختیاری)"
+      load_mode:
+        description: "remote = لود مستقیم سایت (رفع مشکل کوکی) | local = بیلد داخلی"
         required: false
-        default: ""
+        default: "remote"
 
 jobs:
   build:
@@ -63,14 +63,12 @@ jobs:
         run: |
           npm install -g npm@latest
           npm install
-          npm install --no-save javascript-obfuscator
 
       - name: Build web assets
         working-directory: client
         run: npm run build
         env:
           VITE_API_BASE: ${{ inputs.api_base }}
-          VITE_CRYPTO_KEY: ${{ inputs.crypto_key }}
 
       - name: Detect webDir
         working-directory: client
@@ -82,40 +80,14 @@ jobs:
           echo "WEB_DIR=$W" >> $GITHUB_ENV
           echo "webDir = $W"
 
-      - name: Obfuscate JavaScript
-        working-directory: client
-        run: |
-          echo "🔒 Obfuscating JS files..."
-          find dist -name "*.js" -type f | while read -r file; do
-            TMP=$(mktemp -d)
-            if npx javascript-obfuscator "$file" \
-                --output "$TMP" \
-                --compact true \
-                --control-flow-flattening true \
-                --control-flow-flattening-threshold 0.5 \
-                --string-array true \
-                --string-array-threshold 0.8 \
-                --string-array-encoding base64 \
-                --split-strings true \
-                --split-strings-chunk-length 10 \
-                --transform-object-keys true \
-                --ignore-imports true \
-                --rename-globals false \
-                >/dev/null 2>&1; then
-              OUT=$(find "$TMP" -name "*.js" -type f | head -1)
-              [ -f "$OUT" ] && cp "$OUT" "$file" && echo "  ✔ $file"
-            else
-              echo "  ⚠ skipped: $file"
-            fi
-            rm -rf "$TMP"
-          done
-
       - name: Write Capacitor config (fix package name)
         working-directory: client
         env:
           APP_ID: ${{ inputs.app_id }}
           APP_NAME: ${{ inputs.app_name }}
           WEB_DIR: ${{ env.WEB_DIR }}
+          API_BASE: ${{ inputs.api_base }}
+          LOAD_MODE: ${{ inputs.load_mode }}
         run: |
           python3 <<'PYEOF'
           import json, os
@@ -131,12 +103,18 @@ jobs:
           cfg['android'] = {**(cfg.get('android') or {}),
                             'allowMixedContent': False,
                             'webContentsDebuggingEnabled': False}
-          cfg['server'] = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
-          cfg['server'].pop('url', None)
-          cfg['server'].pop('cleartext', None)
+          server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
+          server.pop('cleartext', None)
+          if os.environ['LOAD_MODE'] == 'remote':
+              # لود مستقیم سایت داخل WebView → کوکی‌ها مثل مرورگر کار می‌کنند
+              server['url'] = os.environ['API_BASE']
+          else:
+              server.pop('url', None)
+          cfg['server'] = server
           with open('capacitor.config.json', 'w', encoding='utf-8') as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
-          print('appId =', cfg['appId'], '| appName =', cfg['appName'])
+          print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'],
+                '| server.url =', server.get('url', '(local assets)'))
           PYEOF
 
       - name: Ensure app icon exists (auto-draw if missing)
@@ -165,82 +143,23 @@ jobs:
           rm -rf android
           npx cap add android
 
-      - name: Sync Capacitor
-        working-directory: client
-        run: npx cap sync android
-
-      - name: Generate Android icons & splash (ImageMagick)
-        working-directory: client
-        run: |
-          set -e
-          if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
-          RES=android/app/src/main/res
-          ICON=assets/icon.png
-
-          # نسخه با گوشه گرد (مستر 1024)
-          $MX "$ICON" -resize 1024x1024 \
-            \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
-            -alpha set -compose DstIn -composite /tmp/icon_rounded.png
-
-          # آیکون‌های لانچر + foreground
-          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            den=${pair%%:*}; px=${pair##*:}
-            dir="$RES/mipmap-$den"
-            [ -d "$dir" ] || continue
-            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher.png"
-            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher_round.png"
-            fp=$(( px * 225 / 100 ))
-            inner=$(( fp * 66 / 100 ))
-            $MX -size ${fp}x${fp} xc:none \
-              \( /tmp/icon_rounded.png -resize ${inner}x${inner} \) \
-              -gravity center -compose over -composite "$dir/ic_launcher_foreground.png"
-            echo "  ✔ mipmap-$den"
-          done
-
-          # رنگ پس‌زمینه آیکون adaptive
-          grep -rl "ic_launcher_background" "$RES/values" 2>/dev/null | while read -r bg; do
-            sed -i -E 's/(name="ic_launcher_background">)#[0-9A-Fa-f]+(<)/\1#1B7FF0\2/g' "$bg"
-          done
-
-          # اسپلش‌ها: پس‌زمینه مشکی + آیکون وسط
-          find "$RES" -name "splash.png" -type f | while read -r f; do
-            dims=$($MX "$f" -format "%wx%h" info:)
-            W=${dims%x*}; H=${dims#*x}
-            S=$(( ( W < H ? W : H ) * 45 / 100 ))
-            $MX -size ${W}x${H} xc:black \
-              \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
-              -gravity center -compose over -composite "$f"
-            echo "  ✔ $f (${W}x${H})"
-          done
-          echo "✅ All icons & splash generated"
-
-      - name: Set versionName / versionCode
+      - name: Harden manifest (no backup)
         working-directory: client/android
-        env:
-          VERSION_NAME: ${{ inputs.version_name }}
-          VERSION_CODE: ${{ github.run_number }}
         run: |
-          python3 -c "
-          import re, os
-          p = 'app/build.gradle'
-          s = open(p, encoding='utf-8').read()
-          s = re.sub(r'versionName\s+\"[^\"]*\"', 'versionName \"%s\"' % os.environ['VERSION_NAME'], s)
-          s = re.sub(r'versionCode\s+\d+', 'versionCode %s' % os.environ['VERSION_CODE'], s)
-          open(p, 'w', encoding='utf-8').write(s)
-          print('version:', os.environ['VERSION_NAME'], '| code:', os.environ['VERSION_CODE'])
-          "
+          M=app/src/main/AndroidManifest.xml
+          if grep -q 'android:allowBackup' "$M"; then
+            sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' "$M"
+          else
+            sed -i 's/<application /<application android:allowBackup="false" /' "$M"
+          fi
+          echo "✅ allowBackup=false"
 
-      - name: Build release APK
-        working-directory: client/android
-        run: ./gradlew clean assembleRelease
-
-      - name: Prepare signing keystore
+      - name: Prepare signing keystore + fingerprint
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
-            echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
             echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
             echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
@@ -253,33 +172,18 @@ jobs:
               -storepass msSecret2024 \
               -keypass msSecret2024 \
               -dname "CN=MS, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
-            echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
             echo "KEYSTORE_PASS=msSecret2024" >> $GITHUB_ENV
             echo "KEY_ALIAS=ms-app" >> $GITHUB_ENV
             echo "KEY_PASS=msSecret2024" >> $GITHUB_ENV
             echo "⚠️ Temporary keystore generated"
           fi
+          echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
 
-      - name: Sign APK
-        working-directory: client/android
-        run: |
-          APK=$(find app/build/outputs/apk/release -name "*unsigned*.apk" | head -1)
-          if [ -z "$APK" ]; then
-            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          fi
-          echo "Signing: $APK"
-          $ANDROID_HOME/build-tools/34.0.0/zipalign -f 4 "$APK" aligned.apk
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
-            --ks "$KEYSTORE_PATH" \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass "pass:$KEYSTORE_PASS" \
-            --key-pass "pass:$KEY_PASS" \
-            --out signed.apk aligned.apk
-          $ANDROID_HOME/build-tools/34.0.0/apksigner verify signed.apk
-          echo "✅ Signed: $(du -h signed.apk | cut -f1)"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ms-app-release-apk
-          path: client/android/signed.apk
+          FP=$(keytool -list -v \
+                 -keystore /tmp/release.keystore \
+                 -storepass "$KEYSTORE_PASS" \
+                 -alias "$KEY_ALIAS" 2>/dev/null \
+                 | grep -m1 "SHA256:" \
+                 | sed 's/.*SHA256: *//' \
+                 | tr -d ' :' | tr '[:lower:]' '[:upper:]')
+          if [ ${#FP}
