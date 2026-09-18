@@ -134,6 +134,14 @@ export function buildApp(): express.Express {
   app.use("/api/admin", adminRouter) // /api/admin/*
   app.use("/api", externalRouter) // /api/external/verify (API-key auth)
 
+  // Unknown /api/* must not leak the Express HTML error page (framework
+  // fingerprint + wrong content-type) — JSON 404 instead. Placed after every
+  // /api router; CORS preflights never reach here (the cors middleware
+  // answers OPTIONS itself).
+  app.use("/api", (_req: express.Request, res: express.Response) => {
+    res.status(404).json({ error: "یافت نشد" })
+  })
+
   // --- generic error handler (no stack leak to clients) ---
   // Express default sends HTML + stack in dev; production must get JSON only.
   // ponytail: one handler, no per-route try/catch sprawl.

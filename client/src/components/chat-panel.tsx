@@ -3,6 +3,7 @@ import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, Loader2, Circle } from "lucide-react"
 import { useChat, type ChatMessage } from "@/hooks/use-chat"
+import { sanitizeMessageText } from "@/lib/sanitize"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FaNum } from "@/components/fa-utils"
@@ -57,7 +58,7 @@ export function ChatPanel({
     e.preventDefault()
     if (!text.trim() || sending) return
     nearBottomRef.current = true // my own message → follow to bottom
-    void send(text)
+    void send(sanitizeMessageText(text))
     setText("")
   }
 
@@ -115,10 +116,11 @@ export function ChatPanel({
       <form onSubmit={submit} className="border-t border-border p-2 flex items-end gap-2 bg-background">
         <Textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setText(sanitizeMessageText(e.target.value))}
           onKeyDown={onKeyDown}
           placeholder={isAdmin ? "پاسخ به کاربر…" : "پیام خود را بنویسید…"}
           rows={1}
+          maxLength={2000}
           className="min-h-[44px] max-h-32 resize-none border-border bg-background"
           disabled={sending}
           aria-label="متن پیام"

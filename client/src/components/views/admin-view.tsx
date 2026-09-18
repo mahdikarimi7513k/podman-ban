@@ -1225,8 +1225,10 @@ function AdminSupport() {
   const [loading, setLoading] = React.useState(true)
   const [selected, setSelected] = React.useState<string | null>(null)
 
-  const load = React.useCallback(async () => {
-    setLoading(true)
+  const load = React.useCallback(async (quiet = false) => {
+    // Background refreshes stay silent: flipping `loading` every 15s flashes
+    // a full-view spinner and drops the list scroll position.
+    if (!quiet) setLoading(true)
     try {
       const res = await apiFetch<{ conversations: NonNullable<typeof conversations> }>(
         "/api/support/conversations",
@@ -1241,8 +1243,8 @@ function AdminSupport() {
 
   React.useEffect(() => {
     load()
-    // poll for unread updates every 15s
-    const id = setInterval(load, 15000)
+    // poll for unread updates every 15s (silent — no spinner, no scroll jump)
+    const id = setInterval(() => load(true), 15000)
     return () => clearInterval(id)
   }, [load])
 

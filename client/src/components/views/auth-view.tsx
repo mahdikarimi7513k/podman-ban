@@ -5,6 +5,7 @@ import { transitionBase } from "@/lib/motion"
 import { GraduationCap, Loader2, User, UserX } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
+import { sanitizeUsername, sanitizeName, clampPassword } from "@/lib/sanitize"
 import type { AppUser } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -142,9 +143,9 @@ export function AuthView() {
                   field={field}
                   submitting={submitting}
                   formError={formError}
-                  onNameChange={(v) => setName({ value: v })}
-                  onUsernameChange={(v) => setUsername({ value: v })}
-                  onPasswordChange={(v) => setPassword({ value: v })}
+                  onNameChange={(v) => setName({ value: sanitizeName(v) })}
+                  onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
+                  onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
                   onFieldChange={setField}
                   onSubmit={submit}
                 />
@@ -174,9 +175,9 @@ export function AuthView() {
                     field={field}
                     submitting={submitting}
                     formError={formError}
-                    onNameChange={(v) => setName({ value: v })}
-                    onUsernameChange={(v) => setUsername({ value: v })}
-                    onPasswordChange={(v) => setPassword({ value: v })}
+                  onNameChange={(v) => setName({ value: sanitizeName(v) })}
+                  onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
+                  onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
                     onFieldChange={setField}
                     onSubmit={submit}
                   />
@@ -273,6 +274,7 @@ function AuthForm(props: AuthFormProps) {
             aria-invalid={!!name.error}
             aria-describedby={name.error ? "auth-name-error" : undefined}
             placeholder="مثلاً: علی رضایی"
+            maxLength={40}
             className="h-11"
           />
         </Field>
@@ -292,6 +294,7 @@ function AuthForm(props: AuthFormProps) {
             aria-invalid={!!username.error}
             aria-describedby={username.error ? "auth-username-error" : undefined}
             placeholder="username"
+            maxLength={32}
             ref={firstInvalidRef}
             spellCheck={false}
             autoCapitalize="off"
@@ -312,6 +315,7 @@ function AuthForm(props: AuthFormProps) {
           aria-invalid={!!password.error}
           aria-describedby={password.error ? "auth-password-error" : undefined}
           placeholder="••••••••"
+          maxLength={72}
         />
       </Field>
 

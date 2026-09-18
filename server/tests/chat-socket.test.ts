@@ -87,7 +87,8 @@ describe("chat socket fan-out", () => {
     }
   })
 
-  it("REST still serves messages with no socket connected (fallback)", async () => {
+    it("REST still serves messages with no socket connected (fallback)", async () => {
+
     await ensureUser("chatstu2", "STUDENT", "FANI_HERFEI")
     const stu = await login("chatstu2", PASSWORD)
     const admin = await login("sec_admin", PASSWORD)
@@ -101,5 +102,74 @@ describe("chat socket fan-out", () => {
     expect(list.status).toBe(200)
     const texts = (list.body.messages as { text: string }[]).map((m) => m.text)
     expect(texts).toContain("بدون سوکت")
+  })
+})
+
+/**
+ * CSWSH gate: WebSocket has no CORS preflight, so the socket `cors` option
+ * never rejects — the allowRequest origin check must. A forged cross-site
+ * Origin is denied at handshake (no sid); an allowlisted one connects.
+ * (Origin-less clients are covered above: they connect with the cookie.)
+ */
+describe("chat socket origin gate", () => {
+  let gatedBase = ""
+  let closeGated: () => Promise<void> = async () => {}
+
+  beforeAll(async () => {
+    const app = buildApp()
+    const httpServer = app.listen(0)
+    attachChatSocket(httpServer, ["https://app.example"])
+    await new Promise<void>((r) => httpServer.on("listening", r))
+    const { port } = httpServer.address() as AddressInfo
+    gatedBase = `http://127.0.0.1:${port}`
+    closeGated = () =>
+      new Promise<void>((resolve, reject) =>
+        httpServer.close((e) => (e ? reject(e) : resolve())),
+      )
+  })
+
+  afterAll(() => closeGated())
+
+  function connectWithOrigin(accessToken: string, origin: string): {
+    socket: Socket
+    connected: Promise<Socket>
+  } {
+    const socket = ioClient(gatedBase, {
+      transports: ["websocket"],
+      extraHeaders: { cookie: `pb_access=${accessToken}`, origin },
+    })
+    const connected = new Promise<Socket>((resolve, reject) => {
+      socket.on("connect", () => resolve(socket))
+      socket.on("connect_error", reject)
+    })
+    return { socket, connected }
+  }
+
+  it("denies a handshake carrying a forged cross-site Origin", async () => {
+    await ensureUser("chatcswsh", "STUDENT", "FANI_HERFEI")
+    const stu = await login("chatcswsh", PASSWORD)
+    const { socket, connected } = connectWithOrigin(
+      cookieOf(stu.cookies, "pb_access"),
+      "https://evil.example",
+    )
+    try {
+      await expect(connected).rejects.toThrow()
+    } finally {
+      socket.disconnect()
+    }
+  })
+
+  it("accepts a handshake from an allowlisted Origin", async () => {
+    await ensureUser("chatcswsh2", "STUDENT", "FANI_HERFEI")
+    const stu = await login("chatcswsh2", PASSWORD)
+    const { socket, connected } = connectWithOrigin(
+      cookieOf(stu.cookies, "pb_access"),
+      "https://app.example",
+    )
+    try {
+      await connected
+    } finally {
+      socket.disconnect()
+    }
   })
 })

@@ -9,17 +9,9 @@
     <link rel="apple-touch-icon" href="/icon.svg" />
     <link rel="preload" href="/fonts/vazirmatn-arabic.woff2" as="font" type="font/woff2" crossorigin />
     <title>پودمان‌بان — آزمون پودمانی هنرستان</title>
-    <script>
-      // Apply the persisted theme before first paint to avoid a flash.
-      // Key matches next-themes' default storageKey ("theme").
-      try {
-        var t = localStorage.getItem("theme") || "light";
-        if (t === "system") {
-          t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        if (t === "dark") document.documentElement.classList.add("dark");
-      } catch (e) {}
-    </script>
+    <!-- Render-blocking by design: must run before first paint (no async/defer).
+         External file so script-src 'self' holds; the build injects the CSP meta. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

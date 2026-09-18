@@ -43,6 +43,15 @@ let io: SocketIOServer | null = null
 export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[]): void {
   io = new SocketIOServer(httpServer, {
     path: "/socket.io",
+    // CSWSH gate: WebSocket has no CORS preflight, so the `cors` option below
+    // only decides response headers — it never rejects. Browsers always send
+    // Origin on cross-site handshakes, so the allowlist is enforced here.
+    // Origin-less clients (curl, native) still need the auth cookie below.
+    allowRequest: (req, fn) => {
+      const origin = req.headers.origin
+      if (!origin || allowedOrigins.includes(origin)) fn(null, true)
+      else fn("origin not allowed", false)
+    },
     cors: {
       origin(origin, cb) {
         if (!origin || allowedOrigins.includes(origin)) cb(null, true)
