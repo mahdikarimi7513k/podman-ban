@@ -4,9 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: "آدرس واقعی سرور (بدون اسلش آخر)"
+        description: "آدرس سرور (بدون اسلش آخر)"
         required: true
         default: "https://ms.payam-coder.ir"
+      app_id:
+        description: "Package Name"
+        required: true
+        default: "ir.payamcoder.ms"
+      app_name:
+        description: "نام اپلیکیشن"
+        required: true
+        default: "مدرسه مجازی برای تست زدن"
+      version_name:
+        description: "1.0.0"
+        required: false
+        default: "1.0.0"
+      crypto_key:
+        description: "کلید رمزنگاری (اختیاری - اگر crypto-api.js اضافه کردی)"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -22,47 +38,233 @@ jobs:
           java-version: "21"
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
 
       - name: Install required SDK packages
         run: |
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-34" \
-            "build-tools;34.0.0"
+            "platforms;android-35" \
+            "build-tools;34.0.0" >/dev/null
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
       - name: Install client deps
         working-directory: client
-        run: npm install
+        run: |
+          npm install -g npm@latest
+          npm install
+          npm install --no-save javascript-obfuscator @capacitor/assets sharp
 
       - name: Build web assets
         working-directory: client
         run: npm run build
         env:
           VITE_API_BASE: ${{ inputs.api_base }}
+          VITE_CRYPTO_KEY: ${{ inputs.crypto_key }}
 
-      - name: Add Android platform
+      - name: Detect webDir
         working-directory: client
-        run: npx cap add android
+        run: |
+          if [ -d dist ]; then W=dist
+          elif [ -d build ]; then W=build
+          elif [ -d out ]; then W=out
+          else W=dist; fi
+          echo "WEB_DIR=$W" >> $GITHUB_ENV
+          echo "webDir = $W"
+
+      - name: Obfuscate JavaScript
+        working-directory: client
+        run: |
+          echo "🔒 Obfuscating JS files..."
+          find dist -name "*.js" -type f | while read -r file; do
+            TMP=$(mktemp -d)
+            if npx javascript-obfuscator "$file" \
+                --output "$TMP" \
+                --compact true \
+                --control-flow-flattening true \
+                --control-flow-flattening-threshold 0.5 \
+                --string-array true \
+                --string-array-threshold 0.8 \
+                --string-array-encoding base64 \
+                --split-strings true \
+                --split-strings-chunk-length 10 \
+                --transform-object-keys true \
+                --ignore-imports true \
+                --rename-globals false \
+                >/dev/null 2>&1; then
+              OUT=$(find "$TMP" -name "*.js" -type f | head -1)
+              [ -f "$OUT" ] && cp "$OUT" "$file" && echo "  ✔ $file"
+            else
+              echo "  ⚠ skipped: $file"
+            fi
+            rm -rf "$TMP"
+          done
+
+      - name: Write Capacitor config (fix package name)
+        working-directory: client
+        env:
+          APP_ID: ${{ inputs.app_id }}
+          APP_NAME: ${{ inputs.app_name }}
+          WEB_DIR: ${{ env.WEB_DIR }}
+        run: |
+          python3 <<'PYEOF'
+          import json, os
+          cfg = {}
+          if os.path.exists('capacitor.config.json'):
+              with open('capacitor.config.json', encoding='utf-8') as f:
+                  cfg = json.load(f)
+          elif os.path.exists('capacitor.config.ts'):
+              os.rename('capacitor.config.ts', 'capacitor.config.ts.bak')
+          cfg['appId'] = os.environ['APP_ID']
+          cfg['appName'] = os.environ['APP_NAME']
+          cfg['webDir'] = os.environ['WEB_DIR']
+          cfg['android'] = {**(cfg.get('android') or {}),
+                            'allowMixedContent': False,
+                            'webContentsDebuggingEnabled': False}
+          cfg['server'] = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
+          cfg['server'].pop('url', None)       # حذف آدرس dev server اگر مونده
+          cfg['server'].pop('cleartext', None)
+          with open('capacitor.config.json', 'w', encoding='utf-8') as f:
+              json.dump(cfg, f, indent=2, ensure_ascii=False)
+          print('appId =', cfg['appId'], '| appName =', cfg['appName'])
+          PYEOF
+
+      - name: Prepare icon & splash (auto-generate if missing)
+        working-directory: client
+        run: |
+          mkdir -p assets
+          NEED_ICON=$([ -f assets/icon.png ] && echo 0 || echo 1)
+          NEED_SPLASH=$([ -f assets/splash.png ] && echo 0 || echo 1)
+          if [ "$NEED_ICON" = "1" ] || [ "$NEED_SPLASH" = "1" ]; then
+            cat > .gen-icons.mjs <<'EOF'
+          import sharp from 'sharp';
+          import fs from 'fs';
+
+          const [needIcon, needSplash] = process.argv.slice(2).map(Number);
+          const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3b93ff"/><stop offset="100%" stop-color="#0b63e5"/>
+            </linearGradient></defs>
+            <rect width="1024" height="1024" fill="url(#bg)"/>
+            <g fill="#ffffff">
+              <polygon points="512,258 886,424 512,590 138,424"/>
+              <path d="M330 508 L512 590 L694 508 L694 618 Q694 742 512 742 Q330 742 330 618 Z"/>
+              <rect x="872" y="424" width="28" height="150" rx="14"/>
+              <circle cx="886" cy="600" r="26"/>
+              <path d="M856 626 L916 626 L898 730 Q886 752 874 730 Z"/>
+            </g>
+          </svg>`;
+
+          const iconBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+          if (needIcon) {
+            await sharp(iconBuf).toFile('assets/icon.png');
+            console.log('✅ assets/icon.png generated');
+          }
+          if (needSplash) {
+            const mask = Buffer.from('<svg width="1024" height="1024"><rect width="1024" height="1024" rx="230" fill="#fff"/></svg>');
+            const rounded = await sharp(iconBuf).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+            await sharp({ create: { width: 2732, height: 2732, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
+              .composite([{ input: await sharp(rounded).resize(1300, 1300).png().toBuffer(), gravity: 'center' }])
+              .png().toFile('assets/splash.png');
+            console.log('✅ assets/splash.png generated');
+          }
+          EOF
+            node .gen-icons.mjs "$NEED_ICON" "$NEED_SPLASH"
+            rm -f .gen-icons.mjs
+          else
+            echo "✅ Using committed icon.png + splash.png"
+          fi
+
+      - name: Add Android platform (fresh)
+        working-directory: client
+        run: |
+          rm -rf android
+          npx cap add android
 
       - name: Sync Capacitor
         working-directory: client
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Generate Android icons & splash
+        working-directory: client
+        run: |
+          npx @capacitor/assets generate --android \
+            --iconBackgroundColor '#1B7FF0' \
+            --iconBackgroundColorDark '#1B7FF0' \
+            --splashBackgroundColor '#000000' \
+            --splashBackgroundColorDark '#000000'
+
+      - name: Set versionName / versionCode
         working-directory: client/android
-        run: ./gradlew assembleDebug
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 -c "
+          import re, os
+          p = 'app/build.gradle'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'versionName\s+\"[^\"]*\"', 'versionName \"%s\"' % os.environ['VERSION_NAME'], s)
+          s = re.sub(r'versionCode\s+\d+', 'versionCode %s' % os.environ['VERSION_CODE'], s)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('version:', os.environ['VERSION_NAME'], '| code:', os.environ['VERSION_CODE'])
+          "
+
+      - name: Build release APK
+        working-directory: client/android
+        run: ./gradlew clean assembleRelease
+
+      - name: Prepare signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
+            echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
+            echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+            echo "✅ Using keystore from secrets"
+          else
+            keytool -genkeypair -v \
+              -keystore /tmp/release.keystore \
+              -alias ms-app \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass msSecret2024 \
+              -keypass msSecret2024 \
+              -dname "CN=MS, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
+            echo "KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
+            echo "KEYSTORE_PASS=msSecret2024" >> $GITHUB_ENV
+            echo "KEY_ALIAS=ms-app" >> $GITHUB_ENV
+            echo "KEY_PASS=msSecret2024" >> $GITHUB_ENV
+            echo "⚠️ Temporary keystore generated — برای آپدیت‌های بعدی حتماً Secrets را تنظیم کن"
+          fi
+
+      - name: Sign APK
+        working-directory: client/android
+        run: |
+          APK=$(find app/build/outputs/apk/release -name "*unsigned*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          fi
+          echo "Signing: $APK"
+          $ANDROID_HOME/build-tools/34.0.0/zipalign -f 4 "$APK" aligned.apk
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks "$KEYSTORE_PATH" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out signed.apk aligned.apk
+          $ANDROID_HOME/build-tools/34.0.0/apksigner verify signed.apk
+          echo "✅ Signed: $(du -h signed.apk | cut -f1)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: podman-ban-debug-apk
-          path: client/android/app/build/outputs/apk/debug/app-debug.apk
+          name: ms-app-release-apk
+          path: client/android/signed.apk
