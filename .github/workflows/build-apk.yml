@@ -20,7 +20,7 @@ on:
         required: false
         default: "1.0.0"
       load_mode:
-        description: "remote = لود مستقیم سایت (رفع مشکل کوکی) | local = بیلد داخلی"
+        description: "remote = لود مستقیم سایت | local = بیلد داخلی"
         required: false
         default: "remote"
 
@@ -76,7 +76,7 @@ jobs:
           echo "WEB_DIR=$W" >> $GITHUB_ENV
           echo "webDir = $W"
 
-      - name: Write Capacitor config (fix package name)
+      - name: Write Capacitor config (package name + cookies)
         working-directory: client
         env:
           APP_ID: ${{ inputs.app_id }}
@@ -99,6 +99,12 @@ jobs:
           cfg['android'] = {**(cfg.get('android') or {}),
                             'allowMixedContent': False,
                             'webContentsDebuggingEnabled': False}
+          # ✅ پل کوکی و HTTP نیتیو — بدون این، document.cookie خالی است و CSRF می‌شکند
+          cfg['plugins'] = {
+              **(cfg.get('plugins') or {}),
+              'CapacitorCookies': {'enabled': True},
+              'CapacitorHttp': {'enabled': True},
+          }
           server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
           server.pop('cleartext', None)
           if os.environ['LOAD_MODE'] == 'remote':
@@ -108,8 +114,9 @@ jobs:
           cfg['server'] = server
           with open('capacitor.config.json', 'w', encoding='utf-8') as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
-          print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'],
-                '| server.url =', server.get('url', '(local assets)'))
+          print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
+          print('plugins =', json.dumps(cfg['plugins']))
+          print('server.url =', server.get('url', '(local assets)'))
           PYEOF
 
       - name: Ensure app icon exists (auto-draw if missing)
@@ -177,8 +184,6 @@ jobs:
           if [ "${#FP}" -ne 64 ]; then
             echo "❌ Could not read certificate fingerprint"
             printf '%s\n' "$LIST_OUT" | head -5 || true
-            echo "→ اگر پیام password دیدی: ANDROID_KEYSTORE_PASSWORD اشتباه است"
-            echo "→ وگرنه ANDROID_KEY_ALIAS را چک کن (الان: '$ALIAS_NAME')"
             exit 1
           fi
 
@@ -269,7 +274,7 @@ jobs:
               }
 
               @Override
-              protected void onResume() {
+              public void onResume() {
                   super.onResume();
                   if (!ok()) { die(); }
               }
