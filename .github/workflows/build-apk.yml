@@ -14,13 +14,13 @@ on:
       app_name:
         description: "نام اپلیکیشن"
         required: true
-        default: "مدرسه مجازی برای تست زدن"
+        default: "مدرسه مجازی"
       version_name:
-        description: "1.0.0"
+        description: "شماره نسخه"
         required: false
         default: "1.0.0"
       crypto_key:
-        description: "کلید رمزنگاری (اختیاری - اگر crypto-api.js اضافه کردی)"
+        description: "کلید رمزنگاری (اختیاری)"
         required: false
         default: ""
 
@@ -58,7 +58,7 @@ jobs:
         run: |
           npm install -g npm@latest
           npm install
-          npm install --no-save javascript-obfuscator @capacitor/assets sharp
+          npm install --no-save javascript-obfuscator
 
       - name: Build web assets
         working-directory: client
@@ -127,57 +127,31 @@ jobs:
                             'allowMixedContent': False,
                             'webContentsDebuggingEnabled': False}
           cfg['server'] = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
-          cfg['server'].pop('url', None)       # حذف آدرس dev server اگر مونده
+          cfg['server'].pop('url', None)
           cfg['server'].pop('cleartext', None)
           with open('capacitor.config.json', 'w', encoding='utf-8') as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
           print('appId =', cfg['appId'], '| appName =', cfg['appName'])
           PYEOF
 
-      - name: Prepare icon & splash (auto-generate if missing)
+      - name: Ensure app icon exists (auto-draw if missing)
         working-directory: client
         run: |
+          if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
           mkdir -p assets
-          NEED_ICON=$([ -f assets/icon.png ] && echo 0 || echo 1)
-          NEED_SPLASH=$([ -f assets/splash.png ] && echo 0 || echo 1)
-          if [ "$NEED_ICON" = "1" ] || [ "$NEED_SPLASH" = "1" ]; then
-            cat > .gen-icons.mjs <<'EOF'
-          import sharp from 'sharp';
-          import fs from 'fs';
-
-          const [needIcon, needSplash] = process.argv.slice(2).map(Number);
-          const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#3b93ff"/><stop offset="100%" stop-color="#0b63e5"/>
-            </linearGradient></defs>
-            <rect width="1024" height="1024" fill="url(#bg)"/>
-            <g fill="#ffffff">
-              <polygon points="512,258 886,424 512,590 138,424"/>
-              <path d="M330 508 L512 590 L694 508 L694 618 Q694 742 512 742 Q330 742 330 618 Z"/>
-              <rect x="872" y="424" width="28" height="150" rx="14"/>
-              <circle cx="886" cy="600" r="26"/>
-              <path d="M856 626 L916 626 L898 730 Q886 752 874 730 Z"/>
-            </g>
-          </svg>`;
-
-          const iconBuf = await sharp(Buffer.from(svg)).png().toBuffer();
-          if (needIcon) {
-            await sharp(iconBuf).toFile('assets/icon.png');
-            console.log('✅ assets/icon.png generated');
-          }
-          if (needSplash) {
-            const mask = Buffer.from('<svg width="1024" height="1024"><rect width="1024" height="1024" rx="230" fill="#fff"/></svg>');
-            const rounded = await sharp(iconBuf).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
-            await sharp({ create: { width: 2732, height: 2732, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
-              .composite([{ input: await sharp(rounded).resize(1300, 1300).png().toBuffer(), gravity: 'center' }])
-              .png().toFile('assets/splash.png');
-            console.log('✅ assets/splash.png generated');
-          }
-          EOF
-            node .gen-icons.mjs "$NEED_ICON" "$NEED_SPLASH"
-            rm -f .gen-icons.mjs
+          if [ ! -f assets/icon.png ]; then
+            echo "🎨 Generating default icon (graduation cap)..."
+            $MX -size 1024x1024 gradient:'#4a9bff-#0a5be0' \
+              -fill white -stroke none \
+              -draw "roundrectangle 322,470 702,742 80,80" \
+              -draw "polygon 512,236 894,420 512,604 130,420" \
+              -draw "rectangle 868,420 896,566" \
+              -draw "circle 882,594 882,622" \
+              -draw "polygon 858,616 906,616 890,712 874,712" \
+              assets/icon.png
+            echo "✅ assets/icon.png generated"
           else
-            echo "✅ Using committed icon.png + splash.png"
+            echo "✅ Using committed assets/icon.png"
           fi
 
       - name: Add Android platform (fresh)
@@ -190,14 +164,50 @@ jobs:
         working-directory: client
         run: npx cap sync android
 
-      - name: Generate Android icons & splash
+      - name: Generate Android icons & splash (ImageMagick)
         working-directory: client
         run: |
-          npx @capacitor/assets generate --android \
-            --iconBackgroundColor '#1B7FF0' \
-            --iconBackgroundColorDark '#1B7FF0' \
-            --splashBackgroundColor '#000000' \
-            --splashBackgroundColorDark '#000000'
+          set -e
+          if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
+          RES=android/app/src/main/res
+          ICON=assets/icon.png
+
+          # نسخه با گوشه گرد (مستر 1024)
+          $MX "$ICON" -resize 1024x1024 \
+            \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
+            -alpha set -compose DstIn -composite /tmp/icon_rounded.png
+
+          # آیکون‌های لانچر + foreground
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            den=${pair%%:*}; px=${pair##*:}
+            dir="$RES/mipmap-$den"
+            [ -d "$dir" ] || continue
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher.png"
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher_round.png"
+            fp=$(( px * 225 / 100 ))
+            inner=$(( fp * 66 / 100 ))
+            $MX -size ${fp}x${fp} xc:none \
+              \( /tmp/icon_rounded.png -resize ${inner}x${inner} \) \
+              -gravity center -compose over -composite "$dir/ic_launcher_foreground.png"
+            echo "  ✔ mipmap-$den"
+          done
+
+          # رنگ پس‌زمینه آیکون adaptive
+          grep -rl "ic_launcher_background" "$RES/values" 2>/dev/null | while read -r bg; do
+            sed -i -E 's/(name="ic_launcher_background">)#[0-9A-Fa-f]+(<)/\1#1B7FF0\2/g' "$bg"
+          done
+
+          # اسپلش‌ها: پس‌زمینه مشکی + آیکون وسط
+          find "$RES" -name "splash.png" -type f | while read -r f; do
+            dims=$($MX "$f" -format "%wx%h" info:)
+            W=${dims%x*}; H=${dims#*x}
+            S=$(( ( W < H ? W : H ) * 45 / 100 ))
+            $MX -size ${W}x${H} xc:black \
+              \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
+              -gravity center -compose over -composite "$f"
+            echo "  ✔ $f (${W}x${H})"
+          done
+          echo "✅ All icons & splash generated"
 
       - name: Set versionName / versionCode
         working-directory: client/android
@@ -242,7 +252,7 @@ jobs:
             echo "KEYSTORE_PASS=msSecret2024" >> $GITHUB_ENV
             echo "KEY_ALIAS=ms-app" >> $GITHUB_ENV
             echo "KEY_PASS=msSecret2024" >> $GITHUB_ENV
-            echo "⚠️ Temporary keystore generated — برای آپدیت‌های بعدی حتماً Secrets را تنظیم کن"
+            echo "⚠️ Temporary keystore generated"
           fi
 
       - name: Sign APK
