@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build PodmanBan APK
 
 on:
   workflow_dispatch:
@@ -10,11 +10,11 @@ on:
       app_id:
         description: "Package Name"
         required: true
-        default: "ir.payamcoder.ms"
+        default: "ir.payamcoder.podmanban"
       app_name:
         description: "نام اپلیکیشن"
         required: true
-        default: "مدرسه مجازی"
+        default: "پودمان‌بان"
       version_name:
         description: "شماره نسخه"
         required: false
@@ -38,11 +38,11 @@ jobs:
           java-version: "21"
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
 
       - name: Install required SDK packages
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0" >/dev/null
 
       - name: Install ImageMagick
         run: |
@@ -96,15 +96,19 @@ jobs:
           cfg['appId'] = os.environ['APP_ID']
           cfg['appName'] = os.environ['APP_NAME']
           cfg['webDir'] = os.environ['WEB_DIR']
+          # امنیت: بدون محتوای میکس (http)، بدون دیباگ وب‌ویو در ریلیز
           cfg['android'] = {**(cfg.get('android') or {}),
                             'allowMixedContent': False,
                             'webContentsDebuggingEnabled': False}
-          # ✅ پل کوکی و HTTP نیتیو — بدون این، document.cookie خالی است و CSRF می‌شکند
+          # حیاتی برای لاگین: بدون این دو، document.cookie خالی است،
+          # هدر x-csrf-token ست نمی‌شود و همه POST/PUT/DELETE ها 403 می‌خورند
           cfg['plugins'] = {
               **(cfg.get('plugins') or {}),
               'CapacitorCookies': {'enabled': True},
               'CapacitorHttp': {'enabled': True},
           }
+          # منشأ وب‌ویو اندروید https://localhost می‌شود؛
+          # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد
           server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
           server.pop('cleartext', None)
           if os.environ['LOAD_MODE'] == 'remote':
@@ -145,7 +149,7 @@ jobs:
           rm -rf android
           npx cap add android
 
-      - name: Harden manifest (no backup)
+      - name: Harden manifest (no backup, no cleartext)
         working-directory: client/android
         run: |
           M=app/src/main/AndroidManifest.xml
@@ -154,7 +158,12 @@ jobs:
           else
             sed -i 's/<application /<application android:allowBackup="false" /' "$M"
           fi
-          echo "✅ allowBackup=false"
+          if grep -q 'android:usesCleartextTraffic' "$M"; then
+            sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="false"/' "$M"
+          else
+            sed -i 's/<application /<application android:usesCleartextTraffic="false" /' "$M"
+          fi
+          echo "✅ allowBackup=false, usesCleartextTraffic=false"
 
       - name: Prepare signing keystore + fingerprint
         env:
@@ -171,11 +180,11 @@ jobs:
             KEY_PASS_VAL="$SEC_KEY_PASS"
             echo "✅ Using keystore from secrets"
           else
-            keytool -genkeypair -v -keystore /tmp/release.keystore -alias ms-app -keyalg RSA -keysize 2048 -validity 10000 -storepass msSecret2024 -keypass msSecret2024 -dname "CN=MS, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
-            STORE_PASS="msSecret2024"
-            ALIAS_NAME="ms-app"
-            KEY_PASS_VAL="msSecret2024"
-            echo "⚠️ Temporary keystore generated"
+            keytool -genkeypair -v -keystore /tmp/release.keystore -alias podmanban -keyalg RSA -keysize 2048 -validity 10000 -storepass podmanban2024 -keypass podmanban2024 -dname "CN=PodmanBan, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
+            STORE_PASS="podmanban2024"
+            ALIAS_NAME="podmanban"
+            KEY_PASS_VAL="podmanban2024"
+            echo "⚠️ Temporary keystore generated (unsigned identity — set secrets for production)"
           fi
 
           LIST_OUT=$(keytool -list -v -keystore /tmp/release.keystore -storepass "$STORE_PASS" -alias "$ALIAS_NAME" 2>&1 || true)
@@ -370,5 +379,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ms-app-release-apk
+          name: podman-ban-release-apk
           path: client/android/signed.apk
