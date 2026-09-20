@@ -47,6 +47,8 @@ let watcher: ReturnType<typeof setInterval> | null = null
 
 let watchingVisibility = false
 
+let watchingOnline = false
+
 export function showBroadcastOnce(plugin?: NotifyPlugin): Promise<void> {
   if (!inflight) {
     inflight = run(plugin).finally(() => {
@@ -107,10 +109,11 @@ async function run(plugin?: NotifyPlugin): Promise<void> {
 
 /**
  * Background watcher: re-checks for new admin broadcasts while the app is
- * open (every `intervalMs`) and whenever the page becomes visible again
- * (returning from background on mobile). A broadcast created after boot
- * therefore reaches users without an app restart — as an in-app toast
- * everywhere and a system notification in the APK.
+ * open (every `intervalMs`), whenever the page becomes visible again
+ * (returning from background on mobile), and when the device comes back
+ * online. A broadcast created after boot therefore reaches open apps
+ * without a restart — as an in-app toast everywhere and a system
+ * notification in the APK. A fully closed app still needs FCM for push.
  *
  * Idempotent: calling it twice does not double-schedule. Returns a stop
  * function for cleanup. Failures stay silent by way of showBroadcastOnce.
@@ -124,7 +127,12 @@ export function startBroadcastWatcher(intervalMs = 60000): () => void {
 
   if (!watchingVisibility) {
     watchingVisibility = true
-    document.addEventListener("visibilitychange", recheckOnVisible)
+    document.addEventListener("visibilitychange", recheckLatest)
+  }
+
+  if (!watchingOnline) {
+    watchingOnline = true
+    window.addEventListener("online", recheckLatest)
   }
 
   return stopBroadcastWatcher
@@ -138,10 +146,15 @@ export function stopBroadcastWatcher(): void {
 
   if (watchingVisibility) {
     watchingVisibility = false
-    document.removeEventListener("visibilitychange", recheckOnVisible)
+    document.removeEventListener("visibilitychange", recheckLatest)
+  }
+
+  if (watchingOnline) {
+    watchingOnline = false
+    window.removeEventListener("online", recheckLatest)
   }
 }
 
-function recheckOnVisible(): void {
+function recheckLatest(): void {
   void showBroadcastOnce()
 }

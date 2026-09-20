@@ -209,6 +209,18 @@ describe("showBroadcastOnce", () => {
     expect(screen.getByTestId("probe").textContent).toBe("بازگشت|دوباره خوش آمدی")
   })
 
+  it("watcher: coming back online re-checks immediately", async () => {
+    mockLatest({ id: "n10", title: "اینترنت", body: "وصل شدی", createdAt: "2026-01-02", createdBy: null })
+    startBroadcastWatcher(60000)
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId("probe").textContent).toBe("اینترنت|وصل شدی")
+  })
+
   it("own broadcast: the sender gets no echo toast (but it is marked seen)", async () => {
     setUser("u-admin")
     mockLatest({ id: "n5", title: "من", body: "پیام خودم", createdAt: "2026-01-02", createdBy: "u-admin" })
