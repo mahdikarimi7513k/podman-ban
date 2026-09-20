@@ -14,7 +14,7 @@ uploads/*
 # local lint plugin (not needed to build/run/test/deploy)
 tools/
 
-# dead lint config (its plugin lives in tools/) + agent skill lockfile
+# local-only lint config (anti-slop plugin lives in tools/) + agent skill lockfile
 .oxlintrc.json
 skills-lock.json
 
@@ -24,6 +24,7 @@ deploy/
 # install output
 node_modules/
 client/dist/
+client/android/
 server/dist-server/
 *.tsbuildinfo
 

@@ -179,6 +179,18 @@ export const institutions = sqliteTable("Institution", {
   createdAt: createdAt("createdAt"),
 })
 
+// Admin-broadcast announcements. The client polls the latest active row on
+// boot and surfaces it as an in-app toast (+ native local notification in
+// the APK). Title/body are rendered as plain text only — never HTML.
+export const notifications = sqliteTable("Notification", {
+  id: id("id"),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdBy: text("createdBy").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt("createdAt"),
+}, (t) => [index("Notification_createdAt_idx").on(t.createdAt)])
+
 export const archiveFiles = sqliteTable("ArchiveFile", {
   id: id("id"),
   title: text("title").notNull(),
@@ -199,6 +211,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   examSessions: many(examSessions),
   chatMessages: many(chatMessages),
+  notifications: many(notifications),
 }))
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -241,4 +254,8 @@ export const institutionsRelations = relations(institutions, ({ many }) => ({
 
 export const archiveFilesRelations = relations(archiveFiles, ({ one }) => ({
   institution: one(institutions, { fields: [archiveFiles.institutionId], references: [institutions.id] }),
+}))
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  author: one(users, { fields: [notifications.createdBy], references: [users.id] }),
 }))

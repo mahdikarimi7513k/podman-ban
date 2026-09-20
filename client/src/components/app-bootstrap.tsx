@@ -1,6 +1,8 @@
 
 import * as React from "react"
 import { useApp } from "@/lib/store"
+import { welcomeOnce } from "@/lib/welcome-notify"
+import { showBroadcastOnce, startBroadcastWatcher } from "@/lib/notify-inbox"
 
 export function AppBootstrap({ children }: { children: React.ReactNode }) {
   const boot = useApp((s) => s.boot)
@@ -8,6 +10,14 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     boot()
+    // Native-only first-launch greeting + latest admin broadcast (web: toast).
+    // Both are exactly-once and failure-silent — boot never depends on them.
+    void welcomeOnce()
+    void showBroadcastOnce()
+    // Keep watching: broadcasts created after boot reach open apps too.
+    const stopWatching = startBroadcastWatcher()
+
+    return () => stopWatching()
   }, [boot])
 
   if (!booted) {

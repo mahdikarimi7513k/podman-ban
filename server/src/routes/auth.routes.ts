@@ -9,6 +9,7 @@
  *   GET  /me                 — current user (no auto-refresh)
  *   GET  /csrf                — echo csrf token for the session
  *   GET  /config              — PUBLIC app state (lock/banner/timer)
+ *   GET  /notifications/latest — PUBLIC latest admin broadcast (or null)
  */
 
 import { Router } from "express"
@@ -24,9 +25,9 @@ import {
   rateLimit,
   clientIp,
 } from "../lib/auth/index.js"
-import { eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { db } from "../lib/db.js"
-import { users } from "../lib/db/schema.js"
+import { notifications, users } from "../lib/db/schema.js"
 import { registerSchema, loginSchema, parseBody } from "../lib/validations.js"
 import { getAppState } from "../lib/remote-config.js"
 
@@ -231,4 +232,25 @@ authRouter.get("/csrf", async (req, res) => {
 authRouter.get("/config", async (_req, res) => {
   const state = await getAppState()
   res.json({ state })
+})
+
+// ---- GET /notifications/latest (PUBLIC) -------------------------------
+// Latest active admin broadcast. Unauthenticated by design (same as the
+// banner in /config): the client shows it once per id, tracked locally.
+authRouter.get("/notifications/latest", async (_req, res) => {
+  const row = await db
+    .select({
+      id: notifications.id,
+      title: notifications.title,
+      body: notifications.body,
+      createdBy: notifications.createdBy,
+      createdAt: notifications.createdAt,
+    })
+    .from(notifications)
+    .where(eq(notifications.active, true))
+    .orderBy(desc(notifications.createdAt))
+    .limit(1)
+    .get()
+
+  res.json({ notification: row ?? null })
 })

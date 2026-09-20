@@ -106,6 +106,8 @@ export function buildApp(): express.Express {
       p === "/health" ||
       // Public, read-only, and required by the client to render the lock screen
       (p === "/api/config" && req.method === "GET") ||
+      // Public, read-only admin broadcast shown on boot (same class as /config)
+      (p === "/api/notifications/latest" && req.method === "GET") ||
       p.startsWith("/api/auth") ||
       p.startsWith("/api/admin") ||
       // Stateless credential check (API-key auth) — an auth flow like login.

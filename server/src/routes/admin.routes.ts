@@ -49,6 +49,10 @@
  *   GET    /external-api           key status            (super)
  *   POST   /external-api/key       issue new key         (super, CSRF)
  *   DELETE /external-api/key       revoke key            (super, CSRF)
+ *
+ *   GET    /notifications          list recent broadcasts
+ *   POST   /notifications          send broadcast        (CSRF)
+ *   DELETE /notifications/:id      delete broadcast      (CSRF)
  */
 
 import { Router } from "express"
@@ -64,6 +68,7 @@ import {
   examSessions,
   institutions,
   modules,
+  notifications,
   questions,
   users,
 } from "../lib/db/schema.js"
@@ -89,6 +94,7 @@ import {
   questionCreateSchema,
   questionUpdateSchema,
   archiveCreateSchema,
+  notificationCreateSchema,
   remoteConfigUpdateSchema,
   registerSchema,
   parseBody,
@@ -507,10 +513,17 @@ adminRouter.post(
       } catch {
         /* keep raw value */
       }
+      const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "")
+      // Bridge-safe uploads from the native app arrive base64-encoded
+      // (see apiUpload) — the native bridge cannot transport ArrayBuffer
+      // bodies losslessly. Web keeps sending raw bytes; both meet below.
+      const transfer = req.headers["x-transfer-encoding"]
+      const transferName = (Array.isArray(transfer) ? transfer[0] : transfer ?? "").toLowerCase()
+      const bytes = transferName === "base64" ? Buffer.from(raw.toString("utf8"), "base64") : raw
       const name = saveArchiveUpload(
         id,
         kind,
-        Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? ""),
+        bytes,
         originalName,
         req.headers["content-type"],
       )
@@ -894,5 +907,90 @@ adminRouter.delete("/external-api/key", async (req, res) => {
     return
   }
   await updateAppState({ externalApiKeyHash: null, externalApiKeyPrefix: "" })
+  res.json({ ok: true })
+})
+
+// =====================================================================
+// Broadcast notifications — shown to every app user on next boot.
+// requireAdmin (ADMIN + CONTENT_ADMIN): same trust level as the banner.
+// =====================================================================
+
+adminRouter.get("/notifications", async (req, res) => {
+  const user = await requireAdmin(req, res)
+
+  if (!user) return
+
+  const rows = await db
+    .select({
+      id: notifications.id,
+      title: notifications.title,
+      body: notifications.body,
+      active: notifications.active,
+      createdAt: notifications.createdAt,
+    })
+    .from(notifications)
+    .orderBy(desc(notifications.createdAt))
+    .limit(20)
+    .all()
+
+  res.json({ notifications: rows })
+})
+
+adminRouter.post("/notifications", async (req, res) => {
+  const user = await requireAdmin(req, res)
+
+  if (!user) return
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  const data = parseBody(notificationCreateSchema, req.body, res)
+
+  if (!data) return
+
+  const row = await db
+    .insert(notifications)
+    .values({ title: data.title, body: data.body, createdBy: user.id })
+    .returning({
+      id: notifications.id,
+      title: notifications.title,
+      body: notifications.body,
+      createdAt: notifications.createdAt,
+    })
+    .get()
+
+  res.status(201).json({ notification: row })
+})
+
+adminRouter.delete("/notifications/:id", async (req, res) => {
+  const user = await requireAdmin(req, res)
+
+  if (!user) return
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  const { id } = req.params
+
+  const exists = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(eq(notifications.id, id))
+    .get()
+
+  if (!exists) {
+    res.status(404).json({ error: "اعلان یافت نشد" })
+
+    return
+  }
+
+  await db.delete(notifications).where(eq(notifications.id, id)).run()
+
   res.json({ ok: true })
 })

@@ -165,3 +165,11 @@ export const remoteConfigUpdateSchema = z.object({
 export const chatSendSchema = z.object({
   text: z.string().trim().min(1).max(2000),
 })
+
+// Admin-broadcast notification: rendered as plain text (toast + native
+// notification), so cap lengths and forbid nothing else — no HTML is ever
+// interpreted, but a bound keeps the toast/native tray readable.
+export const notificationCreateSchema = z.object({
+  title: z.string().trim().min(1, "عنوان را وارد کنید").max(120, "عنوان حداکثر ۱۲۰ نویسه باشد"),
+  body: z.string().trim().min(1, "متن پیام را وارد کنید").max(500, "متن پیام حداکثر ۵۰۰ نویسه باشد"),
+})

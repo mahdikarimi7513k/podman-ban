@@ -119,8 +119,24 @@ export async function apiFetch<T = unknown>(
 /**
  * Upload a raw file body (application/octet-stream) with CSRF + auth cookies.
  * Used for archive artifact uploads; server answers with JSON.
+ *
+ * On the native app the body goes base64-encoded: the Capacitor bridge cannot
+ * transport ArrayBuffer bodies losslessly (binary uploads arrive truncated or
+ * mangled), while strings survive. The server decodes on
+ * `x-transfer-encoding: base64`. Web keeps sending raw bytes.
  */
 export async function apiUpload<T = unknown>(input: string, file: File): Promise<T> {
+  if (isNativeApp()) {
+    return apiFetch<T>(input, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-file-name": encodeURIComponent(file.name),
+        "x-transfer-encoding": "base64",
+      },
+      body: await fileToBase64(file),
+    })
+  }
   const bytes = await file.arrayBuffer()
   return apiFetch<T>(input, {
     method: "POST",
@@ -130,4 +146,25 @@ export async function apiUpload<T = unknown>(input: string, file: File): Promise
     },
     body: bytes,
   })
+}
+
+// Same detection as Capacitor core (androidBridge / webkit.messageHandlers),
+// inlined to keep @capacitor/core out of the web bundle.
+function isNativeApp(): boolean {
+  const w = window as unknown as {
+    androidBridge?: unknown
+    webkit?: { messageHandlers?: { bridge?: unknown } }
+  }
+  return !!w.androidBridge || !!w.webkit?.messageHandlers?.bridge
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  // Chunked: btoa on one giant string blows the call stack past ~100k chars.
+  let bin = ""
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(bin)
 }

@@ -7,7 +7,7 @@
     "better-sqlite3": "^13.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "drizzle-orm": "0.44.7",
+    "drizzle-orm": "0.45.2",
     "express": "^5.1.0",
     "jose": "^6.2.10",
     "socket.io": "^4.8.3",

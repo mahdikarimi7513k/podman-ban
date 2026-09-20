@@ -94,7 +94,7 @@ export function AdminView() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full grid grid-cols-5 h-auto">
+        <TabsList className="w-full grid grid-cols-6 h-auto">
           <TabsTrigger value="dashboard" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
             <LayoutDashboard className="size-4" strokeWidth={2} />
             <span className="hidden xs:inline">داشبورد</span>
@@ -110,6 +110,10 @@ export function AdminView() {
           <TabsTrigger value="archive" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
             <Archive className="size-4" strokeWidth={2} />
             <span className="hidden xs:inline">آرشیو</span>
+          </TabsTrigger>
+          <TabsTrigger value="notify" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
+            <Megaphone className="size-4" strokeWidth={2} />
+            <span className="hidden xs:inline">اعلان‌ها</span>
           </TabsTrigger>
           <TabsTrigger value="support" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
             <MessageSquare className="size-4" strokeWidth={2} />
@@ -128,6 +132,9 @@ export function AdminView() {
         </TabsContent>
         <TabsContent value="archive" className="mt-4 focus-visible:outline-none">
           <AdminArchive />
+        </TabsContent>
+        <TabsContent value="notify" className="mt-4 focus-visible:outline-none">
+          <AdminNotify />
         </TabsContent>
         <TabsContent value="support" className="mt-4 focus-visible:outline-none">
           <AdminSupport />
@@ -1210,6 +1217,163 @@ function AdminArchive() {
 }
 
 // ---------------- Support chat ----------------
+
+// ---------------- Broadcast notifications ----------------
+
+interface Broadcast {
+  id: string
+  title: string
+  body: string
+  active: boolean
+  createdAt: string
+}
+
+function AdminNotify() {
+  const { toast } = useToast()
+  const [items, setItems] = React.useState<Broadcast[] | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [title, setTitle] = React.useState("")
+  const [body, setBody] = React.useState("")
+  const [sending, setSending] = React.useState(false)
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
+
+    try {
+      const res = await apiFetch<{ notifications: Broadcast[] }>("/api/admin/notifications")
+      setItems(res.notifications)
+    } catch {
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void load()
+  }, [load])
+
+  async function send() {
+    if (!title.trim() || !body.trim() || sending) return
+    setSending(true)
+
+    try {
+      await apiFetch("/api/admin/notifications", {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), body: body.trim() }),
+      })
+      setTitle("")
+      setBody("")
+      toast({ title: "ارسال شد", description: "اعلان در ورود بعدی کاربران نمایش داده می‌شود." })
+      await load(true)
+    } catch (e) {
+      toast({
+        title: "خطا",
+        description: e instanceof ApiError ? e.message : "ارسال اعلان ناموفق بود",
+      })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function remove(id: string) {
+    if (deletingId) return
+    setDeletingId(id)
+
+    try {
+      await apiFetch(`/api/admin/notifications/${id}`, { method: "DELETE" })
+      setItems((prev) => (prev ? prev.filter((n) => n.id !== id) : prev))
+    } catch (e) {
+      toast({
+        title: "خطا",
+        description: e instanceof ApiError ? e.message : "حذف اعلان ناموفق بود",
+      })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Megaphone className="size-5" strokeWidth={2} />
+          <h2 className="text-sm font-semibold">ارسال اعلان به کاربران</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          در ورود بعدی، همه کاربران (وب و برنامه اندروید) این پیام را می‌بینند.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="notif-title">عنوان</Label>
+          <Input
+            id="notif-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="مثلاً: آزمون فردا"
+            maxLength={120}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="notif-body">متن پیام</Label>
+          <Textarea
+            id="notif-body"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="متن اعلان…"
+            rows={3}
+            maxLength={500}
+          />
+        </div>
+        <Button
+          type="button"
+          onClick={() => void send()}
+          disabled={sending || !title.trim() || !body.trim()}
+          className="cursor-pointer"
+        >
+          {sending ? <Loader2 className="size-4 animate-spin" /> : "ارسال اعلان"}
+        </Button>
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold">اعلان‌های اخیر</h2>
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !items || items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            هنوز اعلانی ارسال نشده است.
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((n) => (
+              <li
+                key={n.id}
+                className="flex items-start gap-3 rounded-lg border border-border bg-card p-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{n.title}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{n.body}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void remove(n.id)}
+                  disabled={deletingId === n.id}
+                  className="cursor-pointer text-destructive hover:text-destructive shrink-0"
+                >
+                  {deletingId === n.id ? <Loader2 className="size-4 animate-spin" /> : "حذف"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function AdminSupport() {
   const [conversations, setConversations] = React.useState<

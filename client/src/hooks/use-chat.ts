@@ -70,11 +70,14 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
 
   // ---- socket (the live channel — retries forever, catches up on reconnect) ----
   React.useEffect(() => {
-    // Same-origin on web (API_BASE === "" → undefined = current origin);
-    // absolute API origin inside the Capacitor APK, whose own origin
-    // (https://localhost) serves no socket.io endpoint.
+    // Transport order: websocket-first on web, polling-first inside the native
+    // app. A raw WebSocket handshake from a WebView carries no synced auth
+    // cookies, so the server drops it and the client never retries (stuck on
+    // "connecting" forever). Polling rides the native HTTP stack (cookies OK)
+    // and the later upgrade reuses the authenticated session — no re-auth
+    // happens on upgrade. API_BASE is only set in APK builds.
     const socket = io(API_BASE || undefined, {
-      transports: ["websocket", "polling"],
+      transports: API_BASE ? ["polling", "websocket"] : ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
     })

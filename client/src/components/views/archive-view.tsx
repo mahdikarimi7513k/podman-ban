@@ -37,6 +37,13 @@ const MONTHS = [
   "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
 ]
 
+// Same rule as banner.tsx and the server's zod schema (^https?://): a href
+// that ever carried javascript:/data: would execute on click, so clamp every
+// external link to a safe scheme before it reaches the DOM.
+function safeExternalHref(url: string | null | undefined): string {
+  return url && /^https?:\/\//i.test(url) ? url : "#"
+}
+
 export function ArchiveView() {
   const [institutions, setInstitutions] = React.useState<InstitutionGroup[] | null>(null)
   const [ungrouped, setUngrouped] = React.useState<ArchiveFile[]>([])
@@ -193,7 +200,7 @@ function FileItem({ file: f }: { file: ArchiveFile }) {
         {(f.questionPath || f.fileUrl) && (
           <Button asChild size="sm" variant="default" className="cursor-pointer flex-1">
             <a
-              href={f.questionPath ? `${API_BASE}/api/archive/file/${f.id}/question` : (f.fileUrl ?? "#")}
+              href={f.questionPath ? `${API_BASE}/api/archive/file/${f.id}/question` : safeExternalHref(f.fileUrl)}
               {...(f.questionPath ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
             >
               <Download className="size-3.5" strokeWidth={2.25} />
@@ -205,7 +212,7 @@ function FileItem({ file: f }: { file: ArchiveFile }) {
         {(f.answerPath || f.answerUrl) && (
           <Button asChild size="sm" variant="outline" className="cursor-pointer flex-1">
             <a
-              href={f.answerPath ? `${API_BASE}/api/archive/file/${f.id}/answer` : (f.answerUrl ?? "#")}
+              href={f.answerPath ? `${API_BASE}/api/archive/file/${f.id}/answer` : safeExternalHref(f.answerUrl)}
               {...(f.answerPath ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
             >
               <FileText className="size-3.5" strokeWidth={2.25} />

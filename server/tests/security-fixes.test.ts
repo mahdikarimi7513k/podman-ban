@@ -76,3 +76,78 @@ describe("bug 3: bannerLink accepts only http(s)", () => {
     await admin.put("/api/admin/config").send({ bannerLink: "" })
   })
 })
+
+/**
+ * Archive upload integrity: the native app posts base64 (bridge-safe) and
+ * every upload must sniff-match its claimed extension — a renamed HEIC must
+ * fail loudly at upload, never surface later as a "corrupt download".
+ */
+describe("archive upload integrity", () => {
+  const PNG_1PX = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  )
+
+  async function makeRecord() {
+    const admin = await login("sec_admin", PASSWORD)
+    const created = await admin.post("/api/admin/archive").send({
+      title: "SEC-Integrity-Probe",
+      field: "FANI_HERFEI",
+      year: 1403,
+      uploadQuestion: true,
+    })
+    expect(created.status).toBe(201)
+    return { admin, id: created.body.file.id as string }
+  }
+
+  it("base64 upload (native path) round-trips byte-identical", async () => {
+    const { admin, id } = await makeRecord()
+    try {
+      const up = await admin
+        .post(`/api/admin/archive/${id}/file/question`)
+        .set("Content-Type", "application/octet-stream")
+        .set("x-file-name", "photo.png")
+        .set("x-transfer-encoding", "base64")
+        .send(PNG_1PX.toString("base64"))
+      expect(up.status).toBe(200)
+
+      const stu = await login("sec_student", PASSWORD)
+      const dl = await stu
+        .get(`/api/archive/file/${id}/question`)
+        .buffer(true)
+        .parse((res, done) => {
+          const stream = res as unknown as {
+            on: (ev: string, fn: (...args: unknown[]) => void) => void
+          }
+          const chunks: Buffer[] = []
+          stream.on("data", (c) => chunks.push(Buffer.from(c as Uint8Array)))
+          stream.on("end", () => done(null, Buffer.concat(chunks)))
+        })
+      expect(dl.status).toBe(200)
+      expect(Number(dl.headers["content-length"])).toBe(PNG_1PX.length)
+      expect((dl.body as Buffer).equals(PNG_1PX)).toBe(true)
+    } finally {
+      await admin.delete(`/api/admin/archive/${id}`)
+    }
+  })
+
+  it("rejects bytes whose magic mismatches the claimed extension", async () => {
+    const { admin, id } = await makeRecord()
+    try {
+      // Plain text renamed to .png, and a real PDF renamed to .png.
+      for (const [name, bytes] of [
+        ["note.png", Buffer.from("just some text, not an image")],
+        ["doc.png", Buffer.from("%PDF-1.4 fake-bytes")],
+      ] as Array<[string, Buffer]>) {
+        const up = await admin
+          .post(`/api/admin/archive/${id}/file/question`)
+          .set("Content-Type", "application/octet-stream")
+          .set("x-file-name", name)
+          .send(bytes)
+        expect(up.status).toBe(422)
+      }
+    } finally {
+      await admin.delete(`/api/admin/archive/${id}`)
+    }
+  })
+})

@@ -7,7 +7,7 @@
  * ever reaches the filesystem. Serving is always attachment-only through
  * GET /api/archive/file/:id/:kind.
  */
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs"
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from "fs"
 import { dirname, resolve } from "path"
 import { fileURLToPath } from "url"
 
@@ -66,6 +66,26 @@ function extFromContentType(ct: string | undefined): string | null {
 }
 
 /**
+ * Sniff the real file type from magic bytes. Returns the canonical extension
+ * or null when unknown/too short. This is what stops a HEIC photo renamed to
+ * .jpg (or any polyglot) from being stored as a "healthy" image that every
+ * viewer then fails to open.
+ */
+export function sniffArchiveExt(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null
+  const b = buffer
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "pdf" // %PDF
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png" // .PNG....
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg" // JPEG SOI
+  if (
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) return "webp" // RIFF....WEBP
+  if (b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07)) return "zip" // PK..
+  return null
+}
+
+/**
  * Persist an uploaded buffer. Returns the stored file NAME (not a path).
  * Throws Error with a Persian message when the input is unacceptable.
  */
@@ -80,12 +100,29 @@ export function saveArchiveUpload(
   if (buffer.length > MAX_ARCHIVE_FILE_BYTES) throw new Error("حجم فایل بیش از حد مجاز است (حداکثر ۲۵ مگابایت)")
   const ext = safeExt(filename) ?? extFromContentType(contentType)
   if (!ext) throw new Error("فرمت فایل مجاز نیست (pdf، png، jpg، webp، zip)")
+  // Claimed extension must match the real magic bytes — otherwise we'd store
+  // a "healthy .jpg" that no viewer can open (e.g. a renamed HEIC photo).
+  const claimed = ext === "jpeg" ? "jpg" : ext
+  if (sniffArchiveExt(buffer) !== claimed) {
+    throw new Error("محتوای فایل با پسوند آن نمی‌خواند — فایل خراب یا تغییرنام‌داده‌شده است")
+  }
 
   mkdirSync(ARCHIVE_DIR, { recursive: true })
   const name = `${archiveId}-${kind}.${ext}`
   // archiveId comes from our own DB (cuid), kind is from the whitelist,
   // ext from the whitelist — the composed name cannot traverse.
-  writeFileSync(resolve(ARCHIVE_DIR, name), buffer)
+  const dest = resolve(ARCHIVE_DIR, name)
+  writeFileSync(dest, buffer)
+  // Integrity: a truncated write (bridge/proxy cut) must fail loudly here,
+  // never surface later as a "corrupt download".
+  if (statSync(dest).size !== buffer.length) {
+    try {
+      unlinkSync(dest)
+    } catch {
+      /* best effort */
+    }
+    throw new Error("ذخیره‌ی فایل ناقص ماند — دوباره تلاش کنید")
+  }
   return name
 }
 
