@@ -1,0 +1,50 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512">
+    <stop stop-color="#18A8FF"/>
+    <stop offset="0.5" stop-color="#0878F9"/>
+    <stop offset="1" stop-color="#003CCB"/>
+  </linearGradient>
+
+  <linearGradient id="shine" x1="0" y1="0" x2="512" y2="512">
+    <stop stop-color="white" stop-opacity="0.25"/>
+    <stop offset="1" stop-color="white" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+
+<!-- Background -->
+<rect width="512" height="512" rx="110" fill="url(#bg)"/>
+
+<!-- Glass shine -->
+<path d="M0 190C120 40 350 20 512 80V0H0V190Z"
+fill="url(#shine)"/>
+
+<path d="M0 400C150 470 360 420 512 280V512H0V400Z"
+fill="#0039B8" opacity="0.25"/>
+
+
+<!-- Graduation cap -->
+<path d="M90 220L256 125L422 220L256 315L90 220Z"
+fill="white"/>
+
+<path d="M150 260V320C150 365 197 390 256 390C315 390 362 365 362 320V260L256 325L150 260Z"
+fill="white"/>
+
+<!-- Inner blue area -->
+<path d="M175 285V320C175 340 210 355 256 355C302 355 337 340 337 320V285L256 335L175 285Z"
+fill="#0878F9"/>
+
+
+<!-- Tassel -->
+<path d="M390 210V310"
+stroke="white"
+stroke-width="14"
+stroke-linecap="round"/>
+
+<circle cx="390" cy="325" r="18" fill="white"/>
+
+<path d="M375 345L405 345L414 395C405 410 375 410 366 395L375 345Z"
+fill="white"/>
+
+</svg>
