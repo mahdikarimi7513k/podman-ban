@@ -49,7 +49,7 @@ jobs:
 
       - name: Install required SDK packages
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "platforms;android-35" "platforms;android-36" "build-tools;34.0.0" >/dev/null
 
       - name: Install ImageMagick + librsvg
         run: |
@@ -140,11 +140,10 @@ jobs:
           with open('capacitor.config.json', 'w', encoding='utf-8') as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
           print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
-          print('plugins =', json.dumps(cfg['plugins']))
           print('server.url =', server.get('url', '(local assets)'))
           PYEOF
 
-      # --- FIX 2: مسیر اشتباه icon.svg (client/assets/client/assets/icon.svg) را جبران کن ---
+      # --- FIX 2: مسیر اشتباه icon.svg را جبران کن ---
       - name: Normalize icon.svg path
         working-directory: client
         run: |
@@ -153,7 +152,7 @@ jobs:
             FOUND=$(find assets -maxdepth 4 -name "icon.svg" -type f | head -1)
             if [ -n "$FOUND" ]; then
               cp "$FOUND" assets/icon.svg
-              echo "✅ icon.svg از $FOUND کپی شد — لطفاً ساختار پوشه را در ریپو هم اصلاح کنید"
+              echo "✅ icon.svg از $FOUND کپی شد"
             else
               echo "⚠️ هیچ icon.svg پیدا نشد — از آیکون پیش‌فرض استفاده می‌شود"
             fi
@@ -217,21 +216,25 @@ jobs:
           else
             sed -i 's/<application /<application android:usesCleartextTraffic="false" /' "$M"
           fi
-          # --- FIX 3: بدون این مجوز، دیالوگ اجازه‌ی نوتیف روی اندروید ۱۳+ اصلاً نمایش داده نمی‌شود ---
           if ! grep -q 'android.permission.POST_NOTIFICATIONS' "$M"; then
             sed -i '/<manifest /a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' "$M"
           fi
           echo "✅ allowBackup=false, usesCleartextTraffic=false, POST_NOTIFICATIONS added"
 
-      # --- FIX 4: targetSdk/compileSdk صریح برای الزام Google Play ---
-      - name: Ensure target/compile SDK 35
+      # --- FIX 3: compileSdk=36 (الزام androidx.core 1.17.0) ولی targetSdk=35 می‌ماند
+      # تا رفتار runtime جدید ۳۶ (edge-to-edge اجباری) فعال نشود ---
+      - name: Ensure SDK versions (compile=36, target=35)
         working-directory: client/android
         run: |
           V=variables.gradle
           [ -f "$V" ] || exit 0
-          sed -i -E 's/(compileSdkVersion\s*=\s*)[0-9]+/\135/' "$V" || true
+          sed -i -E 's/(compileSdkVersion\s*=\s*)[0-9]+/\136/' "$V" || true
           sed -i -E 's/(targetSdkVersion\s*=\s*)[0-9]+/\135/' "$V" || true
-          echo "--- variables.gradle ---"; cat "$V" || true
+          GP=gradle.properties
+          [ -f "$GP" ] || GP=../gradle.properties
+          grep -q 'suppressUnsupportedCompileSdk' "$GP" 2>/dev/null || echo 'android.suppressUnsupportedCompileSdk=36' >> "$GP"
+          echo "--- variables.gradle ---"
+          grep -E 'compileSdkVersion|targetSdkVersion|minSdkVersion' "$V" || true
 
       - name: Prepare signing keystore + fingerprint
         env:
