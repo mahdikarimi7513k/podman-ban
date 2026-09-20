@@ -15,20 +15,8 @@
 import { apiFetch } from "@/lib/api-client"
 import { toast } from "@/hooks/use-toast"
 import { useApp } from "@/lib/store"
-import type { NotifyPlugin } from "@/lib/welcome-notify"
-
-// Same bridge detection as api-client (kept inline so @capacitor/core
-// stays out of the web bundle).
-function isNativeApp(): boolean {
-  // SAFETY: DOM Window has no Capacitor bridge keys; the intersection only
-  // narrows reads to optional props — no runtime shape is assumed.
-  const w = window as Window & {
-    androidBridge?: unknown
-    webkit?: { messageHandlers?: { bridge?: unknown } }
-  }
-
-  return !!w.androidBridge || !!w.webkit?.messageHandlers?.bridge
-}
+import { isNativeApp, scheduleNativeNotification } from "@/lib/native-notify"
+import type { NotifyPlugin } from "@/lib/native-notify"
 
 export interface BroadcastNotification {
   id: string
@@ -85,22 +73,11 @@ async function run(plugin?: NotifyPlugin): Promise<void> {
 
     if (!isNativeApp()) return
 
-    // Dynamic import: the plugin stays out of the web chunk entirely.
-    const active = plugin ?? (await import("@capacitor/local-notifications")).LocalNotifications
-    const perm = await active.requestPermissions()
-
-    if (perm.display !== "granted") return
-
-    await active.schedule({
-      notifications: [
-        {
-          id: 2,
-          title: n.title,
-          body: n.body,
-          schedule: { at: new Date(Date.now() + 1000) },
-          smallIcon: "ic_notification",
-        },
-      ],
+    await scheduleNativeNotification(plugin, {
+      id: 2,
+      title: n.title,
+      body: n.body,
+      delayMs: 1000,
     })
   } catch {
     // Silent — see module doc.

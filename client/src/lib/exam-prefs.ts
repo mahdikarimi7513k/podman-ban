@@ -81,3 +81,12 @@ export function resolveDailyGoal(prefs: ExamPrefs): number {
 
   return FALLBACK_DAILY_GOAL
 }
+
+/**
+ * Hide-answered-modules + exclude-answered-questions switch.
+ * Absent pref = ON (hide): matches the settings default and the server
+ * startExam fallback.
+ */
+export function shouldHideRepeats(prefs: ExamPrefs): boolean {
+  return prefs.repeatQuestions !== true
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `RemoteConfig` ADD `dailyGoalNotify` integer DEFAULT true NOT NULL;

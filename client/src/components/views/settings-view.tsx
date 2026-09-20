@@ -44,7 +44,7 @@ export function SettingsView() {
   const { theme, setTheme } = useTheme()
   const { toast } = useToast()
 
-  const [repeatQuestions, setRepeatQuestions] = React.useState(true)
+  const [repeatQuestions, setRepeatQuestions] = React.useState(false)
   const [duration, setDuration] = React.useState(20)
   const [dailyGoal, setDailyGoal] = React.useState(20)
   const [saving, setSaving] = React.useState(false)
@@ -69,10 +69,19 @@ export function SettingsView() {
       setSaving(true)
 
       try {
-        await apiFetch("/api/user/prefs", {
+        const res = await apiFetch<{ prefs: unknown }>("/api/user/prefs", {
           method: "PUT",
           body: JSON.stringify(patch),
         })
+        // Refresh the local user immediately — otherwise home keeps reading
+        // the stale prefs until the next boot/login (looked "not working").
+        // patchUser (not setUser) so the view doesn't navigate away.
+
+        const current = useApp.getState().user
+
+        if (current) {
+          useApp.getState().patchUser({ prefs: JSON.stringify(res.prefs) })
+        }
       } catch {
         toast({
           variant: "destructive",

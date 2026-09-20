@@ -1,8 +1,8 @@
 
 import * as React from "react"
 import { useApp } from "@/lib/store"
-import { welcomeOnce } from "@/lib/welcome-notify"
 import { showBroadcastOnce, startBroadcastWatcher } from "@/lib/notify-inbox"
+import { startDailyGoalReminder } from "@/lib/daily-goal-reminder"
 
 export function AppBootstrap({ children }: { children: React.ReactNode }) {
   const boot = useApp((s) => s.boot)
@@ -10,14 +10,16 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     boot()
-    // Native-only first-launch greeting + latest admin broadcast (web: toast).
-    // Both are exactly-once and failure-silent — boot never depends on them.
-    void welcomeOnce()
+    // Latest admin broadcast (web: toast). Exactly-once, failure-silent.
     void showBroadcastOnce()
-    // Keep watching: broadcasts created after boot reach open apps too.
+    // Broadcast watcher + nightly goal reminder (23:00 Tehran).
     const stopWatching = startBroadcastWatcher()
+    const stopReminder = startDailyGoalReminder()
 
-    return () => stopWatching()
+    return () => {
+      stopWatching()
+      stopReminder()
+    }
   }, [boot])
 
   if (!booted) {

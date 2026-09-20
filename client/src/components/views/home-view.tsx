@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/accordion"
 import { FaNum } from "@/components/fa-utils"
 import { preloadExamView } from "@/App"
-import { parseExamPrefs, resolveExamDurationMin, resolveDailyGoal } from "@/lib/exam-prefs"
+import { parseExamPrefs, resolveExamDurationMin, resolveDailyGoal, shouldHideRepeats } from "@/lib/exam-prefs"
 import type { BookWithModules } from "@/lib/exam/question-bank"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -52,6 +52,7 @@ export function HomeView() {
   const user = useApp((s) => s.user)
   const config = useApp((s) => s.config)
   const enterExam = useApp((s) => s.enterExam)
+  const setView = useApp((s) => s.setView)
   const { toast } = useToast()
   const [books, setBooks] = React.useState<BookWithModules[] | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -68,6 +69,22 @@ export function HomeView() {
   const dailyGoal = resolveDailyGoal(prefs)
 
   const defaultDuration = resolveExamDurationMin(prefs, config?.defaultTimerMin)
+  const hideAnswered = shouldHideRepeats(prefs)
+
+  // Hide fully-answered modules while "hide repeats" is on. Empty modules
+  // stay visible (unchanged behavior); books left with nothing hide too.
+  const visibleBooks = React.useMemo(() => {
+    if (!books || !hideAnswered) return books
+
+    return books
+      .map((b) => ({
+        ...b,
+        modules: b.modules.filter(
+          (m) => m.questionCount === 0 || (m.answeredCount ?? 0) < m.questionCount,
+        ),
+      }))
+      .filter((b) => b.modules.length > 0)
+  }, [books, hideAnswered])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -172,9 +189,24 @@ export function HomeView() {
         </div>
       ) : !books || books.length === 0 ? (
         <EmptyState />
+      ) : visibleBooks && visibleBooks.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-8 text-center">
+          <p className="text-sm font-medium">همه پودمان‌ها پاسخ داده شده‌اند 🎉</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            چون «حذف سوالات تکراری» روشن است، پودمان تمام‌شده نمایش داده نمی‌شود.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3 cursor-pointer"
+            onClick={() => setView("settings")}
+          >
+            تغییر در تنظیمات
+          </Button>
+        </div>
       ) : (
-        <Accordion type="multiple" defaultValue={[books[0]?.id]} className="space-y-3">
-          {books.map((book, idx) => (
+        <Accordion type="multiple" defaultValue={[(visibleBooks ?? books)[0]?.id]} className="space-y-3">
+          {(visibleBooks ?? books).map((book, idx) => (
             <motion.div
               key={book.id}
               initial={{ opacity: 0, y: 8 }}

@@ -151,6 +151,7 @@ export const remoteConfig = sqliteTable("RemoteConfig", {
   negativeMarking: integer("negativeMarking", { mode: "boolean" }).notNull().default(true),
   registrationOpen: integer("registrationOpen", { mode: "boolean" }).notNull().default(true),
   registrationMessage: text("registrationMessage").notNull().default(""),
+  dailyGoalNotify: integer("dailyGoalNotify", { mode: "boolean" }).notNull().default(true),
   externalApiKeyHash: text("externalApiKeyHash"),
   externalApiKeyPrefix: text("externalApiKeyPrefix").notNull().default(""),
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" })

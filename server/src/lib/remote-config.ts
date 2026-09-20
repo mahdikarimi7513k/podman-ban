@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { db } from "./db.js"
 import { remoteConfig } from "./db/schema.js"
 
@@ -16,6 +16,8 @@ export interface AppState {
   negativeMarking: boolean
   registrationOpen: boolean
   registrationMessage: string
+  // Nightly daily-goal reminder (23:00 Tehran) — admin kill-switch.
+  dailyGoalNotify: boolean
   // external verify API — hash never leaves the server; clients only see
   // whether it is enabled + a short prefix to identify the active key.
   externalApiEnabled: boolean
@@ -27,8 +29,31 @@ export interface AppState {
 let cache: { state: AppState; at: number } | null = null
 const CACHE_TTL_MS = 2_000
 
+// One-shot column guard for databases created before a migration ran
+// (shared hosts can't run drizzle-kit migrate). Runs before the first
+// read so a missing column never 500s /config — existing rows are
+// untouched, the schema default fills the new column.
+//
+// NOTE: the guard issues the ALTER directly instead of probing first:
+// some drivers resolve unknown columns to null instead of throwing,
+// which would make any probe a lie. Duplicate-column errors just mean
+// the migration already ran.
+let columnsEnsured = false
+
+async function ensureColumnsOnce(): Promise<void> {
+  if (columnsEnsured) return
+  columnsEnsured = true
+
+  try {
+    await db.run(sql.raw("ALTER TABLE `RemoteConfig` ADD `dailyGoalNotify` integer DEFAULT true NOT NULL"))
+  } catch {
+    // Already migrated (or otherwise unfixable here) — the read below decides.
+  }
+}
+
 export async function getAppState(): Promise<AppState> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.state
+  await ensureColumnsOnce()
   let row = await db.select().from(remoteConfig).where(eq(remoteConfig.id, "singleton")).get()
   if (!row) {
     row = await db.insert(remoteConfig).values({ id: "singleton" }).returning().get()
@@ -43,6 +68,7 @@ export async function getAppState(): Promise<AppState> {
     negativeMarking: row.negativeMarking,
     registrationOpen: row.registrationOpen,
     registrationMessage: row.registrationMessage,
+    dailyGoalNotify: row.dailyGoalNotify,
     externalApiEnabled: !!row.externalApiKeyHash,
     externalApiKeyPrefix: row.externalApiKeyPrefix ?? "",
   }
@@ -61,6 +87,7 @@ const PATCHABLE = [
   "negativeMarking",
   "registrationOpen",
   "registrationMessage",
+  "dailyGoalNotify",
   "externalApiKeyHash",
   "externalApiKeyPrefix",
 ] as const

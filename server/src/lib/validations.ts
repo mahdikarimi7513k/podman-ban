@@ -161,6 +161,7 @@ export const remoteConfigUpdateSchema = z.object({
   negativeMarking: z.boolean().optional(),
   registrationOpen: z.boolean().optional(),
   registrationMessage: z.string().max(500).optional(),
+  dailyGoalNotify: z.boolean().optional(),
 })
 
 export const chatSendSchema = z.object({

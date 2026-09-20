@@ -53,7 +53,7 @@ examRouter.get("/books", async (req, res) => {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
     return
   }
-  const books = await listBooks(user.field)
+  const books = await listBooks(user.field, user.id)
   res.json({ books })
 })
 
@@ -93,19 +93,22 @@ examRouter.post("/exam/start", async (req, res) => {
     return
   }
 
-  // read the user's "repeatQuestions" preference (default true)
-  let repeatQuestions = true
+  // read the user's "repeatQuestions" preference.
+  // Absent = hide repeats (the settings switch defaults ON).
+  let repeatQuestions = false
+
   try {
     const dbUser = await db
       .select({ prefs: users.prefs })
       .from(users)
       .where(eq(users.id, user.id))
       .get()
+
     if (dbUser?.prefs) {
       const prefs = JSON.parse(dbUser.prefs)
-      if (typeof prefs.repeatQuestions === "boolean") {
-        repeatQuestions = prefs.repeatQuestions
-      }
+
+      if (prefs.repeatQuestions === true) repeatQuestions = true
+      else if (prefs.repeatQuestions === false) repeatQuestions = false
     }
   } catch {
     /* ignore prefs errors */

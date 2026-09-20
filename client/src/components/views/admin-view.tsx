@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Pencil,
   Megaphone,
+  Bell,
   UserPlus,
   KeyRound,
   Copy,
@@ -67,6 +68,7 @@ interface AdminConfig {
   negativeMarking: boolean
   registrationOpen: boolean
   registrationMessage: string
+  dailyGoalNotify: boolean
   externalApiEnabled: boolean
   externalApiKeyPrefix: string
 }
@@ -591,6 +593,44 @@ function AdminDashboard() {
           >
             ذخیره بنر
           </Button>
+        </div>
+      </section>
+
+      {/* Daily-goal reminder */}
+      <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+            <Bell className="size-5" strokeWidth={2} />
+          </div>
+          <div className="flex-1">
+            <Label htmlFor="goal-notify-switch" className="text-sm font-semibold cursor-pointer">
+              یادآور هدف روزانه
+            </Label>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {config.dailyGoalNotify
+                ? "فعال است — ساعت ۲۳ به‌وقت تهران به کسانی که هدفشان را کامل نکرده‌اند یادآوری می‌شود."
+                : "غیرفعال است."}
+            </p>
+          </div>
+          <Switch
+            id="goal-notify-switch"
+            checked={config.dailyGoalNotify}
+            disabled={savingLock}
+            onCheckedChange={async (v) => {
+              try {
+                const res = await apiFetch<{ state: AdminConfig }>(
+                  "/api/admin/config",
+                  { method: "PUT", body: JSON.stringify({ dailyGoalNotify: v }) },
+                )
+
+                setConfig(res.state)
+                useApp.getState().refreshConfig()
+                toast({ title: v ? "یادآور فعال شد" : "یادآور غیرفعال شد" })
+              } catch (err) {
+                toast({ variant: "destructive", title: "تغییر ناموفق بود", description: err instanceof ApiError ? err.message : undefined })
+              }
+            }}
+          />
         </div>
       </section>
     </div>

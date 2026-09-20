@@ -15,6 +15,13 @@
       "when": 1789912855559,
       "tag": "0001_add-notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789934439580,
+      "tag": "0002_add-daily-goal-notify",
+      "breakpoints": true
     }
   ]
 }

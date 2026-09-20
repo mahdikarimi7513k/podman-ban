@@ -1,6 +1,6 @@
 import { and, asc, count, eq, inArray, isNull, or } from "drizzle-orm"
 import { db } from "./db.js"
-import { books, modules, questions } from "./db/schema.js"
+import { answers, books, examSessions, modules, questions } from "./db/schema.js"
 
 /**
  * QuestionBank — deep module.
@@ -18,11 +18,16 @@ export interface BookWithModules {
     description: string | null
     order: number
     questionCount: number
+    // Distinct questions this user answered in any FINISHED session
+    // (same definition startExam uses for repeat exclusion). Zero when
+    // no userId is given (admin listing).
+    answeredCount: number
   }[]
 }
 
 export async function listBooks(
   field?: "FANI_HERFEI" | "KARDANESH",
+  userId?: string,
 ): Promise<BookWithModules[]> {
   const bookRows = await db
     .select()
@@ -58,6 +63,7 @@ export async function listBooks(
     .groupBy(questions.moduleId)
     .all()
   const countByModule = new Map(counts.map((c) => [c.moduleId, c.n]))
+  const answeredByModule = userId ? await answeredCounts(userId, moduleRows.map((m) => m.id)) : new Map<string, number>()
   const modulesByBook = new Map<string, typeof moduleRows>()
   for (const m of moduleRows) {
     const list = modulesByBook.get(m.bookId) ?? []
@@ -75,8 +81,60 @@ export async function listBooks(
       description: m.description,
       order: m.order,
       questionCount: countByModule.get(m.id) ?? 0,
+      answeredCount: answeredByModule.get(m.id) ?? 0,
     })),
   }))
+}
+
+/**
+ * Distinct answered questions per module for the hide-repeats filter.
+ * Same "answered" definition the exam engine excludes on repeat=false:
+ * any FINISHED session (practice or not).
+ */
+async function answeredCounts(userId: string, moduleIds: string[]): Promise<Map<string, number>> {
+  const empty = new Map<string, number>()
+
+  if (moduleIds.length === 0) return empty
+
+  const finishedIds = await db
+    .select({ id: examSessions.id })
+    .from(examSessions)
+    .where(and(eq(examSessions.userId, userId), eq(examSessions.status, "FINISHED")))
+    .all()
+
+  if (finishedIds.length === 0) return empty
+
+  const answered = await db
+    .selectDistinct({ questionId: answers.questionId })
+    .from(answers)
+    .where(
+      inArray(
+        answers.sessionId,
+        finishedIds.map((s) => s.id),
+      ),
+    )
+    .all()
+
+  if (answered.length === 0) return empty
+
+  const owners = await db
+    .select({ id: questions.id, moduleId: questions.moduleId })
+    .from(questions)
+    .where(
+      inArray(
+        questions.id,
+        answered.map((a) => a.questionId),
+      ),
+    )
+    .all()
+
+  const byModule = new Map<string, number>()
+
+  for (const q of owners) {
+    byModule.set(q.moduleId, (byModule.get(q.moduleId) ?? 0) + 1)
+  }
+
+  return byModule
 }
 
 export interface ExamQuestion {

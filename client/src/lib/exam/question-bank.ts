@@ -13,5 +13,8 @@ export interface BookWithModules {
     description: string | null
     order: number
     questionCount: number
+    // Distinct answered questions (server counts FINISHED sessions).
+    // Absent on stale cached payloads → treated as unanswered (visible).
+    answeredCount?: number
   }[]
 }

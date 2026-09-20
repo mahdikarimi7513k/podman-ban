@@ -3,6 +3,7 @@ import {
   parseExamPrefs,
   resolveExamDurationMin,
   resolveDailyGoal,
+  shouldHideRepeats,
   FALLBACK_DURATION_MIN,
   FALLBACK_DAILY_GOAL,
 } from "./exam-prefs"
@@ -54,5 +55,16 @@ describe("resolveDailyGoal", () => {
     expect(resolveDailyGoal({})).toBe(FALLBACK_DAILY_GOAL)
     expect(resolveDailyGoal({ dailyGoal: 3 })).toBe(FALLBACK_DAILY_GOAL)
     expect(resolveDailyGoal({ dailyGoal: 500 })).toBe(FALLBACK_DAILY_GOAL)
+  })
+})
+
+describe("shouldHideRepeats", () => {
+  it("hides by default (switch ON, pref absent)", () => {
+    expect(shouldHideRepeats({})).toBe(true)
+  })
+
+  it("shows only on explicit opt-in to repeats", () => {
+    expect(shouldHideRepeats({ repeatQuestions: true })).toBe(false)
+    expect(shouldHideRepeats({ repeatQuestions: false })).toBe(true)
   })
 })

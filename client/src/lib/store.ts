@@ -54,6 +54,8 @@ export interface RemoteConfigState {
   bannerActive: boolean
   defaultTimerMin: number
   negativeMarking: boolean
+  // Nightly daily-goal reminder (23:00 Tehran) kill-switch.
+  dailyGoalNotify: boolean
   // absent on old cached payloads → treat as open (server enforces anyway)
   registrationOpen?: boolean
   registrationMessage?: string
@@ -77,6 +79,8 @@ interface AppState {
   exitExam: () => void
   signOut: () => Promise<void>
   refreshConfig: () => Promise<void>
+  // Merge user fields without touching the current view (setUser navigates).
+  patchUser: (patch: Partial<AppUser>) => void
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -131,6 +135,12 @@ export const useApp = create<AppState>((set, get) => ({
     } catch {
       /* ignore */
     }
+  },
+
+  patchUser(patch) {
+    const user = get().user
+
+    if (user) set({ user: { ...user, ...patch } })
   },
 }))
 

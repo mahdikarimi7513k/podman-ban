@@ -12,7 +12,7 @@ import { useApp } from "@/lib/store"
 import type { AppUser } from "@/lib/store"
 import { showBroadcastOnce, startBroadcastWatcher, stopBroadcastWatcher } from "./notify-inbox"
 import type { BroadcastNotification } from "./notify-inbox"
-import type { NotifyPlugin } from "./welcome-notify"
+import type { NotifyPlugin } from "./native-notify"
 
 /**
  * Seam: admin broadcast inbox (real interfaces, no module mocking).

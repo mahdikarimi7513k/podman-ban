@@ -17,6 +17,7 @@ async function main() {
       bannerActive: true,
       defaultTimerMin: 20,
       negativeMarking: true,
+      dailyGoalNotify: true,
     })
     .onConflictDoNothing()
     .run()
@@ -26,6 +27,7 @@ async function main() {
   // and logged ONCE at seed time. Existing users are never re-passworded by
   // re-seeding — rotate via the app or SEED_ADMIN_PASSWORD explicitly.
   const bcrypt = await import("bcryptjs")
+
   const randomPassword = () =>
     Array.from({ length: 16 }, () =>
       "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789".charAt(
