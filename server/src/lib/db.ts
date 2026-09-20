@@ -40,6 +40,32 @@ function dbPath(): string {
 // which is surprisingly expensive on Windows dev machines.
 const logger = process.env.DEBUG_DB === "true" ? new DefaultLogger() : undefined
 
+/**
+ * Host-safe schema guard — mirrors drizzle/0001_add-notifications.sql.
+ *
+ * Shared hosts (cPanel without shell) cannot run `drizzle-kit migrate`, so
+ * a database created from an older bundle would miss the Notification
+ * table and every broadcast endpoint would 500. IF NOT EXISTS makes this
+ * a no-op everywhere else (dev, tests, fresh deploys) — existing data is
+ * never touched.
+ */
+const RUNTIME_DDL = [
+  `CREATE TABLE IF NOT EXISTS \`Notification\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`title\` text NOT NULL,
+	\`body\` text NOT NULL,
+	\`active\` integer DEFAULT true NOT NULL,
+	\`createdBy\` text,
+	\`createdAt\` integer NOT NULL,
+	FOREIGN KEY (\`createdBy\`) REFERENCES \`User\`(\`id\`) ON UPDATE no action ON DELETE set null
+)`,
+  "CREATE INDEX IF NOT EXISTS `Notification_createdAt_idx` ON `Notification` (`createdAt`)",
+]
+
+function ensureRuntimeTables(exec: (sql: string) => void): void {
+  for (const stmt of RUNTIME_DDL) exec(stmt)
+}
+
 function openDatabase(): BetterSQLite3Database<typeof schema> {
   const path = dbPath()
   // NOTE: drivers are require()d lazily (never statically imported) because
@@ -60,6 +86,7 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     // Prisma enforced FK cascades on every connection — sqlite defaults to
     // OFF, so turn them on for parity.
     client.exec("PRAGMA foreign_keys = ON")
+    ensureRuntimeTables((stmt) => client.exec(stmt))
     // SAFETY: bun:sqlite's Database is exactly what drizzle-orm/bun-sqlite
     // wraps; the double assertion only bridges the untyped require boundary.
     const bunClient = client as unknown as Parameters<BunDrizzle>[0]
@@ -76,6 +103,7 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     }
     const client = new Better(path)
     client.exec("PRAGMA foreign_keys = ON")
+    ensureRuntimeTables((stmt) => client.exec(stmt))
     return drizzleBetter(client, { schema, logger })
   }
 }
