@@ -1,89 +1,491 @@
-name: CI (quality gate)
+name: Build PodmanBan APK
 
 on:
-  push:
-    branches: [main, master, develop]
-  pull_request:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "آدرس سرور (بدون اسلش آخر) — باید https باشد"
+        required: true
+        default: "https://ms.payam-coder.ir"
+      app_id:
+        description: "Package Name"
+        required: true
+        default: "ir.payamcoder.podmanban"
+      app_name:
+        description: "نام اپلیکیشن"
+        required: true
+        default: "پودمان‌بان"
+      version_name:
+        description: "شماره نسخه"
+        required: false
+        default: "1.0.0"
+      load_mode:
+        description: "remote = لود مستقیم سایت | local = بیلد داخلی"
+        required: false
+        default: "remote"
 
 jobs:
-  client:
-    name: Client · typecheck + lint + test
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults: { run: { shell: bash } }
     steps:
-      - uses: actions/checkout@v4            # TODO(pin): @<sha>
-        with: { persist-credentials: false }
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4          # TODO(pin): @<sha>
+      - name: Validate api_base is https
+        run: |
+          case "${{ inputs.api_base }}" in
+            https://*) echo "✅ https OK" ;;
+            *) echo "❌ api_base باید با https:// شروع شود (androidScheme=https + allowMixedContent=false)"; exit 1 ;;
+          esac
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+      - name: Install required SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "platforms;android-35" "platforms;android-36" "build-tools;34.0.0" >/dev/null
+
+      - name: Install ImageMagick + librsvg
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y imagemagick librsvg2-bin
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: client/package-lock.json   # ASSUMPTION: lockfile اینجاست
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
 
-      - name: Install (frozen)
+      - name: Setup Bun (server tests need bunx for migrations)
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('client/android/**/*.gradle*') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install client deps
         working-directory: client
         run: |
-          set -euo pipefail
-          npm ci                              # B2: reproducible، نه npm install
+          npm install -g npm@latest
+          npm install
 
-      - name: Lint
+      - name: Quality gate (client typecheck + tests)
         working-directory: client
         run: |
-          set -euo pipefail
           npm run lint --if-present
-
-      - name: Typecheck
-        working-directory: client
-        run: |
-          set -euo pipefail
           npx tsc --noEmit
-
-      - name: Test
-        working-directory: client
-        run: |
-          set -euo pipefail
           npm run test --if-present
 
-  server:
-    name: Server · typecheck + test
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults: { run: { shell: bash } }
-    steps:
-      - uses: actions/checkout@v4            # TODO(pin): @<sha>
-        with: { persist-credentials: false }
+      - name: Install server deps
+        working-directory: server
+        run: npm install
 
-      # ASSUMPTION: سرور npm است. اگر bun.lockb داری، این سه step را به
-      #   oven-sh/setup-bun@v2 + `bun install --frozen-lockfile` + `bun run test`
-      # تغییر بده و npm را حذف کن. قفل روی یک package-manager حیاتی است (D1).
-      - uses: actions/setup-node@v4          # TODO(pin): @<sha>
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: server/package-lock.json   # ASSUMPTION
-
-      - name: Install (frozen)
+      - name: Quality gate (server typecheck + tests)
         working-directory: server
         run: |
-          set -euo pipefail
-          npm ci
-
-      - name: Typecheck
-        working-directory: server
-        run: |
-          set -euo pipefail
           npx tsc --noEmit
-
-      - name: Test
-        working-directory: server
-        run: |
-          set -euo pipefail
           npx vitest run
+
+      # --- notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
+      # (سورس از قبل ic_notification است؛ این sed فقط تور ایمنی برای رگرسیون است)
+      - name: Fix notification smallIcon reference
+        working-directory: client
+        run: |
+          grep -rl 'smallIcon: "ic_launcher"' src/lib | xargs -r sed -i 's/smallIcon: "ic_launcher"/smallIcon: "ic_notification"/g'
+          echo "بررسی نهایی:"
+          grep -rn 'smallIcon:' src/lib || true
+
+      - name: Build web assets
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_API_BASE: ${{ inputs.api_base }}
+
+      - name: Detect webDir
+        working-directory: client
+        run: |
+          if [ -d dist ]; then W=dist
+          elif [ -d build ]; then W=build
+          elif [ -d out ]; then W=out
+          else W=dist; fi
+          echo "WEB_DIR=$W" >> $GITHUB_ENV
+          echo "webDir = $W"
+
+      - name: Write Capacitor config (package name + cookies)
+        working-directory: client
+        env:
+          APP_ID: ${{ inputs.app_id }}
+          APP_NAME: ${{ inputs.app_name }}
+          WEB_DIR: ${{ env.WEB_DIR }}
+          API_BASE: ${{ inputs.api_base }}
+          LOAD_MODE: ${{ inputs.load_mode }}
+        run: |
+          python3 <<'PYEOF'
+          import json, os
+          cfg = {}
+          if os.path.exists('capacitor.config.json'):
+              with open('capacitor.config.json', encoding='utf-8') as f:
+                  cfg = json.load(f)
+          elif os.path.exists('capacitor.config.ts'):
+              os.rename('capacitor.config.ts', 'capacitor.config.ts.bak')
+          cfg['appId'] = os.environ['APP_ID']
+          cfg['appName'] = os.environ['APP_NAME']
+          cfg['webDir'] = os.environ['WEB_DIR']
+          # امنیت: بدون محتوای میکس (http)، بدون دیباگ وب‌ویو در ریلیز
+          cfg['android'] = {**(cfg.get('android') or {}),
+                            'allowMixedContent': False,
+                            'webContentsDebuggingEnabled': False}
+          # حیاتی برای لاگین: بدون این دو، document.cookie خالی است،
+          # هدر x-csrf-token ست نمی‌شود و همه POST/PUT/DELETE ها 403 می‌خورند
+          cfg['plugins'] = {
+              **(cfg.get('plugins') or {}),
+              'CapacitorCookies': {'enabled': True},
+              'CapacitorHttp': {'enabled': True},
+          }
+          # منشأ وب‌ویو اندروید https://localhost می‌شود؛
+          # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد
+          server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
+          server.pop('cleartext', None)
+          if os.environ['LOAD_MODE'] == 'remote':
+              server['url'] = os.environ['API_BASE']
+          else:
+              server.pop('url', None)
+          cfg['server'] = server
+          with open('capacitor.config.json', 'w', encoding='utf-8') as f:
+              json.dump(cfg, f, indent=2, ensure_ascii=False)
+          print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
+          print('plugins =', json.dumps(cfg['plugins']))
+          print('server.url =', server.get('url', '(local assets)'))
+          PYEOF
+
+      # --- مسیر اشتباه icon.svg را جبران کن ---
+      - name: Normalize icon.svg path
+        working-directory: client
+        run: |
+          mkdir -p assets
+          if [ ! -f assets/icon.svg ]; then
+            FOUND=$(find assets -maxdepth 4 -name "icon.svg" -type f | head -1)
+            if [ -n "$FOUND" ]; then
+              cp "$FOUND" assets/icon.svg
+              echo "✅ icon.svg از $FOUND کپی شد"
+            else
+              echo "⚠️ هیچ icon.svg پیدا نشد — از آیکون پیش‌فرض استفاده می‌شود"
+            fi
+          fi
+
+      - name: Prepare icon assets (SVG → PNG + notification icon)
+        working-directory: client
+        run: |
+          set -e
+          mkdir -p assets
+
+          if [ -f assets/icon.svg ]; then
+            rsvg-convert -w 1024 -h 1024 assets/icon.svg -o assets/icon.png
+            echo "✅ icon.png از icon.svg رندر شد"
+          fi
+          if [ ! -f assets/icon.png ]; then
+            echo "⚠️ نه SVG بود نه PNG → آیکون پیش‌فرض ساخته می‌شود"
+            if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
+            $MX -size 1024x1024 gradient:'#4a9bff-#0a5be0' \
+              -fill white -stroke none \
+              -draw "roundrectangle 322,470 702,742 80,80" \
+              -draw "polygon 512,236 894,420 512,604 130,420" \
+              -draw "rectangle 868,420 896,566" \
+              -draw "circle 882,594 882,622" \
+              -draw "polygon 858,616 906,616 890,712 874,712" \
+              assets/icon.png
+          fi
+
+          cat > /tmp/notif.svg <<'EOF'
+          <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+            <g fill="#FFFFFF">
+              <path d="M90 220L256 125L422 220L256 315L90 220Z"/>
+              <path fill-rule="evenodd" d="M150 260V320C150 365 197 390 256 390C315 390 362 365 362 320V260L256 325L150 260Z M175 285V320C175 340 210 355 256 355C302 355 337 340 337 320V285L256 335L175 285Z"/>
+              <circle cx="390" cy="325" r="18"/>
+              <path d="M375 345L405 345L414 395C405 410 375 410 366 395L375 345Z"/>
+            </g>
+            <path d="M390 210V310" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" fill="none"/>
+          </svg>
+          EOF
+          rsvg-convert -w 96 -h 96 /tmp/notif.svg -o /tmp/ic_notification.png
+          echo "✅ notification icon master ready"
+
+      - name: Add Android platform (fresh)
+        working-directory: client
+        run: |
+          rm -rf android
+          npx cap add android
+          chmod +x android/gradlew
+
+      - name: Harden manifest (no backup, no cleartext, notification permission)
+        working-directory: client/android
+        run: |
+          M=app/src/main/AndroidManifest.xml
+          if grep -q 'android:allowBackup' "$M"; then
+            sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' "$M"
+          else
+            sed -i 's/<application /<application android:allowBackup="false" /' "$M"
+          fi
+          if grep -q 'android:usesCleartextTraffic' "$M"; then
+            sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="false"/' "$M"
+          else
+            sed -i 's/<application /<application android:usesCleartextTraffic="false" /' "$M"
+          fi
+          if ! grep -q 'android.permission.POST_NOTIFICATIONS' "$M"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' "$M"
+          fi
+          echo "✅ allowBackup=false, usesCleartextTraffic=false, POST_NOTIFICATIONS added"
+
+      # --- compileSdk=36 (الزام androidx.core 1.17.0) ولی targetSdk=35 می‌ماند
+      # تا رفتار runtime جدید ۳۶ (edge-to-edge اجباری) فعال نشود ---
+      - name: Ensure SDK versions (compile=36, target=35)
+        working-directory: client/android
+        run: |
+          V=variables.gradle
+          [ -f "$V" ] || exit 0
+          sed -i -E 's/(compileSdkVersion\s*=\s*)[0-9]+/\136/' "$V" || true
+          sed -i -E 's/(targetSdkVersion\s*=\s*)[0-9]+/\135/' "$V" || true
+          GP=gradle.properties
+          [ -f "$GP" ] || GP=../gradle.properties
+          grep -q 'suppressUnsupportedCompileSdk' "$GP" 2>/dev/null || echo 'android.suppressUnsupportedCompileSdk=36' >> "$GP"
+          echo "--- variables.gradle ---"
+          grep -E 'compileSdkVersion|targetSdkVersion|minSdkVersion' "$V" || true
+
+      - name: Prepare signing keystore + fingerprint
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SEC_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SEC_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SEC_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > /tmp/release.keystore
+            STORE_PASS="$SEC_STORE_PASS"
+            ALIAS_NAME="$SEC_ALIAS"
+            KEY_PASS_VAL="$SEC_KEY_PASS"
+            echo "✅ Using keystore from secrets"
+          else
+            keytool -genkeypair -v -keystore /tmp/release.keystore -alias podmanban -keyalg RSA -keysize 2048 -validity 10000 -storepass podmanban2024 -keypass podmanban2024 -dname "CN=PodmanBan, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
+            STORE_PASS="podmanban2024"
+            ALIAS_NAME="podmanban"
+            KEY_PASS_VAL="podmanban2024"
+            echo "⚠️ Temporary keystore generated (unsigned identity — set secrets for production)"
+          fi
+
+          LIST_OUT=$(keytool -list -v -keystore /tmp/release.keystore -storepass "$STORE_PASS" -alias "$ALIAS_NAME" 2>&1 || true)
+          FP=$(printf '%s' "$LIST_OUT" | grep -m1 'SHA256:' | sed 's/.*SHA256:[[:space:]]*//' | tr -d ' :' | tr '[:lower:]' '[:upper:]')
+
+          if [ "${#FP}" -ne 64 ]; then
+            echo "❌ Could not read certificate fingerprint"
+            printf '%s\n' "$LIST_OUT" | head -5 || true
+            exit 1
+          fi
+
+          {
+            echo "KEYSTORE_PATH=/tmp/release.keystore"
+            echo "KEYSTORE_PASS=$STORE_PASS"
+            echo "KEY_ALIAS=$ALIAS_NAME"
+            echo "KEY_PASS=$KEY_PASS_VAL"
+            echo "CERT_FP=$FP"
+          } >> "$GITHUB_ENV"
+
+          echo "🔐 Cert fingerprint: $FP"
+
+      - name: Inject anti-tamper signature guard
+        working-directory: client
+        env:
+          APP_ID: ${{ inputs.app_id }}
+          CERT_FP: ${{ env.CERT_FP }}
+        run: |
+          python3 <<'PYEOF'
+          import os, glob
+
+          fp = os.environ['CERT_FP'].replace(':', '').strip().upper()
+          if len(fp) != 64:
+              raise SystemExit('❌ fingerprint invalid')
+          pkg = os.environ['APP_ID'].strip()
+          digest = bytes.fromhex(fp)
+          arr = ', '.join(str((b ^ 0x5A) & 0xFF) for b in digest)
+
+          base = 'android/app/src/main/java/' + pkg.replace('.', '/')
+          os.makedirs(base, exist_ok=True)
+          for f in glob.glob(base + '/MainActivity.*'):
+              os.remove(f)
+
+          java = r'''
+          package __PKG__;
+
+          import android.content.pm.PackageInfo;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.os.Process;
+          import java.security.MessageDigest;
+
+          public class MainActivity extends com.getcapacitor.BridgeActivity {
+
+              private static final int XOR = 0x5A;
+              private static final int[] FP = {__ARR__};
+
+              private boolean ok() {
+                  try {
+                      byte[] raw;
+                      if (Build.VERSION.SDK_INT >= 28) {
+                          PackageInfo p = getPackageManager().getPackageInfo(
+                                  getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+                          raw = p.signingInfo.getApkContentsSigners()[0].toByteArray();
+                      } else {
+                          PackageInfo p = getPackageManager().getPackageInfo(
+                                  getPackageName(), PackageManager.GET_SIGNATURES);
+                          raw = p.signatures[0].toByteArray();
+                      }
+                      byte[] d = MessageDigest.getInstance("SHA-256").digest(raw);
+                      if (d.length != FP.length) return false;
+                      for (int i = 0; i < d.length; i++) {
+                          if (((d[i] ^ XOR) & 0xFF) != FP[i]) return false;
+                      }
+                      return true;
+                  } catch (Throwable t) {
+                      return false;
+                  }
+              }
+
+              private void die() {
+                  finishAffinity();
+                  Process.killProcess(Process.myPid());
+              }
+
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  if (!ok()) { die(); return; }
+                  super.onCreate(savedInstanceState);
+                  new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                      @Override
+                      public void run() { if (!ok()) die(); }
+                  }, 5000);
+              }
+
+              @Override
+              public void onResume() {
+                  super.onResume();
+                  if (!ok()) { die(); }
+              }
+          }
+          '''
+          java = java.replace('__PKG__', pkg).replace('__ARR__', arr)
+          path = os.path.join(base, 'MainActivity.java')
+          with open(path, 'w', encoding='utf-8') as f:
+              f.write(java.strip() + '\n')
+          print('🛡 Signature guard injected →', path)
+          PYEOF
+
+      - name: Sync Capacitor
+        working-directory: client
+        run: npx cap sync android
+
+      - name: Generate Android icons & splash
+        working-directory: client
+        run: |
+          set -e
+          if command -v magick >/dev/null 2>&1; then MX="magick"; else MX="convert"; fi
+          RES=android/app/src/main/res
+          ICON=assets/icon.png
+
+          $MX "$ICON" -resize 1024x1024 \
+            \( -size 1024x1024 xc:none -fill white -draw "roundrectangle 0,0 1023,1023 230,230" \) \
+            -alpha set -compose DstIn -composite /tmp/icon_rounded.png
+
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            den=${pair%%:*}; px=${pair##*:}
+            dir="$RES/mipmap-$den"
+            [ -d "$dir" ] || continue
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher.png"
+            $MX /tmp/icon_rounded.png -resize ${px}x${px} "$dir/ic_launcher_round.png"
+            fp=$(( px * 225 / 100 ))
+            inner=$(( fp * 66 / 100 ))
+            $MX -size ${fp}x${fp} xc:none \
+              \( /tmp/icon_rounded.png -resize ${inner}x${inner} \) \
+              -gravity center -compose over -composite "$dir/ic_launcher_foreground.png"
+            echo "  ✔️ mipmap-$den"
+          done
+
+          grep -rl "ic_launcher_background" "$RES/values" 2>/dev/null | while read -r bg; do
+            sed -i -E 's/(name="ic_launcher_background">)#[0-9A-Fa-f]+(<)/\1#0878F9\2/g' "$bg"
+          done
+
+          find "$RES" -name "splash.png" -type f | while read -r f; do
+            dims=$($MX "$f" -format "%wx%h" info:)
+            W=${dims%x*}; H=${dims#*x}
+            S=$(( ( W < H ? W : H ) * 45 / 100 ))
+            $MX -size ${W}x${H} xc:black \
+              \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
+              -gravity center -compose over -composite "$f"
+            echo "  ✔️ $f (${W}x${H})"
+          done
+
+          for pair in mdpi:24 hdpi:36 xhdpi:48 xxhdpi:72 xxxhdpi:96; do
+            den=${pair%%:*}; px=${pair##*:}
+            dir="$RES/drawable-$den"
+            mkdir -p "$dir"
+            $MX /tmp/ic_notification.png -resize ${px}x${px} "$dir/ic_notification.png"
+            echo "  ✔️ drawable-$den/ic_notification.png"
+          done
+          mkdir -p "$RES/drawable"
+          $MX /tmp/ic_notification.png -resize 24x24 "$RES/drawable/ic_notification.png"
+          echo "✅ All icons & splash generated"
+
+      - name: Set versionName / versionCode
+        working-directory: client/android
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 -c "
+          import re, os
+          p = 'app/build.gradle'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'versionName\s+\"[^\"]*\"', 'versionName \"%s\"' % os.environ['VERSION_NAME'], s)
+          s = re.sub(r'versionCode\s+\d+', 'versionCode %s' % os.environ['VERSION_CODE'], s)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('version:', os.environ['VERSION_NAME'], '| code:', os.environ['VERSION_CODE'])
+          "
+
+      - name: Build release APK
+        working-directory: client/android
+        run: ./gradlew clean assembleRelease
+
+      - name: Sign APK
+        working-directory: client/android
+        run: |
+          set -e
+          APK=$(find app/build/outputs/apk/release -name "*unsigned*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          fi
+          echo "Signing: $APK"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          "$BT/zipalign" -f 4 "$APK" aligned.apk
+          "$BT/apksigner" sign --ks "$KEYSTORE_PATH" --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEY_PASS" --out signed.apk aligned.apk
+          "$BT/apksigner" verify signed.apk
+          echo "✅ Signed: $(du -h signed.apk | cut -f1)"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-ban-release-apk
+          path: client/android/signed.apk
