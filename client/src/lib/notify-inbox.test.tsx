@@ -164,6 +164,9 @@ describe("showBroadcastOnce", () => {
 
     expect(screen.getByTestId("probe").textContent).toBe("اطلاعیه|متن")
     expect(plugin.schedule).toHaveBeenCalledTimes(1)
+    expect(plugin.schedule.mock.calls[0][0].notifications[0].smallIcon).toBe(
+      "ic_notification",
+    )
   })
 
   it("fetch failure: silent, no throw", async () => {

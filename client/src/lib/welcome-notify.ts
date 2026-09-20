@@ -57,7 +57,7 @@ export async function welcomeOnce(plugin?: NotifyPlugin): Promise<void> {
           body: WELCOME_BODY,
           // 3s after entry — feels like «a message from the app», not boot noise.
           schedule: { at: new Date(Date.now() + 3000) },
-          smallIcon: "ic_launcher",
+          smallIcon: "ic_notification",
         },
       ],
     })

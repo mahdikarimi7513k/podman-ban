@@ -98,7 +98,7 @@ async function run(plugin?: NotifyPlugin): Promise<void> {
           title: n.title,
           body: n.body,
           schedule: { at: new Date(Date.now() + 1000) },
-          smallIcon: "ic_launcher",
+          smallIcon: "ic_notification",
         },
       ],
     })

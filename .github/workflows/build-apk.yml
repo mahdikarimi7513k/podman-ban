@@ -63,6 +63,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
+      - name: Setup Bun (server tests need bunx for migrations)
+        uses: oven-sh/setup-bun@v2
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -78,7 +81,25 @@ jobs:
           npm install -g npm@latest
           npm install
 
-      # --- FIX 1: notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
+      - name: Quality gate (client typecheck + tests)
+        working-directory: client
+        run: |
+          npm run lint --if-present
+          npx tsc --noEmit
+          npm run test --if-present
+
+      - name: Install server deps
+        working-directory: server
+        run: npm install
+
+      - name: Quality gate (server typecheck + tests)
+        working-directory: server
+        run: |
+          npx tsc --noEmit
+          npx vitest run
+
+      # --- notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
+      # (سورس از قبل ic_notification است؛ این sed فقط تور ایمنی برای رگرسیون است)
       - name: Fix notification smallIcon reference
         working-directory: client
         run: |
@@ -122,14 +143,19 @@ jobs:
           cfg['appId'] = os.environ['APP_ID']
           cfg['appName'] = os.environ['APP_NAME']
           cfg['webDir'] = os.environ['WEB_DIR']
+          # امنیت: بدون محتوای میکس (http)، بدون دیباگ وب‌ویو در ریلیز
           cfg['android'] = {**(cfg.get('android') or {}),
                             'allowMixedContent': False,
                             'webContentsDebuggingEnabled': False}
+          # حیاتی برای لاگین: بدون این دو، document.cookie خالی است،
+          # هدر x-csrf-token ست نمی‌شود و همه POST/PUT/DELETE ها 403 می‌خورند
           cfg['plugins'] = {
               **(cfg.get('plugins') or {}),
               'CapacitorCookies': {'enabled': True},
               'CapacitorHttp': {'enabled': True},
           }
+          # منشأ وب‌ویو اندروید https://localhost می‌شود؛
+          # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد
           server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
           server.pop('cleartext', None)
           if os.environ['LOAD_MODE'] == 'remote':
@@ -140,10 +166,11 @@ jobs:
           with open('capacitor.config.json', 'w', encoding='utf-8') as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
           print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
+          print('plugins =', json.dumps(cfg['plugins']))
           print('server.url =', server.get('url', '(local assets)'))
           PYEOF
 
-      # --- FIX 2: مسیر اشتباه icon.svg را جبران کن ---
+      # --- مسیر اشتباه icon.svg را جبران کن ---
       - name: Normalize icon.svg path
         working-directory: client
         run: |
@@ -221,7 +248,7 @@ jobs:
           fi
           echo "✅ allowBackup=false, usesCleartextTraffic=false, POST_NOTIFICATIONS added"
 
-      # --- FIX 3: compileSdk=36 (الزام androidx.core 1.17.0) ولی targetSdk=35 می‌ماند
+      # --- compileSdk=36 (الزام androidx.core 1.17.0) ولی targetSdk=35 می‌ماند
       # تا رفتار runtime جدید ۳۶ (edge-to-edge اجباری) فعال نشود ---
       - name: Ensure SDK versions (compile=36, target=35)
         working-directory: client/android

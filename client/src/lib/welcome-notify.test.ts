@@ -62,6 +62,12 @@ describe("welcomeOnce", () => {
     expect(plugin.schedule.mock.calls[0][0]).toMatchObject({
       notifications: [{ title: WELCOME_TITLE, body: WELCOME_BODY }],
     })
+    // Regression: ic_launcher lives in mipmap (adaptive) and can never be
+    // a notification smallIcon — Android falls back to the default glyph.
+    // The APK ships drawable/ic_notification for this (see workflow).
+    expect(plugin.schedule.mock.calls[0][0].notifications[0].smallIcon).toBe(
+      "ic_notification",
+    )
     expect(localStorage.getItem("pb-welcomed")).toBe("1")
   })
 
