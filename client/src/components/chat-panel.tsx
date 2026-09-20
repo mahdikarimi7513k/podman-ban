@@ -46,13 +46,23 @@ export function ChatPanel({
     if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
 
-  // admin: mark read when opening / new messages arrive
+  // admin: mark read exactly once per incoming message — not on every
+  // length change (own messages must not retrigger parent callbacks or
+  // unread-badge fetches).
+  const lastHandledRef = React.useRef<string | null>(null)
+
   React.useEffect(() => {
-    if (isAdmin && onViewed) {
-      onViewed()
-      void markRead()
-    }
-  }, [isAdmin, onViewed, markRead, messages.length])
+    if (!isAdmin) return
+
+    const last = messages[messages.length - 1]
+
+    if (!last || last.id === lastHandledRef.current) return
+    lastHandledRef.current = last.id
+
+    if (last.sender !== "STUDENT" || last.readAt) return
+    onViewed?.()
+    void markRead()
+  }, [isAdmin, onViewed, markRead, messages])
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()

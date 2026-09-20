@@ -94,6 +94,7 @@ import {
   questionCreateSchema,
   questionUpdateSchema,
   archiveCreateSchema,
+  archiveUpdateSchema,
   notificationCreateSchema,
   remoteConfigUpdateSchema,
   registerSchema,
@@ -553,7 +554,7 @@ adminRouter.put("/archive/:id", async (req, res) => {
     return
   }
   const { id } = req.params
-  const data = parseBody(archiveCreateSchema, req.body, res)
+  const data = parseBody(archiveUpdateSchema, req.body, res)
   if (!data) return
   const exists = await db.select({ id: archiveFiles.id }).from(archiveFiles).where(eq(archiveFiles.id, id)).get()
   if (!exists) {

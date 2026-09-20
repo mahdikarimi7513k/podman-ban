@@ -141,6 +141,7 @@ export const archiveCreateSchema = z.object({
     .nullable(),
   institutionId: z.string().optional().nullable(),
 })
+export const archiveUpdateSchema = archiveCreateSchema.partial()
 
 export const remoteConfigUpdateSchema = z.object({
   siteLocked: z.boolean().optional(),

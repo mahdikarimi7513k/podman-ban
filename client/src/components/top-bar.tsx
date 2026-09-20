@@ -2,6 +2,7 @@
 import { Archive, GraduationCap, ShieldCheck, Trophy, Award } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { FaNum } from "@/components/fa-utils"
 import { cn } from "@/lib/utils"
 
 export function TopBar() {
@@ -11,7 +12,9 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur pt-safe">
-      <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+      {/* Adaptive gutters: tight on phones so the action cluster never
+          overflows; comfortable from sm up. */}
+      <div className="max-w-3xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => setView("home")}
@@ -29,10 +32,12 @@ export function TopBar() {
           </div>
         </button>
 
-        <div className="flex items-center gap-1">
+        {/* shrink-0 keeps every 36px hit area intact on narrow screens
+            while the brand side truncates instead of overflowing. */}
+        <div className="flex items-center gap-1 shrink-0">
           {user && (
-            <span className="hidden xs:inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums">
-              {user.totalTests} آزمون
+            <span className="hidden xs:inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
+              <FaNum>{user.totalTests}</FaNum>&nbsp;آزمون
             </span>
           )}
           <button

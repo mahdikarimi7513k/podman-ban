@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
+import { AnswerQueue } from "@/lib/answer-queue"
 import { Button } from "@/components/ui/button"
 import { FaNum } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
@@ -191,12 +192,15 @@ export function ExamView() {
     }
   }, [examSessionId])
 
-  // ---- answer persistence with retry ----
+  // ---- answer persistence with retry + ordering ----
   // A dropped request (tunnel, offline blip) must not silently lose an
-  // answer — finishExam scores from saved rows only. Unsent answers wait in
-  // a small pending map: retried in the background and flushed on finish.
-  const pendingRef = React.useRef(new Map<string, number | null>())
-  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // answer — finishExam scores from saved rows only. Rapid re-taps on one
+  // question are chained per question (see AnswerQueue): arrival order
+  // always matches tap order, so the stored option equals the screen.
+  const queueRef = React.useRef<AnswerQueue | null>(null)
+
+  if (!queueRef.current) queueRef.current = new AnswerQueue()
+  const queue = queueRef.current
 
   const postAnswer = React.useCallback(
     async (questionId: string, selectedOption: number | null): Promise<boolean> => {
@@ -216,48 +220,15 @@ export function ExamView() {
     [examSessionId],
   )
 
-  const flushPending = React.useCallback(async (): Promise<boolean> => {
-    let allOk = true
-
-    for (const [qid, opt] of Array.from(pendingRef.current.entries())) {
-      const ok = await postAnswer(qid, opt)
-
-      if (ok) pendingRef.current.delete(qid)
-      else allOk = false
-    }
-
-    return allOk
-  }, [postAnswer])
-
-  const scheduleRetry = React.useCallback(() => {
-    if (retryTimerRef.current !== null) return
-    retryTimerRef.current = setTimeout(() => {
-      retryTimerRef.current = null
-      void flushPending().then((ok) => {
-        if (!ok) scheduleRetry()
-      })
-    }, 3000)
-  }, [flushPending])
-
   const recordAnswer = React.useCallback(
-    async (questionId: string, selectedOption: number | null) => {
-      if (!examSessionId) return
-      pendingRef.current.set(questionId, selectedOption)
-      const ok = await postAnswer(questionId, selectedOption)
-
-      if (ok) pendingRef.current.delete(questionId)
-      else scheduleRetry()
+    (questionId: string, selectedOption: number | null) => {
+      queue.submit(questionId, selectedOption, (qid, opt) => postAnswer(qid, opt))
     },
-    [examSessionId, postAnswer, scheduleRetry],
+    [queue, postAnswer],
   )
 
   // Drop the retry chain on unmount — finish() flushes synchronously instead.
-  React.useEffect(
-    () => () => {
-      if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current)
-    },
-    [],
-  )
+  React.useEffect(() => () => queue.stop(), [queue])
 
   const select = async (questionId: string, option: number) => {
     setAnswers((a) => ({ ...a, [questionId]: option }))
@@ -313,7 +284,7 @@ export function ExamView() {
     try {
       // Flush answers the background retry hasn't landed yet — finishing
       // with unsaved rows would silently undercount the score.
-      const flushed = await flushPending()
+      const flushed = await queue.flush((qid, opt) => postAnswer(qid, opt))
 
       const res = await apiFetch<{ result: FinishedResult }>(
         `/api/exam/${examSessionId}/finish`,
@@ -337,7 +308,7 @@ export function ExamView() {
     } finally {
       setFinishing(false)
     }
-  }, [examSessionId, toast, flushPending])
+  }, [examSessionId, toast, queue, postAnswer])
 
   const loadReview = React.useCallback(async () => {
     if (!examSessionId) return
