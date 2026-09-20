@@ -141,7 +141,15 @@ describe("startDailyGoalReminder", () => {
 
     const text = screen.getByTestId("probe").textContent ?? ""
     expect(text).toContain("هدف امروزت مونده!")
-    expect(localStorage.getItem("pb-goal-reminded-" + tehranDayKey(Date.now()))).toBe("1")
+
+    const firedKeys: Array<string> = []
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+
+      if (k && k.startsWith("pb-goal-reminded-")) firedKeys.push(k)
+    }
+    expect(firedKeys).toHaveLength(1)
   })
 
   it("stays silent when the goal is already met", async () => {

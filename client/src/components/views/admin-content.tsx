@@ -116,7 +116,7 @@ export function AdminContent() {
     }
   }
   const deleteBook = async (id: string, title: string) => {
-    if (!confirm(`حذف کتاب «${title}»؟ همه‌ی پودمان‌ها و سوالاتش هم حذف می‌شوند.`))
+    if (!confirm(`حذف کتاب «${title}»؟ همه‌ی پودمان‌ها، سوالات و سوابق آزمون‌هایش هم حذف می‌شوند.`))
       return
     try {
       await apiFetch(`/api/admin/books/${id}`, { method: "DELETE" })
@@ -165,7 +165,7 @@ export function AdminContent() {
     }
   }
   const deleteModule = async (id: string, title: string) => {
-    if (!confirm(`حذف پودمان «${title}»؟ همه‌ی سوالاتش هم حذف می‌شوند.`)) return
+    if (!confirm(`حذف پودمان «${title}»؟ همه‌ی سوالات و سوابق آزمون‌هایش هم حذف می‌شوند.`)) return
     try {
       await apiFetch(`/api/admin/modules/${id}`, { method: "DELETE" })
       await load()

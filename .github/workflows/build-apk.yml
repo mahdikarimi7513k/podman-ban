@@ -25,6 +25,27 @@ on:
         default: "remote"
 
 jobs:
+  # Static analysis (SAST) — runs beside the build so findings never
+  # block artifact upload, but are always visible under Security.
+  security:
+    name: CodeQL security scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -88,6 +109,12 @@ jobs:
           npx tsc --noEmit
           npm run test --if-present
 
+      # Fail the pipeline on high/critical dependency vulnerabilities
+      # instead of deploying them silently.
+      - name: Audit client dependencies
+        working-directory: client
+        run: npm audit --audit-level=high
+
       - name: Install server deps
         working-directory: server
         run: npm install
@@ -97,6 +124,10 @@ jobs:
         run: |
           npx tsc --noEmit
           npx vitest run
+
+      - name: Audit server dependencies
+        working-directory: server
+        run: npm audit --audit-level=high
 
       # --- notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
       # (سورس از قبل ic_notification است؛ این sed فقط تور ایمنی برای رگرسیون است)
