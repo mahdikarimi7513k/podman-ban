@@ -11,7 +11,7 @@
 
 import { Router } from "express"
 import { z } from "zod"
-import { and, count, eq, gte, inArray, isNull } from "drizzle-orm"
+import { and, eq, gte, inArray, isNull } from "drizzle-orm"
 import { db } from "../lib/db.js"
 import { answers, examSessions, refreshTokens, users } from "../lib/db/schema.js"
 import {
@@ -26,6 +26,63 @@ import {
 import { prefsSchema, parseBody } from "../lib/validations.js"
 
 export const userRouter = Router()
+
+// ---- Tehran calendar-day helpers --------------------------------------
+// The server timezone is arbitrary (shared host), so every "day" boundary
+// (streak, daily goal, heatmap) follows Asia/Tehran. en-CA formats as
+// YYYY-MM-DD — lexicographically sortable and directly comparable.
+const TEHRAN_TZ = "Asia/Tehran"
+
+const tehranDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TEHRAN_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+/** Calendar-day key (YYYY-MM-DD) in Tehran for an instant. */
+function tehranDayKey(d: Date): string {
+  return tehranDayFmt.format(d)
+}
+
+const tehranPartsFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TEHRAN_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+})
+
+/** IANA-zone offset (ms, east-positive) in effect at the given instant. */
+function tehranOffsetMs(d: Date): number {
+  const parts: Record<string, string> = {}
+
+  for (const p of tehranPartsFmt.formatToParts(d)) parts[p.type] = p.value
+
+  const asUTC = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+  )
+
+  return asUTC - d.getTime()
+}
+
+/** UTC ms of Tehran 00:00 for the Tehran calendar day containing `nowMs`. */
+function tehranDayStartMs(nowMs: number): number {
+  const [y, m, d] = tehranDayKey(new Date(nowMs)).split("-").map(Number)
+  // Measure the offset at UTC noon — always the same Tehran calendar day
+  // (UTC+3:30 → 15:30 local), so a midnight DST jump can't skew the result.
+  const off = tehranOffsetMs(new Date(Date.UTC(y, m - 1, d, 12, 0, 0)))
+
+  return Date.UTC(y, m - 1, d, 0, 0, 0) - off
+}
 
 // ---- PUT /prefs (CSRF) ----------------------------------------------
 
@@ -162,19 +219,23 @@ userRouter.get("/achievements", async (req, res) => {
   const bestScore = sessions.reduce((a, s) => Math.max(a, s.scorePercent), 0)
   const perfectScores = sessions.filter((s) => s.scorePercent >= 90).length
 
-  // streak: consecutive days with at least one finished exam (from today backwards)
+  // streak: consecutive Tehran days with at least one finished exam (today backwards)
   const days = new Set<string>()
+
   for (const s of sessions) {
     if (s.finishedAt) {
-      days.add(s.finishedAt.toISOString().slice(0, 10))
+      days.add(tehranDayKey(s.finishedAt))
     }
   }
+
   let streak = 0
-  const today = new Date()
+  // Fixed 24h steps are exact while Tehran has no DST (none since 2022);
+  // the formatter keys keep each boundary correct regardless.
+  const streakStartMs = tehranDayStartMs(Date.now())
+
   for (let i = 0; i < 365; i++) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = tehranDayKey(new Date(streakStartMs - i * 86400000))
+
     if (days.has(key)) streak++
     else if (i > 0) break // allow today to be empty
   }
@@ -269,14 +330,16 @@ userRouter.get("/daily-progress", async (req, res) => {
     return
   }
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
+  const nowMs = Date.now()
+
+  const todayStart = new Date(tehranDayStartMs(nowMs))
 
   const sessionIds = await db
     .select({ id: examSessions.id })
     .from(examSessions)
     .where(eq(examSessions.userId, me.id))
     .all()
+
   const answerRows = await db
     .select({ id: answers.id })
     .from(answers)
@@ -295,7 +358,7 @@ userRouter.get("/daily-progress", async (req, res) => {
 
   res.json({
     todayAnswered: answerRows.length,
-    date: todayStart.toISOString().slice(0, 10),
+    date: tehranDayKey(new Date(nowMs)),
   })
 })
 
@@ -309,6 +372,7 @@ userRouter.get("/heatmap", async (req, res) => {
   }
 
   const range = req.query.range === "30" ? 30 : 7
+
   const dayCount = range
 
   const days: {
@@ -317,23 +381,25 @@ userRouter.get("/heatmap", async (req, res) => {
     label: string
     dayNum: number
   }[] = []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const firstDay = new Date(today)
-  firstDay.setDate(firstDay.getDate() - (dayCount - 1))
 
-  // One grouped query instead of one COUNT per day (N+1).
-  const since = new Date(firstDay)
+  const rangeStartMs = tehranDayStartMs(Date.now())
+  const firstDay = new Date(rangeStartMs - (dayCount - 1) * 86400000)
+
+  // One bounded query (no GROUP BY on ms timestamps — every distinct
+  // millisecond was its own group); bucket into Tehran days in JS.
+  const since = firstDay
   const countsByDay = new Map<string, number>()
+
   const mySessionIds = await db
     .select({ id: examSessions.id })
     .from(examSessions)
     .where(eq(examSessions.userId, me.id))
     .all()
-  const grouped =
+
+  const answerTimes =
     mySessionIds.length > 0
       ? await db
-          .select({ answeredAt: answers.answeredAt, n: count() })
+          .select({ answeredAt: answers.answeredAt })
           .from(answers)
           .where(
             and(
@@ -344,27 +410,24 @@ userRouter.get("/heatmap", async (req, res) => {
               gte(answers.answeredAt, since),
             ),
           )
-          .groupBy(answers.answeredAt)
           .all()
       : []
-  for (const row of grouped) {
-    const d = new Date(row.answeredAt)
-    d.setHours(0, 0, 0, 0)
-    const key = d.toISOString().slice(0, 10)
-    countsByDay.set(key, (countsByDay.get(key) ?? 0) + row.n)
+
+  for (const row of answerTimes) {
+    const key = tehranDayKey(row.answeredAt)
+    countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1)
   }
 
   for (let i = dayCount - 1; i >= 0; i--) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
+    const key = tehranDayKey(new Date(rangeStartMs - i * 86400000))
 
-    const count = countsByDay.get(d.toISOString().slice(0, 10)) ?? 0
+    const count = countsByDay.get(key) ?? 0
 
     days.push({
-      date: d.toISOString().slice(0, 10),
+      date: key,
       count,
-      label: new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(d),
-      dayNum: d.getDate(),
+      label: new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(new Date(`${key}T12:00:00Z`)),
+      dayNum: Number(key.slice(8, 10)),
     })
   }
 

@@ -314,7 +314,7 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
   const userRows =
     grouped.length > 0
       ? await db
-          .select({ id: users.id, name: users.name, username: users.username, field: users.field })
+          .select({ id: users.id, name: users.name, field: users.field })
           .from(users)
           .where(
             inArray(
@@ -333,7 +333,6 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
       return {
         id: u.id,
         name: u.name,
-        username: u.username,
         field: u.field as "FANI_HERFEI" | "KARDANESH",
         avg: Math.round(Number(g.avgScore ?? 0)),
         best: g.bestScore ?? 0,

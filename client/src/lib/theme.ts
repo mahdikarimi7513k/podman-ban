@@ -2,24 +2,31 @@ export type Theme = "dark" | "light" | "system"
 
 /**
  * Theme-cycling policy for the single toggle button.
- * The app default is dark, so any unknown/missing value cycles to "dark".
+ * The app default is light (App.tsx defaultTheme + theme-init.js fallback),
+ * so any unknown/missing value cycles to "light".
  */
 export function nextTheme(theme: string | undefined): Theme {
-  if (theme === "dark") return "light"
   if (theme === "light") return "system"
-  return "dark"
+
+  if (theme === "system") return "dark"
+
+  return "light"
 }
 
 /** Persian accessible label for the toggle button, keyed by current theme. */
 export function themeLabel(theme: string | undefined): string {
-  if (theme === "light") return "تم: روشن"
+  if (theme === "dark") return "تم: تاریک"
+
   if (theme === "system") return "تم: خودکار"
-  return "تم: تاریک"
+
+  return "تم: روشن"
 }
 
 /** Persian announcement for the aria-live region after a change. */
 export function themeAnnouncement(theme: string | undefined): string {
-  if (theme === "light") return "تم روشن شد"
+  if (theme === "dark") return "تم تاریک شد"
+
   if (theme === "system") return "تم خودکار شد"
-  return "تم تاریک شد"
+
+  return "تم روشن شد"
 }

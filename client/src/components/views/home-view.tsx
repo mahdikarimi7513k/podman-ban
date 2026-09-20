@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/accordion"
 import { FaNum } from "@/components/fa-utils"
 import { preloadExamView } from "@/App"
+import { parseExamPrefs, resolveExamDurationMin, resolveDailyGoal } from "@/lib/exam-prefs"
 import type { BookWithModules } from "@/lib/exam/question-bank"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -49,6 +50,7 @@ interface InProgressSession {
 
 export function HomeView() {
   const user = useApp((s) => s.user)
+  const config = useApp((s) => s.config)
   const enterExam = useApp((s) => s.enterExam)
   const { toast } = useToast()
   const [books, setBooks] = React.useState<BookWithModules[] | null>(null)
@@ -61,8 +63,11 @@ export function HomeView() {
   } | null>(null)
   const [dailyAnswered, setDailyAnswered] = React.useState<number | null>(null)
 
-  // Not state — nothing ever changes it. A constant wearing a costume.
-  const DAILY_GOAL = 20
+  // Applied settings (were hardcoded): user prefs → admin default → fallback.
+  const prefs = React.useMemo(() => parseExamPrefs(user?.prefs), [user?.prefs])
+  const dailyGoal = resolveDailyGoal(prefs)
+
+  const defaultDuration = resolveExamDurationMin(prefs, config?.defaultTimerMin)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -156,7 +161,7 @@ export function HomeView() {
 
       {/* Daily goal tracker */}
       {dailyAnswered !== null && (
-        <DailyGoalCard answered={dailyAnswered} goal={DAILY_GOAL} />
+        <DailyGoalCard answered={dailyAnswered} goal={dailyGoal} />
       )}
 
       {loading ? (
@@ -244,6 +249,7 @@ export function HomeView() {
         <DurationPickerDialog
           moduleTitle={durationPicker.moduleTitle}
           starting={startingId === durationPicker.moduleId}
+          initialDuration={defaultDuration}
           onClose={() => setDurationPicker(null)}
           onStart={(durationMin, practice) => {
             if (durationPicker) {
@@ -259,15 +265,19 @@ export function HomeView() {
 function DurationPickerDialog({
   moduleTitle,
   starting,
+  initialDuration,
   onClose,
   onStart,
 }: {
   moduleTitle: string
   starting: boolean
+  initialDuration: number
   onClose: () => void
   onStart: (durationMin: number, practice: boolean) => void
 }) {
+
   const [practice, setPractice] = React.useState(false)
+
   const durations = [
     { min: 5, label: "۵ دقیقه", desc: "مرور سریع" },
     { min: 10, label: "۱۰ دقیقه", desc: "آزمون کوتاه" },
@@ -276,7 +286,11 @@ function DurationPickerDialog({
     { min: 45, label: "۴۵ دقیقه", desc: "وقت زیاد" },
     { min: 60, label: "۶۰ دقیقه", desc: "بدون محدودیت" },
   ]
-  const [selected, setSelected] = React.useState(20)
+
+  // Preselect the resolved default when it is one of the offered options.
+  const [selected, setSelected] = React.useState(
+    durations.some((d) => d.min === initialDuration) ? initialDuration : 20,
+  )
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

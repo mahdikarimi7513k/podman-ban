@@ -49,12 +49,37 @@ export function rateLimit(
   return { ok: true, remaining: limit - entry.count, retryAfterSec: 0 }
 }
 
-/** Client IP for audit fields — honors TRUST_PROXY the same way as getIp(). */
-export function clientIp(req: { ip?: string; socket?: { remoteAddress?: string }; headers: Record<string, unknown> }): string {
+/**
+ * Client IP for audit fields and rate-limit keys.
+ *
+ * Never take the leftmost X-Forwarded-For entry: behind an appending proxy
+ * (Apache/cPanel — unlike Caddy, the header may already carry brackets from
+ * earlier hops) anyone can prepend arbitrary addresses and poison per-IP
+ * buckets (login brute-force shield). So take the rightmost entry — the
+ * address the closest proxy hop appended — which matches what Express'
+ * own req.ip resolves to under `trust proxy`. The manual parse below keeps
+ * that rule for non-Express callers (tests drive plain header objects).
+ */
+export function clientIp(req: {
+  ip?: string
+  socket?: { remoteAddress?: string }
+  headers: Record<string, string | string[] | undefined>
+}): string {
   if (process.env.TRUST_PROXY === "true") {
     const xff = req.headers["x-forwarded-for"]
-    const first = Array.isArray(xff) ? xff[0] : xff
-    if (typeof first === "string" && first) return first.split(",")[0].trim()
+
+    if (Array.isArray(xff)) {
+      const last = xff.length > 0 ? xff[xff.length - 1].split(",").pop()?.trim() : undefined
+
+      if (last) return last
+    } else if (xff) {
+      const last = xff.split(",").pop()?.trim()
+
+      if (last) return last
+    }
   }
+  // Same value Express' own req.ip resolves to under `trust proxy` (the
+  // rightmost untrusted chain entry) — kept as fallback for direct callers.
+
   return req.ip ?? req.socket?.remoteAddress ?? "unknown"
 }

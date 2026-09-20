@@ -6,6 +6,7 @@ import {
   Monitor,
   Repeat,
   Timer,
+  Target,
   LogOut,
   User,
   Hash,
@@ -31,6 +32,8 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { FaNum } from "@/components/fa-utils"
+import { parseExamPrefs } from "@/lib/exam-prefs"
+import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -43,26 +46,28 @@ export function SettingsView() {
 
   const [repeatQuestions, setRepeatQuestions] = React.useState(true)
   const [duration, setDuration] = React.useState(20)
+  const [dailyGoal, setDailyGoal] = React.useState(20)
   const [saving, setSaving] = React.useState(false)
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
     setMounted(true)
+
     if (!user) return
-    try {
-      const prefs = user.prefs ? JSON.parse(user.prefs) : {}
-      if (typeof prefs.repeatQuestions === "boolean")
-        setRepeatQuestions(prefs.repeatQuestions)
-      if (typeof prefs.examDurationMin === "number")
-        setDuration(prefs.examDurationMin)
-    } catch {
-      /* ignore */
-    }
+
+    const exam = parseExamPrefs(user.prefs)
+
+    if (exam.repeatQuestions !== undefined) setRepeatQuestions(exam.repeatQuestions)
+
+    if (exam.examDurationMin !== undefined) setDuration(exam.examDurationMin)
+
+    if (exam.dailyGoal !== undefined) setDailyGoal(exam.dailyGoal)
   }, [user])
 
   const savePrefs = React.useCallback(
-    async (patch: Record<string, unknown>) => {
+    async (patch: ExamPrefs) => {
       setSaving(true)
+
       try {
         await apiFetch("/api/user/prefs", {
           method: "PUT",
@@ -234,9 +239,39 @@ export function SettingsView() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[10, 15, 20, 30, 45, 60, 90].map((m) => (
+              {[5, 10, 20, 30, 45, 60].map((m) => (
                 <SelectItem key={m} value={String(m)} className="cursor-pointer">
                   <FaNum>{m}</FaNum> دقیقه
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-3 p-4 border-t border-border">
+          <Target className="size-4 text-muted-foreground shrink-0" strokeWidth={2} />
+          <div className="flex-1 min-w-0">
+            <Label htmlFor="goal-select" className="text-sm font-medium cursor-pointer">
+              هدف روزانه
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              تعداد سوال در روز — در کارت هدف خانه نمایش داده می‌شود.
+            </p>
+          </div>
+          <Select
+            value={String(dailyGoal)}
+            onValueChange={(v) => {
+              const n = Number(v)
+              setDailyGoal(n)
+              void savePrefs({ dailyGoal: n })
+            }}
+          >
+            <SelectTrigger id="goal-select" className="w-24 cursor-pointer" dir="ltr">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[10, 20, 30, 50, 100].map((m) => (
+                <SelectItem key={m} value={String(m)} className="cursor-pointer">
+                  <FaNum>{m}</FaNum> سوال
                 </SelectItem>
               ))}
             </SelectContent>

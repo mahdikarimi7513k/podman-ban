@@ -137,6 +137,7 @@ export async function recordAnswer(
       status: examSessions.status,
       startedAt: examSessions.startedAt,
       durationSec: examSessions.durationSec,
+      isPractice: examSessions.isPractice,
       questionOrder: examSessions.questionOrder,
     })
     .from(examSessions)
@@ -153,9 +154,13 @@ export async function recordAnswer(
   if (!rl.ok) return { ok: false, code: "RATE_LIMITED" }
 
   // Server-side timer: answers past startedAt+duration (+grace) are refused.
-  const deadline = session.startedAt.getTime() + session.durationSec * 1000
-  if (Date.now() > deadline + ANSWER_GRACE_MS) {
-    return { ok: false, code: "EXPIRED" }
+  // Practice sessions are untimed by design (the client hides the timer),
+  // so the deadline never applies to them.
+  if (!session.isPractice) {
+    const deadline = session.startedAt.getTime() + session.durationSec * 1000
+    if (Date.now() > deadline + ANSWER_GRACE_MS) {
+      return { ok: false, code: "EXPIRED" }
+    }
   }
 
   // Fetch the question directly and verify it belongs to this session's module.

@@ -148,15 +148,36 @@ export function ExamView() {
         }
         setAnswers(initial)
         if (res.session.status === "FINISHED") {
-          setResult({
-            sessionId: res.session.id,
-            totalQuestions: res.session.totalQuestions,
-            correctCount: 0,
-            wrongCount: 0,
-            skippedCount: res.session.totalQuestions,
-            scorePercent: res.session.scorePercent,
-            negativeMarking: res.session.negativeMarking,
-          })
+          // GET /exam/:session carries no per-question verdicts, so a
+          // reopened report would show 0/0 and every question "unanswered".
+          // The /review endpoint has the real counts — load it up front so
+          // the result screen is correct and review opens instantly.
+          try {
+            const review = await apiFetch<ReviewData>(`/api/exam/${examSessionId}/review`)
+
+            if (cancelled) return
+            setReviewData(review)
+            setResult({
+              sessionId: review.session.id,
+              totalQuestions: review.session.totalQuestions,
+              correctCount: review.session.correctCount,
+              wrongCount: review.session.wrongCount,
+              skippedCount: review.session.skippedCount,
+              scorePercent: review.session.scorePercent,
+              negativeMarking: review.session.negativeMarking,
+            })
+          } catch {
+            if (cancelled) return
+            setResult({
+              sessionId: res.session.id,
+              totalQuestions: res.session.totalQuestions,
+              correctCount: 0,
+              wrongCount: 0,
+              skippedCount: res.session.totalQuestions,
+              scorePercent: res.session.scorePercent,
+              negativeMarking: res.session.negativeMarking,
+            })
+          }
         }
       } catch (err) {
         if (!cancelled)
@@ -170,19 +191,72 @@ export function ExamView() {
     }
   }, [examSessionId])
 
-  const recordAnswer = React.useCallback(
-    async (questionId: string, selectedOption: number | null) => {
-      if (!examSessionId) return
+  // ---- answer persistence with retry ----
+  // A dropped request (tunnel, offline blip) must not silently lose an
+  // answer — finishExam scores from saved rows only. Unsent answers wait in
+  // a small pending map: retried in the background and flushed on finish.
+  const pendingRef = React.useRef(new Map<string, number | null>())
+  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const postAnswer = React.useCallback(
+    async (questionId: string, selectedOption: number | null): Promise<boolean> => {
+      if (!examSessionId) return false
+
       try {
         await apiFetch(`/api/exam/${examSessionId}/answer`, {
           method: "POST",
           body: JSON.stringify({ questionId, selectedOption }),
         })
+
+        return true
       } catch {
-        /* best-effort; we keep local state */
+        return false
       }
     },
     [examSessionId],
+  )
+
+  const flushPending = React.useCallback(async (): Promise<boolean> => {
+    let allOk = true
+
+    for (const [qid, opt] of Array.from(pendingRef.current.entries())) {
+      const ok = await postAnswer(qid, opt)
+
+      if (ok) pendingRef.current.delete(qid)
+      else allOk = false
+    }
+
+    return allOk
+  }, [postAnswer])
+
+  const scheduleRetry = React.useCallback(() => {
+    if (retryTimerRef.current !== null) return
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null
+      void flushPending().then((ok) => {
+        if (!ok) scheduleRetry()
+      })
+    }, 3000)
+  }, [flushPending])
+
+  const recordAnswer = React.useCallback(
+    async (questionId: string, selectedOption: number | null) => {
+      if (!examSessionId) return
+      pendingRef.current.set(questionId, selectedOption)
+      const ok = await postAnswer(questionId, selectedOption)
+
+      if (ok) pendingRef.current.delete(questionId)
+      else scheduleRetry()
+    },
+    [examSessionId, postAnswer, scheduleRetry],
+  )
+
+  // Drop the retry chain on unmount — finish() flushes synchronously instead.
+  React.useEffect(
+    () => () => {
+      if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current)
+    },
+    [],
   )
 
   const select = async (questionId: string, option: number) => {
@@ -235,12 +309,25 @@ export function ExamView() {
   const finish = React.useCallback(async () => {
     if (!examSessionId) return
     setFinishing(true)
+
     try {
+      // Flush answers the background retry hasn't landed yet — finishing
+      // with unsaved rows would silently undercount the score.
+      const flushed = await flushPending()
+
       const res = await apiFetch<{ result: FinishedResult }>(
         `/api/exam/${examSessionId}/finish`,
         { method: "POST", body: JSON.stringify({}) },
       )
+
       setResult(res.result)
+
+      if (!flushed) {
+        toast({
+          title: "برخی پاسخ‌ها ذخیره نشد",
+          description: "نمره ممکن است ناقص باشد — اتصال اینترنت را بررسی کنید.",
+        })
+      }
     } catch (err) {
       toast({
         variant: "destructive",
@@ -250,7 +337,7 @@ export function ExamView() {
     } finally {
       setFinishing(false)
     }
-  }, [examSessionId, toast])
+  }, [examSessionId, toast, flushPending])
 
   const loadReview = React.useCallback(async () => {
     if (!examSessionId) return

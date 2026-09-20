@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 interface LeaderRow {
   id: string
   name: string
-  username: string
   field: "FANI_HERFEI" | "KARDANESH"
   avg: number
   best: number

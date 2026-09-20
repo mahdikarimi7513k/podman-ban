@@ -49,7 +49,7 @@ const logger = process.env.DEBUG_DB === "true" ? new DefaultLogger() : undefined
  * a no-op everywhere else (dev, tests, fresh deploys) — existing data is
  * never touched.
  */
-const RUNTIME_DDL = [
+export const RUNTIME_DDL = [
   `CREATE TABLE IF NOT EXISTS \`Notification\` (
 	\`id\` text PRIMARY KEY NOT NULL,
 	\`title\` text NOT NULL,

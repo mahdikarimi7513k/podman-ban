@@ -483,9 +483,12 @@ adminRouter.post("/archive", async (req, res) => {
 // Raw-bytes upload for one artifact of an existing archive record.
 // The client sends the file as the request body (application/octet-stream) and
 // the original name in x-file-name — no multipart parsing needed.
+// Limit note: the native app ships base64 (+33%), so the wire cap must clear
+// 25MB*4/3 ≈ 33.3MB or real 19–25MB files 413. The true 25MB cap is enforced
+// after decode in archive-files (MAX_ARCHIVE_FILE_BYTES).
 adminRouter.post(
   "/archive/:id/file/:kind",
-  express.raw({ type: "*/*", limit: "25mb" }),
+  express.raw({ type: "*/*", limit: "35mb" }),
   async (req, res) => {
     const user = await requireAdmin(req, res)
     if (!user) return
@@ -806,11 +809,14 @@ adminRouter.put("/users/:id", async (req, res) => {
     return
   }
 
-  // Don't allow demoting the last admin
-  if (existing.role === "ADMIN" && data.role === "STUDENT") {
+  // Don't allow demoting the last ADMIN to any lesser role (STUDENT or
+  // CONTENT_ADMIN) — otherwise the system is left with no super-admin.
+  if (existing.role === "ADMIN" && data.role !== undefined && data.role !== "ADMIN") {
     const adminCount = db.select({ n: count() }).from(users).where(eq(users.role, "ADMIN")).get()?.n ?? 0
+
     if (adminCount <= 1) {
-      res.status(400).json({ error: "نمی‌توان تنها مدیر را عادی کرد" })
+      res.status(400).json({ error: "نمی‌توان تنها مدیر را تنزل داد" })
+
       return
     }
   }

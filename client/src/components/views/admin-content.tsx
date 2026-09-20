@@ -38,7 +38,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { FaNum } from "@/components/fa-utils"
+import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
@@ -568,7 +568,8 @@ function BulkImportDialog({
         method: "POST",
         body: JSON.stringify({ moduleId, questions: parsed }),
       })
-      toast({ title: `<FaNum>${res.count}</FaNum> سوال افزوده شد` })
+
+      toast({ title: `${ToPersianDigits(res.count)} سوال افزوده شد` })
       onImported()
     } catch (err) {
       toast({

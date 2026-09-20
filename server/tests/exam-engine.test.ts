@@ -84,6 +84,19 @@ describe("recordAnswer", () => {
     expect(result).toEqual({ ok: false, code: "EXPIRED" })
   })
 
+  it("accepts practice answers past the nominal deadline (untimed practice)", async () => {
+    const sid = await studentId("eng_stu_practice")
+    const started = await startExam(sid, await moduleId(), { durationMin: 20, practice: true })
+    await db
+      .update(examSessions)
+      .set({ startedAt: new Date(Date.now() - 60 * 60_000) })
+      .where(eq(examSessions.id, started.sessionId))
+      .run()
+
+    const result = await recordAnswer(started.sessionId, sid, started.questionOrder[0], 1)
+    expect(result).toEqual({ ok: true })
+  })
+
   it("rejects a question that belongs to another module", async () => {
     const sid = await studentId("eng_stu6")
     const started = await startExam(sid, await moduleId(), { durationMin: 20 })

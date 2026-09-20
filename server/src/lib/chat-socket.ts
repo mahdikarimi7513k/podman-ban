@@ -1,5 +1,5 @@
 import type { Server as HttpServer } from "http"
-import { Server as SocketIOServer, type Socket } from "socket.io"
+import { Server as SocketIOServer } from "socket.io"
 import type { ChatSender } from "./db/schema.js"
 import { verifyAccessToken } from "./auth/jwt.js"
 import { readCookieFromHeader } from "./auth/cookies.js"
@@ -23,19 +23,6 @@ interface ChatMessageEvent {
   sender: ChatSender
   text: string
   createdAt: string
-}
-
-// Per-socket token bucket: 10 messages burst, refills 1/sec.
-const socketRates = new WeakMap<Socket, { tokens: number; last: number }>()
-function consumeRate(socket: Socket): boolean {
-  const now = Date.now()
-  const st = socketRates.get(socket) ?? { tokens: 10, last: now }
-  st.tokens = Math.min(10, st.tokens + ((now - st.last) / 1000) * 1)
-  st.last = now
-  if (st.tokens < 1) return false
-  st.tokens -= 1
-  socketRates.set(socket, st)
-  return true
 }
 
 let io: SocketIOServer | null = null
@@ -81,28 +68,10 @@ export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[
       void socket.join(userRoom(user.id))
       if (isStaff(user.role)) void socket.join(ADMINS_ROOM)
 
-      socket.on("chat:send", (raw: unknown) => {
-        const p = (raw ?? {}) as { userId?: unknown; text?: unknown }
-        const targetUserId = typeof p.userId === "string" ? p.userId.trim() : ""
-        const text = typeof p.text === "string" ? p.text : ""
-        if (!targetUserId || !text || text.length > 2000) return
-        if (!consumeRate(socket)) {
-          socket.emit("chat:error", { code: "RATE_LIMITED", message: "Too many messages" })
-          return
-        }
-        if (!isStaff(user.role) && targetUserId !== user.id) return
-
-        const message: ChatMessageEvent = {
-          id: `live-${socket.id}-${Date.now()}`,
-          userId: targetUserId,
-          sender: (isStaff(user.role) ? "ADMIN" : "STUDENT") as ChatSender,
-          text,
-          createdAt: new Date().toISOString(),
-        }
-        io!.to(userRoom(targetUserId)).emit("chat:message", message)
-        io!.to(ADMINS_ROOM).emit("chat:message", message)
-      })
-
+      // NOTE: no "chat:send" handler by design. Messages are persisted via
+      // POST /api/support/messages (source of truth, zod-validated, CSRF'd)
+      // and fanned out with ioEmitChatMessage. A socket-side send path would
+      // broadcast unpersisted, unvalidated payloads with forged ids.
       socket.on("chat:typing", (raw: unknown) => {
         const p = (raw ?? {}) as { userId?: unknown }
         let targetUserId = typeof p.userId === "string" ? p.userId.trim() : ""

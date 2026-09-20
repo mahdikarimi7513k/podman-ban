@@ -78,9 +78,11 @@ describe("role boundaries", () => {
 
   it("accepts CONTENT_ADMIN in the user role enum (regression)", async () => {
     const s = await login("sec_admin", PASSWORD)
-    // nonexistent id → 404 means schema accepted the role value (not 400/422)
+    // nonexistent id → 404 means schema accepted the role value (not 400/422).
+    // PUT is the real update route (there is no PATCH) — a 404 here comes
+    // from the update handler itself, not the generic /api fallback.
     const res = await s
-      .patch("/api/admin/users/nonexistent-id")
+      .put("/api/admin/users/nonexistent-id")
       .send({ role: "CONTENT_ADMIN" })
     expect(res.status).toBe(404)
   })
