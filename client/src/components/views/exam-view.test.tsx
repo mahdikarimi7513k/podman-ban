@@ -144,4 +144,43 @@ describe("ExamView question navigation stability", () => {
     })
     expect(screen.getByText("متن سوال شماره یک")).toBeInTheDocument()
   })
+
+  it("finish while offline warns and never POSTs /finish", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    expect(screen.getByText("متن سوال شماره سه")).toBeInTheDocument()
+
+    const finishCalls = () =>
+      apiFetchMock.mock.calls.filter(([url]) => String(url).endsWith("/finish")).length
+
+    const before = finishCalls()
+
+    Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true })
+
+    try {
+      act(() => {
+        window.dispatchEvent(new Event("offline"))
+      })
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: /اتمام آزمون/ }))
+      })
+      // Confirm dialog opens (not submitted yet).
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: /ثبت نهایی/ }))
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(finishCalls() - before).toBe(0)
+    } finally {
+      Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true })
+    }
+  })
 })

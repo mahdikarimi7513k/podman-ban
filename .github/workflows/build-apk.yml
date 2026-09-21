@@ -1,6 +1,14 @@
 name: Build PodmanBan APK
 
+# Quality gates run on every push/PR/schedule; the APK itself is only
+# built on manual dispatch (needs all gates green first).
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
     inputs:
       api_base:
@@ -23,6 +31,11 @@ on:
         description: "remote = لود مستقیم سایت | local = بیلد داخلی"
         required: false
         default: "remote"
+      adhoc_sign:
+        description: "امضای موقت بدون سکرت (فقط تست دستی — آپدیت بعدی روی آن نصب نمی‌شود)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # Static analysis (SAST) — runs beside the build so findings never
@@ -46,7 +59,67 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
+  client-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install client deps (reproducible)
+        working-directory: client
+        run: npm ci
+
+      - name: Typecheck + tests
+        working-directory: client
+        run: |
+          npm run lint --if-present
+          npx tsc --noEmit
+          npm run test --if-present
+
+      # Fail the pipeline on high/critical dependency vulnerabilities
+      # instead of deploying them silently.
+      - name: Audit client dependencies
+        working-directory: client
+        run: npm audit --audit-level=high
+
+  server-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Bun (server tests need bunx for migrations)
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install server deps (reproducible)
+        working-directory: server
+        run: npm ci
+
+      - name: Typecheck + tests
+        working-directory: server
+        run: |
+          npx tsc --noEmit
+          npx vitest run
+
+      - name: Audit server dependencies
+        working-directory: server
+        run: npm audit --audit-level=high
+
   build:
+    needs: [security, client-quality, server-quality]
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -84,9 +157,6 @@ jobs:
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
-      - name: Setup Bun (server tests need bunx for migrations)
-        uses: oven-sh/setup-bun@v2
-
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -96,38 +166,9 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('client/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Install client deps
+      - name: Install client deps (reproducible)
         working-directory: client
-        run: |
-          npm install -g npm@latest
-          npm install
-
-      - name: Quality gate (client typecheck + tests)
-        working-directory: client
-        run: |
-          npm run lint --if-present
-          npx tsc --noEmit
-          npm run test --if-present
-
-      # Fail the pipeline on high/critical dependency vulnerabilities
-      # instead of deploying them silently.
-      - name: Audit client dependencies
-        working-directory: client
-        run: npm audit --audit-level=high
-
-      - name: Install server deps
-        working-directory: server
-        run: npm install
-
-      - name: Quality gate (server typecheck + tests)
-        working-directory: server
-        run: |
-          npx tsc --noEmit
-          npx vitest run
-
-      - name: Audit server dependencies
-        working-directory: server
-        run: npm audit --audit-level=high
+        run: npm ci
 
       # --- notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
       # (سورس از قبل ic_notification است؛ این sed فقط تور ایمنی برای رگرسیون است)
@@ -153,6 +194,82 @@ jobs:
           else W=dist; fi
           echo "WEB_DIR=$W" >> $GITHUB_ENV
           echo "webDir = $W"
+
+      # Branded offline fallback (offline.html ships from client/public via
+      # vite; regenerate here only if somehow missing). Capacitor shows it
+      # through server.errorPath when the remote site is unreachable.
+      - name: Ensure offline fallback page
+        working-directory: client
+        env:
+          WEB_DIR: ${{ env.WEB_DIR }}
+        run: |
+          set -e
+          if [ -f "$WEB_DIR/offline.html" ]; then
+            echo "✅ offline.html already in $WEB_DIR"
+            exit 0
+          fi
+          cat > "$WEB_DIR/offline.html" <<'EOF'
+          <!DOCTYPE html>
+          <html lang="fa" dir="rtl">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>عدم اتصال به اینترنت</title>
+            <style>
+              * { margin:0; padding:0; box-sizing:border-box; }
+              body {
+                min-height:100vh; display:flex; align-items:center; justify-content:center;
+                font-family:Tahoma, sans-serif; text-align:center; padding:24px;
+                background:linear-gradient(135deg,#18A8FF,#0878F9 50%,#003CCB); color:#fff;
+              }
+              .card { max-width:420px; width:100%; }
+              .icon { width:110px; height:110px; margin:0 auto 24px; background:#fff;
+                      border-radius:28px; display:flex; align-items:center; justify-content:center;
+                      box-shadow:0 10px 30px rgba(0,0,0,.25); }
+              .icon svg { width:70px; height:70px; }
+              h1 { font-size:22px; margin-bottom:12px; }
+              p { font-size:15px; opacity:.92; line-height:2; margin-bottom:28px; }
+              button {
+                border:none; outline:none; cursor:pointer; font-family:inherit; font-size:16px;
+                background:#fff; color:#0878F9; font-weight:bold; padding:14px 44px;
+                border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.2);
+              }
+              button:active { transform:scale(.97); }
+              .status { margin-top:18px; font-size:13px; opacity:.8; min-height:18px; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="icon">
+                <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+                  <g fill="#0878F9">
+                    <path d="M90 220L256 125L422 220L256 315L90 220Z"/>
+                    <path fill-rule="evenodd" d="M150 260V320C150 365 197 390 256 390C315 390 362 365 362 320V260L256 325L150 260Z M175 285V320C175 340 210 355 256 355C302 355 337 340 337 320V285L256 335L175 285Z"/>
+                    <circle cx="390" cy="325" r="18"/>
+                    <path d="M375 345L405 345L414 395C405 410 375 410 366 395L375 345Z"/>
+                  </g>
+                  <path d="M390 210V310" stroke="#0878F9" stroke-width="14" stroke-linecap="round" fill="none"/>
+                </svg>
+              </div>
+              <h1>به اینترنت متصل نیستی!</h1>
+              <p>پودمان‌بان برای کار کردن به اینترنت نیاز دارد.<br>لطفاً اینترنت گوشی را روشن کن و دوباره تلاش کن.</p>
+              <button onclick="location.reload()">تلاش مجدد</button>
+              <div class="status" id="status"></div>
+            </div>
+            <script>
+              var s = document.getElementById('status');
+              function upd() {
+                s.textContent = navigator.onLine ? 'اینترنت وصل شد — در حال اتصال...' : 'در انتظار اتصال اینترنت...';
+              }
+              window.addEventListener('online', function(){ upd(); setTimeout(function(){ location.reload(); }, 800); });
+              window.addEventListener('offline', upd);
+              setInterval(function(){ if (navigator.onLine) location.reload(); }, 5000);
+              upd();
+            </script>
+          </body>
+          </html>
+          EOF
+          echo "✅ offline.html generated in $WEB_DIR"
 
       - name: Write Capacitor config (package name + cookies)
         working-directory: client
@@ -186,8 +303,10 @@ jobs:
               'CapacitorHttp': {'enabled': True},
           }
           # منشأ وب‌ویو اندروید https://localhost می‌شود؛
-          # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد
-          server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
+          # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد.
+          # errorPath: صفحه آفلاین برند هنگام unreachable بودن سایت.
+          server = {**(cfg.get('server') or {}), 'androidScheme': 'https',
+                    'errorPath': 'offline.html'}
           server.pop('cleartext', None)
           if os.environ['LOAD_MODE'] == 'remote':
               server['url'] = os.environ['API_BASE']
@@ -199,6 +318,7 @@ jobs:
           print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
           print('plugins =', json.dumps(cfg['plugins']))
           print('server.url =', server.get('url', '(local assets)'))
+          print('server.errorPath =', server.get('errorPath'))
           PYEOF
 
       # --- مسیر اشتباه icon.svg را جبران کن ---
@@ -294,6 +414,10 @@ jobs:
           echo "--- variables.gradle ---"
           grep -E 'compileSdkVersion|targetSdkVersion|minSdkVersion' "$V" || true
 
+      # Release builds REQUIRE real signing secrets. A throwaway keystore
+      # is only ever minted for explicit ad-hoc test builds (adhoc_sign),
+      # which upload under a distinct -adhoc name with short retention —
+      # an ad-hoc APK can never update a store/production install.
       - name: Prepare signing keystore + fingerprint
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -308,12 +432,16 @@ jobs:
             ALIAS_NAME="$SEC_ALIAS"
             KEY_PASS_VAL="$SEC_KEY_PASS"
             echo "✅ Using keystore from secrets"
+          elif [ "${{ inputs.adhoc_sign }}" = "true" ]; then
+            ADHOC_PASS="$(openssl rand -hex 16)"
+            keytool -genkeypair -v -keystore /tmp/release.keystore -alias podmanban-tmp -keyalg RSA -keysize 2048 -validity 30 -storepass "$ADHOC_PASS" -keypass "$ADHOC_PASS" -dname "CN=PodmanBan-Adhoc, OU=Test, O=Test, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
+            STORE_PASS="$ADHOC_PASS"
+            ALIAS_NAME="podmanban-tmp"
+            KEY_PASS_VAL="$ADHOC_PASS"
+            echo "⚠️ Ad-hoc keystore (test only — updates will NOT install over it)"
           else
-            keytool -genkeypair -v -keystore /tmp/release.keystore -alias podmanban -keyalg RSA -keysize 2048 -validity 10000 -storepass podmanban2024 -keypass podmanban2024 -dname "CN=PodmanBan, OU=PayamCoder, O=PayamCoder, L=Tehran, ST=Tehran, C=IR" >/dev/null 2>&1
-            STORE_PASS="podmanban2024"
-            ALIAS_NAME="podmanban"
-            KEY_PASS_VAL="podmanban2024"
-            echo "⚠️ Temporary keystore generated (unsigned identity — set secrets for production)"
+            echo "❌ No signing secrets. Add ANDROID_KEYSTORE_* secrets or re-run with ad-hoc signing enabled."
+            exit 1
           fi
 
           LIST_OUT=$(keytool -list -v -keystore /tmp/release.keystore -storepass "$STORE_PASS" -alias "$ALIAS_NAME" 2>&1 || true)
@@ -422,7 +550,7 @@ jobs:
           path = os.path.join(base, 'MainActivity.java')
           with open(path, 'w', encoding='utf-8') as f:
               f.write(java.strip() + '\n')
-          print('🛡 Signature guard injected →', path)
+          print('🛡️ Signature guard injected →', path)
           PYEOF
 
       - name: Sync Capacitor
@@ -452,7 +580,7 @@ jobs:
             $MX -size ${fp}x${fp} xc:none \
               \( /tmp/icon_rounded.png -resize ${inner}x${inner} \) \
               -gravity center -compose over -composite "$dir/ic_launcher_foreground.png"
-            echo "  ✔️ mipmap-$den"
+            echo "  ✔ mipmap-$den"
           done
 
           grep -rl "ic_launcher_background" "$RES/values" 2>/dev/null | while read -r bg; do
@@ -466,7 +594,7 @@ jobs:
             $MX -size ${W}x${H} xc:black \
               \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
               -gravity center -compose over -composite "$f"
-            echo "  ✔️ $f (${W}x${H})"
+            echo "  ✔ $f (${W}x${H})"
           done
 
           for pair in mdpi:24 hdpi:36 xhdpi:48 xxhdpi:72 xxxhdpi:96; do
@@ -474,7 +602,7 @@ jobs:
             dir="$RES/drawable-$den"
             mkdir -p "$dir"
             $MX /tmp/ic_notification.png -resize ${px}x${px} "$dir/ic_notification.png"
-            echo "  ✔️ drawable-$den/ic_notification.png"
+            echo "  ✔ drawable-$den/ic_notification.png"
           done
           mkdir -p "$RES/drawable"
           $MX /tmp/ic_notification.png -resize 24x24 "$RES/drawable/ic_notification.png"
@@ -515,8 +643,18 @@ jobs:
           "$BT/apksigner" verify signed.apk
           echo "✅ Signed: $(du -h signed.apk | cut -f1)"
 
-      - name: Upload APK
+      - name: Upload APK (release)
+        if: ${{ !inputs.adhoc_sign }}
         uses: actions/upload-artifact@v4
         with:
           name: podman-ban-release-apk
           path: client/android/signed.apk
+          retention-days: 90
+
+      - name: Upload APK (ad-hoc, short-lived)
+        if: ${{ inputs.adhoc_sign }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-ban-adhoc-apk
+          path: client/android/signed.apk
+          retention-days: 7

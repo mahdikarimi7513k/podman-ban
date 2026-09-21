@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>عدم اتصال به اینترنت</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      min-height:100vh; display:flex; align-items:center; justify-content:center;
+      font-family:Tahoma, sans-serif; text-align:center; padding:24px;
+      background:linear-gradient(135deg,#18A8FF,#0878F9 50%,#003CCB); color:#fff;
+    }
+    .card { max-width:420px; width:100%; }
+    .icon { width:110px; height:110px; margin:0 auto 24px; background:#fff;
+            border-radius:28px; display:flex; align-items:center; justify-content:center;
+            box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .icon svg { width:70px; height:70px; }
+    h1 { font-size:22px; margin-bottom:12px; }
+    p { font-size:15px; opacity:.92; line-height:2; margin-bottom:28px; }
+    button {
+      border:none; outline:none; cursor:pointer; font-family:inherit; font-size:16px;
+      background:#fff; color:#0878F9; font-weight:bold; padding:14px 44px;
+      border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.2);
+    }
+    button:active { transform:scale(.97); }
+    .status { margin-top:18px; font-size:13px; opacity:.8; min-height:18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#0878F9">
+          <path d="M90 220L256 125L422 220L256 315L90 220Z"/>
+          <path fill-rule="evenodd" d="M150 260V320C150 365 197 390 256 390C315 390 362 365 362 320V260L256 325L150 260Z M175 285V320C175 340 210 355 256 355C302 355 337 340 337 320V285L256 335L175 285Z"/>
+          <circle cx="390" cy="325" r="18"/>
+          <path d="M375 345L405 345L414 395C405 410 375 410 366 395L375 345Z"/>
+        </g>
+        <path d="M390 210V310" stroke="#0878F9" stroke-width="14" stroke-linecap="round" fill="none"/>
+      </svg>
+    </div>
+    <h1>به اینترنت متصل نیستی!</h1>
+    <p>پودمان‌بان برای کار کردن به اینترنت نیاز دارد.<br>لطفاً اینترنت گوشی را روشن کن و دوباره تلاش کن.</p>
+    <button onclick="location.reload()">تلاش مجدد</button>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    var s = document.getElementById('status');
+    function upd() {
+      s.textContent = navigator.onLine ? 'اینترنت وصل شد — در حال اتصال...' : 'در انتظار اتصال اینترنت...';
+    }
+    window.addEventListener('online', function(){ upd(); setTimeout(function(){ location.reload(); }, 800); });
+    window.addEventListener('offline', upd);
+    setInterval(function(){ if (navigator.onLine) location.reload(); }, 5000);
+    upd();
+  </script>
+</body>
+</html>

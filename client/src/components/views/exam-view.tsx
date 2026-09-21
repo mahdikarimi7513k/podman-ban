@@ -293,8 +293,35 @@ export function ExamView() {
     })
   }
 
+  // Connectivity: mid-exam offline keeps answering alive (local state +
+  // queued POSTs); only the final submit requires internet.
+  const [online, setOnline] = React.useState(true)
+
+  React.useEffect(() => {
+    setOnline(navigator.onLine)
+    const up = () => setOnline(true)
+    const down = () => setOnline(false)
+    window.addEventListener("online", up)
+    window.addEventListener("offline", down)
+
+    return () => {
+      window.removeEventListener("online", up)
+      window.removeEventListener("offline", down)
+    }
+  }, [])
+
   const finish = React.useCallback(async () => {
     if (!examSessionId) return
+
+    if (!navigator.onLine) {
+      toast({
+        variant: "destructive",
+        title: "برای ثبت نهایی باید آنلاین باشی",
+        description: "پاسخ‌هایت نگه داشته شده — با وصل شدن اینترنت ثبت کن.",
+      })
+
+      return
+    }
     setFinishing(true)
 
     try {
@@ -353,6 +380,17 @@ export function ExamView() {
     setAutoFinished(true)
     void finish()
   }, [finish])
+
+  // Timer expired while offline: submit once on the offline→online
+  // transition (guarded so a failed submit can't loop on state flips).
+  const wasOnlineRef = React.useRef(true)
+
+  React.useEffect(() => {
+    const was = wasOnlineRef.current
+    wasOnlineRef.current = online
+
+    if (online && !was && autoFinished && !result && !finishing) void finish()
+  }, [online, autoFinished, result, finishing, finish])
 
   if (loading) {
     return (
@@ -431,6 +469,13 @@ export function ExamView() {
           onExpire={handleExpire}
           reduced={Boolean(reduced)}
         />
+      )}
+      {!online && (
+        <div role="status" className="border-b border-warning/30 bg-warning/10">
+          <p className="max-w-3xl mx-auto px-4 py-1.5 text-[11px] text-center text-muted-foreground">
+            آفلاین هستی — می‌تونی ادامه بدی؛ پاسخ‌ها نگه داشته می‌شن و ثبت نهایی با اینترنت انجام می‌شه.
+          </p>
+        </div>
       )}
       {data.session.isPractice && (
         <div className="sticky top-0 z-20 bg-background border-b border-border">
