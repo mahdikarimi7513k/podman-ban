@@ -7,8 +7,16 @@ import { buildApp } from "./app.js"
 import { attachChatSocket } from "./lib/chat-socket.js"
 
 // cPanel/Passenger assigns PORT; local dev falls back to 3001.
+// SECURITY: with TRUST_PROXY=true the X-Forwarded-For chain is trusted,
+// which is only sound if the direct socket peer really is that proxy.
+// Default to loopback in proxy mode so a directly exposed port can never
+// turn the attacker into their own "trusted" hop (XFF rotation would then
+// mint fresh rate-limit buckets per request). Override with BIND_HOST only
+// when the proxy lives on another interface — and firewall the port then.
 const PORT = Number(process.env.PORT ?? 3001)
-const BIND_HOST = process.env.BIND_HOST || undefined
+
+const BIND_HOST =
+  process.env.BIND_HOST ?? (process.env.TRUST_PROXY === "true" ? "127.0.0.1" : undefined)
 
 const app = buildApp()
 

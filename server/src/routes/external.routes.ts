@@ -31,6 +31,7 @@ import { timingSafeEqual } from "crypto"
 import {
   rateLimit,
   clientIp,
+  socketIp,
   verifyPassword,
   hashPassword,
   sha256,
@@ -102,16 +103,27 @@ externalRouter.post("/external/verify", async (req, res) => {
   }
 
   // --- rate limit (own namespace so external traffic never eats login quota) ---
+  // Socket-IP siblings mirror the login hardening (XFF rotation resistance).
   const ip = clientIp(req)
+  const sip = socketIp(req)
   const rlIp = rateLimit(`ext-verify-ip:${ip}`, 30, 300)
   const rlUser = rateLimit(`ext-verify-u:${ip}:${parsed.data.username}`, 8, 300)
-  if (!rlIp.ok || !rlUser.ok) {
+  const rlUserSock = rateLimit(`ext-verify-u-sock:${sip}:${parsed.data.username}`, 8, 300)
+  const rlSock = rateLimit(`ext-verify-ip-sock:${sip}`, 300, 300)
+
+  if (!rlIp.ok || !rlUser.ok || !rlUserSock.ok || !rlSock.ok) {
     res.status(429).json({
       ok: false,
       error: "تلاش‌های بیش از حد",
       code: "RATE_LIMITED",
-      retryAfterSec: Math.max(rlIp.retryAfterSec, rlUser.retryAfterSec),
+      retryAfterSec: Math.max(
+        rlIp.retryAfterSec,
+        rlUser.retryAfterSec,
+        rlUserSock.retryAfterSec,
+        rlSock.retryAfterSec,
+      ),
     })
+
     return
   }
 
@@ -175,13 +187,16 @@ externalRouter.post("/external/register", async (req, res) => {
   // Own namespace (mirrors the public /auth/register quota).
   const ip = clientIp(req)
   const rl = rateLimit(`ext-register:${ip}`, 10, 300)
-  if (!rl.ok) {
+  const rlSock = rateLimit(`ext-register-sock:${socketIp(req)}`, 10, 300)
+
+  if (!rl.ok || !rlSock.ok) {
     res.status(429).json({
       ok: false,
       error: "تلاش‌های بیش از حد",
       code: "RATE_LIMITED",
-      retryAfterSec: rl.retryAfterSec,
+      retryAfterSec: Math.max(rl.retryAfterSec, rlSock.retryAfterSec),
     })
+
     return
   }
 

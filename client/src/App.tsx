@@ -6,6 +6,9 @@ import { AppBootstrap } from "@/components/app-bootstrap"
 import { ServiceWorkerRegister } from "@/components/sw-register"
 import { Toaster } from "@/components/ui/toaster"
 import { useApp } from "@/lib/store"
+import type { View } from "@/lib/store"
+import { pushViewState, replaceViewState, readViewState } from "@/lib/view-history"
+import { isNativeApp } from "@/lib/native-notify"
 import { TopBar } from "@/components/top-bar"
 import { BottomNav } from "@/components/bottom-nav"
 import { Banner } from "@/components/banner"
@@ -54,10 +57,99 @@ function ViewFallback() {
 
 const viewVariants = fadeUp
 
+/**
+ * Browser back button + Android hardware back button.
+ * Only the exam entry is pushed (everything else replaces), so Back can
+ * never trap the user: popping past our entries exits naturally, and Back
+ * inside an exam opens the exit-confirm dialog instead of killing it.
+ */
+function useViewHistory(): void {
+  const view = useApp((s) => s.view)
+
+  React.useEffect(() => {
+    replaceViewState(view)
+  }, [])
+
+  React.useEffect(() => {
+    if (view === "exam") pushViewState("exam")
+  }, [view])
+
+  React.useEffect(() => {
+    const onPop = () => {
+      const st = useApp.getState()
+
+      if (st.exitConfirmOpen) {
+        st.dismissExitConfirm()
+
+        return
+      }
+
+      const v = readViewState()
+
+      if (v === st.view) return
+
+      if (st.view === "exam") {
+        st.requestExitConfirm()
+        pushViewState("exam")
+
+        return
+      }
+
+      if (v) {
+        // SAFETY: readViewState only returns allowlisted view names.
+        st.setView(v as View)
+      }
+      // v === null: popped past our entries — let the browser exit.
+    }
+
+    window.addEventListener("popstate", onPop)
+
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
+
+  // Android hardware back button (Capacitor). Same policy as popstate:
+  // dialog → close, exam → confirm, otherwise back-or-minimize.
+  React.useEffect(() => {
+    let remove: (() => void) | undefined
+
+    void (async () => {
+      if (!isNativeApp()) return
+      const { App: CapApp } = await import("@capacitor/app")
+
+      const sub = await CapApp.addListener("backButton", ({ canGoBack }) => {
+        const st = useApp.getState()
+
+        if (st.exitConfirmOpen) {
+          st.dismissExitConfirm()
+
+          return
+        }
+
+        if (st.view === "exam") {
+          st.requestExitConfirm()
+          pushViewState("exam")
+
+          return
+        }
+
+        if (canGoBack) window.history.back()
+        else void CapApp.minimizeApp()
+      })
+
+      remove = () => {
+        void sub.remove()
+      }
+    })()
+
+    return () => remove?.()
+  }, [])
+}
+
 function AppContent() {
   const user = useApp((s) => s.user)
   const config = useApp((s) => s.config)
   const view = useApp((s) => s.view)
+  useViewHistory()
 
   if (config?.siteLocked && user?.role !== "ADMIN" && user?.role !== "CONTENT_ADMIN") {
     return <MaintenanceView message={config.lockMessage} />

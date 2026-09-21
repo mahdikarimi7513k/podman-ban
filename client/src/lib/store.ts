@@ -81,6 +81,10 @@ interface AppState {
   refreshConfig: () => Promise<void>
   // Merge user fields without touching the current view (setUser navigates).
   patchUser: (patch: Partial<AppUser>) => void
+  // Exit-confirm dialog for the exam (back button / explicit exit).
+  exitConfirmOpen: boolean
+  requestExitConfirm: () => void
+  dismissExitConfirm: () => void
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -90,6 +94,7 @@ export const useApp = create<AppState>((set, get) => ({
   view: "auth",
   examSessionId: null,
   startExamModuleId: null,
+  exitConfirmOpen: false,
 
   // Module-level memo so React StrictMode's double effect (and any remount)
   // shares one in-flight boot instead of issuing duplicate API calls.
@@ -141,6 +146,14 @@ export const useApp = create<AppState>((set, get) => ({
     const user = get().user
 
     if (user) set({ user: { ...user, ...patch } })
+  },
+
+  requestExitConfirm() {
+    set({ exitConfirmOpen: true })
+  },
+
+  dismissExitConfirm() {
+    set({ exitConfirmOpen: false })
   },
 }))
 

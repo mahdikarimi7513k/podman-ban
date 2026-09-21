@@ -26,7 +26,17 @@ import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { AnswerQueue } from "@/lib/answer-queue"
 import { Button } from "@/components/ui/button"
-import { FaNum } from "@/components/fa-utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { FaNum, ToPersianDigits } from "@/components/fa-utils"
+import { firedThresholds, vibrate } from "@/lib/exam-timer"
+import { replaceViewState } from "@/lib/view-history"
 import { useToast } from "@/hooks/use-toast"
 
 interface ExamQuestion {
@@ -108,6 +118,8 @@ function fetchSessionOnce(sessionId: string): Promise<SessionResponse> {
 export function ExamView() {
   const examSessionId = useApp((s) => s.examSessionId)
   const exitExam = useApp((s) => s.exitExam)
+  const exitConfirmOpen = useApp((s) => s.exitConfirmOpen)
+  const dismissExitConfirm = useApp((s) => s.dismissExitConfirm)
   const { toast } = useToast()
   const reduced = useReducedMotion()
 
@@ -121,6 +133,10 @@ export function ExamView() {
   >({})
   const [result, setResult] = React.useState<FinishedResult | null>(null)
   const [finishing, setFinishing] = React.useState(false)
+  // Finish/exit confirm dialog (finish button, exit button, or back button).
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  // True when the timer (not the user) submitted the exam.
+  const [autoFinished, setAutoFinished] = React.useState(false)
   const [reviewMode, setReviewMode] = React.useState(false)
   const [reviewData, setReviewData] = React.useState<ReviewData | null>(null)
   const [loadingReview, setLoadingReview] = React.useState(false)
@@ -330,6 +346,14 @@ export function ExamView() {
     }
   }, [examSessionId, toast])
 
+  // Auto-submit (timer) bypasses the confirm dialog; manual finish/exit
+  // always go through it. Back-button exits arrive via the store flag.
+  // NOTE: hooks must stay above the early returns below.
+  const handleExpire = React.useCallback(() => {
+    setAutoFinished(true)
+    void finish()
+  }, [finish])
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background">
@@ -364,6 +388,7 @@ export function ExamView() {
     return (
       <ExamResult
         result={result}
+        auto={autoFinished}
         onExit={exitExam}
         onReview={loadReview}
         loadingReview={loadingReview}
@@ -377,13 +402,33 @@ export function ExamView() {
     (v) => v !== null && v !== undefined,
   ).length
 
+  const unansweredCount = total - answeredCount
+
+  const dialogOpen = confirmOpen || exitConfirmOpen
+
+  const closeDialog = () => {
+    setConfirmOpen(false)
+    dismissExitConfirm()
+  }
+
+  const doExitExam = () => {
+    closeDialog()
+    replaceViewState("home")
+    exitExam()
+  }
+
+  const doFinishExam = () => {
+    closeDialog()
+    void finish()
+  }
+
   return (
     <div className="min-h-dvh flex flex-col bg-background">
       {!data.session.isPractice && (
         <ExamTimer
           startedAt={data.session.startedAt}
           durationSec={data.session.durationSec}
-          onExpire={finish}
+          onExpire={handleExpire}
           reduced={Boolean(reduced)}
         />
       )}
@@ -646,6 +691,16 @@ export function ExamView() {
       <footer className="sticky bottom-0 border-t border-border bg-background/90 backdrop-blur pb-safe">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-2">
           <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setConfirmOpen(true)}
+            aria-label="خروج از آزمون"
+            title="خروج از آزمون"
+            className="cursor-pointer text-muted-foreground shrink-0"
+          >
+            <X className="size-4" strokeWidth={2.25} />
+          </Button>
+          <Button
             variant="outline"
             size="icon"
             onClick={goPrev}
@@ -670,7 +725,7 @@ export function ExamView() {
             </Button>
           ) : (
             <Button
-              onClick={finish}
+              onClick={() => setConfirmOpen(true)}
               disabled={finishing}
               className="cursor-pointer flex-1"
             >
@@ -684,6 +739,34 @@ export function ExamView() {
           )}
         </div>
       </footer>
+
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) closeDialog() }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>اتمام آزمون؟</DialogTitle>
+            <DialogDescription>
+              {unansweredCount > 0
+                ? `تعداد ${ToPersianDigits(unansweredCount)} سوال هنوز بی‌پاسخ است. مطمئنی؟`
+                : "همه‌ی سوال‌ها پاسخ داده شده‌اند."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={closeDialog} className="cursor-pointer">
+              انصراف
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={doExitExam}
+              className="cursor-pointer text-destructive hover:text-destructive"
+            >
+              خروج از آزمون
+            </Button>
+            <Button onClick={doFinishExam} disabled={finishing} className="cursor-pointer">
+              {finishing ? <Loader2 className="size-4 animate-spin" /> : "ثبت نهایی"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -705,11 +788,41 @@ function ExamTimer({
   // scaleX instead of width: the bar depletes on the compositor (GPU) without
   // re-layout every frame. originX = right edge, the inline start in RTL.
   const progress = useMotionValue(1)
+
   const [remainingSec, setRemainingSec] = React.useState(
     Math.max(0, Math.round((endMs - Date.now()) / 1000)),
   )
+
   const [danger, setDanger] = React.useState(false)
   const expiredRef = React.useRef(false)
+
+  const { toast } = useToast()
+  // Screen-reader announcements (the mm:ss readout itself stays silent so
+  // it doesn't spam on every tick): polite at 5/1 minutes, assertive at
+  // 30/10 seconds.
+  const [liveMsg, setLiveMsg] = React.useState("")
+  const [assertMsg, setAssertMsg] = React.useState("")
+  const firedRef = React.useRef(new Set<number>())
+  const prevRemRef = React.useRef<number | null>(null)
+
+  const announce = React.useCallback(
+    (t: number) => {
+      if (t === 300 || t === 60) {
+        const label = t === 300 ? "۵ دقیقه تا پایان آزمون" : "۱ دقیقه تا پایان آزمون"
+        toast({
+          title: label,
+          description: t === 300 ? "فرصت مرور پاسخ‌ها" : "آخرین پاسخ‌ها را ثبت کنید.",
+        })
+        vibrate(t === 300 ? 100 : [100, 50, 100])
+        setLiveMsg(label)
+      } else if (t === 30) {
+        setAssertMsg("۳۰ ثانیه تا پایان آزمون")
+      } else if (t === 10) {
+        setAssertMsg("۱۰ ثانیه تا پایان آزمون")
+      }
+    },
+    [toast],
+  )
 
   React.useEffect(() => {
     const update = () => {
@@ -718,26 +831,47 @@ function ExamTimer({
       progress.set(rem / durationSec)
       setRemainingSec(Math.ceil(rem))
       setDanger(rem <= 30 && rem > 0)
+      const prev = prevRemRef.current
+      prevRemRef.current = rem
+
+      if (prev !== null) {
+        for (const t of firedThresholds(prev, rem)) {
+          if (firedRef.current.has(t)) continue
+          firedRef.current.add(t)
+          announce(t)
+        }
+      }
+
       if (rem <= 0 && !expiredRef.current) {
         expiredRef.current = true
         onExpire()
+
         return true
       }
+
       return false
     }
+
     if (update()) return
     // A wall-clock ticks once per second — a rAF loop re-rendered 60×/s for
     // the same information. Drift-free because it recomputes from Date.now().
     const id = setInterval(update, 1000)
+
     return () => clearInterval(id)
-  }, [endMs, durationSec, onExpire])
+  }, [endMs, durationSec, onExpire, announce])
 
   const mins = Math.floor(remainingSec / 60)
   const secs = remainingSec % 60
 
   return (
     <div className="sticky top-0 z-20 bg-background border-b border-border">
-      <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
+      <div
+        className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3"
+        role="timer"
+        aria-label="زمان باقی‌مانده آزمون"
+      >
+        <span className="sr-only" role="status">{liveMsg}</span>
+        <span className="sr-only" role="alert">{assertMsg}</span>
         <Clock
           className={`size-4 ${danger ? "text-destructive" : "text-muted-foreground"}`}
           strokeWidth={2}
@@ -761,11 +895,13 @@ function ExamTimer({
 
 function ExamResult({
   result,
+  auto,
   onExit,
   onReview,
   loadingReview,
 }: {
   result: FinishedResult
+  auto?: boolean
   onExit: () => void
   onReview: () => void
   loadingReview: boolean
@@ -828,6 +964,11 @@ function ExamResult({
             </div>
           </div>
           <p className={`mt-4 text-sm font-medium ${verdictColor}`}>{verdictText}</p>
+          {auto && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground leading-relaxed">
+              زمان آزمون به پایان رسید و پاسخ‌های ذخیره‌شده به‌صورت خودکار ثبت شدند.
+            </p>
+          )}
         </div>
 
         <div className="mt-8 w-full grid grid-cols-3 gap-2">

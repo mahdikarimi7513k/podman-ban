@@ -25,6 +25,12 @@ export interface RateLimitResult {
   retryAfterSec: number
 }
 
+/** Test hook: drop all buckets so test files start with fresh budgets. */
+export function clearRateLimitBuckets(): void {
+  buckets.clear()
+  sinceSweep = 0
+}
+
 export function rateLimit(
   key: string,
   limit: number,
@@ -82,4 +88,17 @@ export function clientIp(req: {
   // rightmost untrusted chain entry) — kept as fallback for direct callers.
 
   return req.ip ?? req.socket?.remoteAddress ?? "unknown"
+}
+
+/**
+ * Direct socket peer — never derived from headers, so it cannot be spoofed.
+ * Rate-limit keys always pair an XFF-derived bucket with a socket-IP bucket:
+ * behind a correct proxy both identify the client; if the port is ever
+ * exposed directly, the attacker becomes their own fixed socket peer and
+ * rotating X-Forwarded-For buys them nothing.
+ */
+export function socketIp(req: {
+  socket?: { remoteAddress?: string }
+}): string {
+  return req.socket?.remoteAddress ?? "unknown"
 }

@@ -38,6 +38,7 @@ export {
 export {
   rateLimit,
   clientIp,
+  socketIp,
   type RateLimitResult,
 } from "./rate-limit"
 

@@ -108,15 +108,30 @@ export function readCookie(
  * Read a cookie from a raw `cookie` header (manual parsing fallback).
  * Useful when running outside of the cookie-parser middleware chain
  * (e.g. in a websocket mini-service that only sees the raw header).
+ *
+ * SECURITY: malformed percent-encoding (e.g. `pb_access=%`) throws URIError.
+ * The socket.io handshake calls this before any auth — an uncaught throw
+ * would crash the whole Node process (unauthenticated DoS). Never throw:
+ * fall back to the raw value, which then fails authentication normally.
  */
 export function readCookieFromHeader(
   cookieHeader: string | null | undefined,
   name: string,
 ): string | undefined {
   if (!cookieHeader) return undefined
+
   for (const part of cookieHeader.split(";")) {
     const [k, ...v] = part.trim().split("=")
-    if (k === name) return decodeURIComponent(v.join("="))
+
+    if (k !== name) continue
+    const raw = v.join("=")
+
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
   }
+
   return undefined
 }

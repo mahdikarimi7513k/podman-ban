@@ -4,7 +4,7 @@
  * that was found and fixed, or a boundary that must hold.
  */
 import { describe, it, expect, beforeAll } from "vitest"
-import { http, login } from "./helpers.js"
+import { http, login, ensureUser } from "./helpers.js"
 import { ensureFixtures, PASSWORD } from "./fixtures.js"
 
 beforeAll(ensureFixtures)
@@ -85,6 +85,52 @@ describe("role boundaries", () => {
       .put("/api/admin/users/nonexistent-id")
       .send({ role: "CONTENT_ADMIN" })
     expect(res.status).toBe(404)
+  })
+})
+
+describe("rate-limit socket floor", () => {
+  // Direct-port exposure would let an attacker rotate X-Forwarded-For per
+  // request. Socket-IP sibling buckets must trip anyway (same loopback
+  // socket here, fresh spoofed XFF every request).
+  it("rotating XFF from one socket still trips 429 on register", async () => {
+    const admin = await login("sec_admin", PASSWORD)
+    await admin.put("/api/admin/config").send({ registrationOpen: true })
+
+    let tripped = false
+
+    for (let i = 0; i < 12; i++) {
+      const res = await http
+        .post("/api/auth/register")
+        .set("X-Forwarded-For", `9.9.1.${i}`)
+        .send({ name: "فلود", username: "sec_student", password: "Aa123456", field: "FANI_HERFEI" })
+
+      if (res.status === 429) {
+        tripped = true
+        break
+      }
+    }
+
+    expect(tripped).toBe(true)
+  })
+
+  it("rotating XFF cannot brute-force one account past 8 tries", async () => {
+    await ensureUser("rlsock_user", "STUDENT", "FANI_HERFEI")
+
+    let tripped = false
+
+    for (let i = 0; i < 10; i++) {
+      const res = await http
+        .post("/api/auth/login")
+        .set("X-Forwarded-For", `9.9.2.${i}`)
+        .send({ username: "rlsock_user", password: "wrong-pass-1" })
+
+      if (res.status === 429) {
+        tripped = true
+        break
+      }
+    }
+
+    expect(tripped).toBe(true)
   })
 })
 

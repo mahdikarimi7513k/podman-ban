@@ -30,8 +30,15 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000,h
   .map((s) => s.trim())
   .filter(Boolean)
 
-// Behind Caddy, one proxy hop sets X-Forwarded-For from the real client.
-// Direct connections must never be able to spoof their IP via headers.
+// Proxy contract (single trusted hop):
+//  - Exactly ONE proxy (Caddy / Passenger / Apache) sits in front and sets
+//    X-Forwarded-For; `trust proxy = 1` and the rightmost-entry rule in
+//    clientIp() both assume this. More hops need a larger trust count.
+//  - With TRUST_PROXY=true the server binds loopback by default (index.ts),
+//    so the socket peer IS that proxy. Direct connections must never be
+//    able to spoof their IP via headers — and as a second floor, every
+//    brute-forceable route also keys a socket-IP bucket (socketIp) that
+//    survives X-Forwarded-For rotation.
 const TRUST_PROXY = process.env.TRUST_PROXY === "true"
 
 export function buildApp(): express.Express {

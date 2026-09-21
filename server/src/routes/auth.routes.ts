@@ -24,6 +24,7 @@ import {
   issueCsrfToken,
   rateLimit,
   clientIp,
+  socketIp,
 } from "../lib/auth/index.js"
 import { desc, eq } from "drizzle-orm"
 import { db } from "../lib/db.js"
@@ -38,9 +39,14 @@ export const authRouter = Router()
 
 authRouter.post("/auth/register", async (req, res) => {
   const ip = clientIp(req)
+  // Socket-IP floor: rotating X-Forwarded-For from one socket still shares
+  // this bucket (direct-port exposure can't mint fresh quota per request).
   const rl = rateLimit(`register:${ip}`, 10, 300)
-  if (!rl.ok) {
-    res.status(429).json({ error: "تلاش‌های بیش از حد", retryAfter: rl.retryAfterSec })
+  const rlSock = rateLimit(`register-sock:${socketIp(req)}`, 10, 300)
+
+  if (!rl.ok || !rlSock.ok) {
+    res.status(429).json({ error: "تلاش‌های بیش از حد", retryAfter: Math.max(rl.retryAfterSec, rlSock.retryAfterSec) })
+
     return
   }
 
@@ -106,21 +112,35 @@ export const DUMMY_HASH = "$2b$12$bICd1dH9gm9g2f404qXxEeA8Ttha/6IG4yRgDwXKJgjbyl
 
 authRouter.post("/auth/login", async (req, res) => {
   const ip = clientIp(req)
+  const sip = socketIp(req)
 
   // Parse first (cheap zod, no DB) so the per-account+IP bucket can key on it.
   const parsedBody = parseBody(loginSchema, req.body, res)
   if (!parsedBody) return
 
-  // Two-tier limit:
+  // Three-tier limit (per-XFF buckets plus socket-IP floors):
   //  - per (username, IP): 8/5min — brute force from one source
-  //  - per IP overall:     30/5min — floods, while a school NAT still breathes
+  //  - per (username, socket): 8/5min — same, surviving XFF rotation on a
+  //    directly exposed port (the attacker is their own fixed socket peer)
+  //  - per IP overall: 30/5min — floods, while a school NAT still breathes
+  //  - per socket overall: 300/5min — flood floor no legitimate proxy
+  //    population trips, but a direct-connection flood does
   const rlIp = rateLimit(`login-ip:${ip}`, 30, 300)
   const rlUser = rateLimit(`login-u:${ip}:${parsedBody.username}`, 8, 300)
-  if (!rlIp.ok || !rlUser.ok) {
+  const rlUserSock = rateLimit(`login-u-sock:${sip}:${parsedBody.username}`, 8, 300)
+  const rlSock = rateLimit(`login-ip-sock:${sip}`, 300, 300)
+
+  if (!rlIp.ok || !rlUser.ok || !rlUserSock.ok || !rlSock.ok) {
     res.status(429).json({
       error: "تلاش‌های بیش از حد",
-      retryAfterSec: Math.max(rlIp.retryAfterSec, rlUser.retryAfterSec),
+      retryAfterSec: Math.max(
+        rlIp.retryAfterSec,
+        rlUser.retryAfterSec,
+        rlUserSock.retryAfterSec,
+        rlSock.retryAfterSec,
+      ),
     })
+
     return
   }
 
