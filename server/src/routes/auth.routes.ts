@@ -194,6 +194,25 @@ authRouter.post("/auth/logout", async (req, res) => {
 // ---- POST /refresh ---------------------------------------------------
 
 authRouter.post("/auth/refresh", async (req, res) => {
+  const ip = clientIp(req)
+  const sip = socketIp(req)
+
+  // Token endpoint without a limit is a JWT-guessing oracle: each try costs
+  // one verify + one indexed lookup. 60/5min per IP never trips a real
+  // client (1 refresh per 15min access lifetime + 1 retry per 401) but
+  // stops bulk guessing; the socket floor survives XFF rotation.
+  const rlIp = rateLimit(`refresh-ip:${ip}`, 60, 300)
+  const rlSock = rateLimit(`refresh-ip-sock:${sip}`, 300, 300)
+
+  if (!rlIp.ok || !rlSock.ok) {
+    res.status(429).json({
+      error: "تلاش‌های بیش از حد",
+      retryAfterSec: Math.max(rlIp.retryAfterSec, rlSock.retryAfterSec),
+    })
+
+    return
+  }
+
   const user = await rotateRefreshToken(req, res)
   if (!user) {
     res.status(401).json({ error: "نشست نامعتبر است — دوباره وارد شوید" })
