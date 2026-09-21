@@ -59,7 +59,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { randomBytes } from "crypto"
 import express from "express"
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { db } from "../lib/db.js"
 import {
   answers,
@@ -109,10 +109,24 @@ export const adminRouter = Router()
  * Explicit (not FK-reliant): examSessions.moduleId is ON DELETE RESTRICT,
  * so deleting a tried module would otherwise 500 — and deleting questions
  * first still leaves sessions pointing at the module. Student history of
- * the deleted modules goes with them (the UI confirm says so).
+ * the deleted modules goes with them (the UI confirm says so), including
+ * the users.totalTests counter (incremented per finish), so report cards
+ * read as if those exams never happened.
  */
 async function deleteModuleContents(moduleIds: string[]): Promise<void> {
   if (moduleIds.length === 0) return
+
+  const finishedByUser = await db
+    .select({ userId: examSessions.userId, n: count() })
+    .from(examSessions)
+    .where(
+      and(
+        inArray(examSessions.moduleId, moduleIds),
+        eq(examSessions.status, "FINISHED"),
+      ),
+    )
+    .groupBy(examSessions.userId)
+    .all()
 
   const sessIds = await db
     .select({ id: examSessions.id })
@@ -125,7 +139,16 @@ async function deleteModuleContents(moduleIds: string[]): Promise<void> {
     await db.delete(answers).where(inArray(answers.sessionId, ids)).run()
     await db.delete(examSessions).where(inArray(examSessions.id, ids)).run()
   }
+
   await db.delete(questions).where(inArray(questions.moduleId, moduleIds)).run()
+
+  for (const f of finishedByUser) {
+    await db
+      .update(users)
+      .set({ totalTests: sql`max(0, ${users.totalTests} - ${f.n})` })
+      .where(eq(users.id, f.userId))
+      .run()
+  }
 }
 
 // =====================================================================
@@ -199,12 +222,17 @@ adminRouter.put("/books/:id", async (req, res) => {
 
 adminRouter.delete("/books/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
+
   const bookMods = await db
     .select({ id: modules.id })
     .from(modules)
@@ -215,11 +243,15 @@ adminRouter.delete("/books/:id", async (req, res) => {
     await deleteModuleContents(bookMods.map((m) => m.id))
     await db.delete(modules).where(eq(modules.bookId, id)).run()
   }
+
   const deleted = await db.delete(books).where(eq(books.id, id)).returning({ id: books.id }).get()
+
   if (!deleted) {
     res.status(404).json({ error: "کتاب یافت نشد" })
+
     return
   }
+
   res.json({ ok: true })
 })
 
@@ -271,17 +303,24 @@ adminRouter.put("/modules/:id", async (req, res) => {
 
 adminRouter.delete("/modules/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const exists = await db.select({ id: modules.id }).from(modules).where(eq(modules.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "پودمان یافت نشد" })
+
     return
   }
+
   await deleteModuleContents([id])
   await db.delete(modules).where(eq(modules.id, id)).run()
   res.json({ ok: true })

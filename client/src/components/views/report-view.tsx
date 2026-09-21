@@ -26,6 +26,12 @@ import {
 } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/store"
@@ -62,6 +68,19 @@ interface AnswerStats {
   totalQuestions: number
   totalSessions: number
   byBook: Array<{ book: string; correct: number; wrong: number; skipped: number }>
+}
+
+/** Group finished sessions under their book (stable book order of first appearance). */
+export function groupSessionsByBook(sessions: SessionRow[]): Array<{ book: string; rows: SessionRow[] }> {
+  const groups = new Map<string, SessionRow[]>()
+
+  for (const s of sessions) {
+    const list = groups.get(s.bookTitle) ?? []
+    list.push(s)
+    groups.set(s.bookTitle, list)
+  }
+
+  return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
 }
 
 type Status = "good" | "medium" | "bad" | "none"
@@ -485,59 +504,84 @@ export function ReportView() {
         </ul>
       </section>
 
-      {/* Recent sessions */}
+      {/* Recent sessions, grouped under their book */}
       <section>
         <div className="flex items-center gap-2 mb-2">
           <History className="size-4 text-muted-foreground" strokeWidth={2} />
           <h2 className="text-sm font-semibold">آخرین آزمون‌ها</h2>
         </div>
-        <ul className="space-y-2">
-          {sessions?.map((s) => {
-            const st = statusFor(s.scorePercent)
-            const meta = STATUS_META[st]
-            return (
-              <li
-                key={s.id}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-accent/30"
+        {sessions && sessions.length > 0 ? (
+          <Accordion
+            type="multiple"
+            defaultValue={[groupSessionsByBook(sessions)[0]?.book ?? ""]}
+            className="space-y-2"
+          >
+            {groupSessionsByBook(sessions).map((g) => (
+              <AccordionItem
+                key={g.book}
+                value={g.book}
+                className="rounded-lg border border-border bg-card overflow-hidden"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.moduleTitle}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    <FaNum>{s.correctCount}</FaNum> صحیح،{" "}
-                    <FaNum>{s.wrongCount}</FaNum> غلط،{" "}
-                    <FaNum>{s.skippedCount}</FaNum> نزده
-                  </p>
-                </div>
-                <div className="text-left shrink-0">
-                  <p className={cn("text-base font-bold tabular-nums", meta.className)}>
-                    <FaNum>{s.scorePercent}</FaNum>٪
-                  </p>
-                  {s.finishedAt && (
-                    <p className="text-[10px] text-muted-foreground">
-                      {formatDate(s.finishedAt)}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => enterExam(s.id, s.moduleId)}
-                  className="cursor-pointer shrink-0"
-                >
-                  <Eye className="size-3.5" strokeWidth={2.25} />
-                  تشریحی
-                </Button>
-              </li>
-            )
-          })}
-          {sessions?.length === 0 && (
-            <li className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              هنوز آزمونی نزده‌اید.
-            </li>
-          )}
-        </ul>
+                <AccordionTrigger className="px-3.5 py-3 hover:no-underline cursor-pointer">
+                  <span className="text-sm font-semibold truncate">{g.book}</span>
+                  <span className="text-[11px] text-muted-foreground mr-auto pl-1 shrink-0">
+                    <FaNum>{g.rows.length}</FaNum> آزمون
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-2 pb-2">
+                  <ul className="space-y-1.5">
+                    {g.rows.map((s) => (
+                      <SessionRowItem key={s.id} s={s} onReview={() => enterExam(s.id, s.moduleId)} />
+                    ))}
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            هنوز آزمونی نزده‌اید.
+          </div>
+        )}
       </section>
     </div>
+  )
+}
+
+function SessionRowItem({ s, onReview }: { s: SessionRow; onReview: () => void }) {
+  const st = statusFor(s.scorePercent)
+  const meta = STATUS_META[st]
+
+  return (
+    <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-accent/30">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{s.moduleTitle}</p>
+        <p className="text-[11px] text-muted-foreground">
+          <FaNum>{s.correctCount}</FaNum> صحیح،{" "}
+          <FaNum>{s.wrongCount}</FaNum> غلط،{" "}
+          <FaNum>{s.skippedCount}</FaNum> نزده
+        </p>
+      </div>
+      <div className="text-left shrink-0">
+        <p className={cn("text-base font-bold tabular-nums", meta.className)}>
+          <FaNum>{s.scorePercent}</FaNum>٪
+        </p>
+        {s.finishedAt && (
+          <p className="text-[10px] text-muted-foreground">
+            {formatDate(s.finishedAt)}
+          </p>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onReview}
+        className="cursor-pointer shrink-0"
+      >
+        <Eye className="size-3.5" strokeWidth={2.25} />
+        تشریحی
+      </Button>
+    </li>
   )
 }
 

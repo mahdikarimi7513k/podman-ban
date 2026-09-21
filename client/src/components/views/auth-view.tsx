@@ -207,7 +207,7 @@ function RegistrationClosed({
       </div>
       <div className="space-y-1">
         <p className="text-base font-semibold">ثبت‌نام بسته است</p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
           {message ?? "ثبت‌نام جدید فعلاً توسط مدیر بسته شده است."}
         </p>
       </div>

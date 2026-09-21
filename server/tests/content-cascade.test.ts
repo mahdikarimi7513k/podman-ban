@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll } from "vitest"
 import { eq } from "drizzle-orm"
 import { db } from "../src/lib/db.js"
-import { examSessions, modules, questions } from "../src/lib/db/schema.js"
+import { examSessions, modules, questions, users } from "../src/lib/db/schema.js"
 import { login } from "./helpers.js"
 import { ensureFixtures, PASSWORD } from "./fixtures.js"
 
@@ -44,11 +44,25 @@ describe("module delete cascade", () => {
     const admin = await login("sec_admin", PASSWORD)
     const { moduleId, bookId } = await makeModule(admin, "mod")
 
-    // A student attempts the module → IN_PROGRESS session exists.
+    // A student attempts AND finishes the module.
     const stu = await login("sec_student", PASSWORD)
     const started = await stu.post("/api/exam/start").send({ moduleId })
     expect(started.status).toBe(200)
     const sessionId = String(started.body.session.sessionId)
+
+    const finished = await stu
+      .post(`/api/exam/${sessionId}/finish`)
+      .send({})
+
+    expect(finished.status).toBe(200)
+
+    const before = await db
+      .select({ totalTests: users.totalTests })
+      .from(users)
+      .where(eq(users.username, "sec_student"))
+      .get()
+
+    expect(before?.totalTests ?? 0).toBeGreaterThan(0)
 
     const del = await admin.delete(`/api/admin/modules/${moduleId}`)
     expect(del.status).toBe(200)
@@ -79,6 +93,15 @@ describe("module delete cascade", () => {
 
     const gone = await admin.delete(`/api/admin/modules/${moduleId}`)
     expect(gone.status).toBe(404)
+
+    // The report card reads as if the exam never happened.
+    const after = await db
+      .select({ totalTests: users.totalTests })
+      .from(users)
+      .where(eq(users.username, "sec_student"))
+      .get()
+
+    expect(after?.totalTests ?? -1).toBe((before?.totalTests ?? 1) - 1)
 
     await admin.delete(`/api/admin/books/${bookId}`)
   })

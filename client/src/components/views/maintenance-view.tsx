@@ -8,7 +8,7 @@ export function MaintenanceView({ message }: { message?: string }) {
         <Lock className="size-7 text-muted-foreground" strokeWidth={1.75} />
       </div>
       <h1 className="text-xl font-bold tracking-tight">سامانه موقتاً غیرفعال است</h1>
-      <p className="mt-3 max-w-sm text-sm text-muted-foreground leading-relaxed">
+      <p className="mt-3 max-w-sm text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
         {message || "در حال به‌روزرسانی هستیم. به‌زودی باز می‌گردیم."}
       </p>
     </div>
