@@ -22,7 +22,7 @@ describe("auth boundaries", () => {
     expect(res.status).toBe(403)
   })
 
-  it("rotates refresh tokens; reuse of the old one kills the family", async () => {
+  it("rotates refresh tokens; instant replay gets grace (access-only), not a nuke", async () => {
     const s = await login("sec_student", PASSWORD)
     // rotate once via /api/auth/refresh using pb_refresh cookie only
     const refreshCookie = s.cookies
@@ -35,13 +35,17 @@ describe("auth boundaries", () => {
     const set1 = r1.headers["set-cookie"] as unknown as string[]
     const newRefresh = set1.find((c) => c.startsWith("pb_refresh="))!.split(";")[0]
 
-    // REUSE of the already-rotated old cookie → must be rejected AND nuke family
+    // REPLAY of the just-rotated old cookie → grace: 200 with ACCESS ONLY
+    // (parallel refreshes / kill-before-flush look identical to theft here;
+    // nuking would log out legitimate races). No fresh refresh is minted.
     const r2 = await http.post("/api/auth/refresh").set("Cookie", refreshCookie!)
-    expect(r2.status).toBe(401)
+    expect(r2.status).toBe(200)
+    const set2 = r2.headers["set-cookie"] as unknown as string[]
+    expect(set2.some((c) => c.startsWith("pb_refresh="))).toBe(false)
 
-    // The fresh token from rotation is also dead now (same family revoked)
+    // Family survived: the current token still rotates normally.
     const r3 = await http.post("/api/auth/refresh").set("Cookie", newRefresh)
-    expect(r3.status).toBe(401)
+    expect(r3.status).toBe(200)
   })
 
   it("changing the password revokes existing sessions", async () => {

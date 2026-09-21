@@ -263,23 +263,49 @@ jobs:
               </div>
               <h1>به اینترنت متصل نیستی!</h1>
               <p>پودمان‌بان برای کار کردن به اینترنت نیاز دارد.<br>لطفاً اینترنت گوشی را روشن کن و دوباره تلاش کن.</p>
-              <button onclick="location.reload()">تلاش مجدد</button>
+              <button onclick="retry()">تلاش مجدد</button>
               <div class="status" id="status"></div>
             </div>
             <script>
+              // Same logic as client/public/offline.html (single source).
+              // Retry navigates to the real server URL (injected below) so
+              // the user never leaves the app WebView.
+              var API_BASE = "__API_BASE__";
+              function apiUrl() {
+                return (typeof API_BASE === "string" && API_BASE.indexOf("https://") === 0)
+                  ? API_BASE
+                  : null;
+              }
+              function retry() {
+                var u = apiUrl();
+                if (u) location.href = u;
+                else location.reload();
+              }
               var s = document.getElementById('status');
               function upd() {
                 s.textContent = navigator.onLine ? 'اینترنت وصل شد — در حال اتصال...' : 'در انتظار اتصال اینترنت...';
               }
-              window.addEventListener('online', function(){ upd(); setTimeout(function(){ location.reload(); }, 800); });
+              window.addEventListener('online', function(){ upd(); setTimeout(retry, 800); });
               window.addEventListener('offline', upd);
-              setInterval(function(){ if (navigator.onLine) location.reload(); }, 5000);
+              setInterval(function(){ if (navigator.onLine) retry(); }, 5000);
               upd();
             </script>
           </body>
           </html>
           EOF
           echo "✅ offline.html generated in $WEB_DIR"
+
+      # Bake the real server URL into the offline page so "retry" navigates
+      # back inside the app WebView instead of reloading the error page
+      # (which on some setups escapes to an external browser).
+      - name: Inject api_base into offline page
+        working-directory: client
+        env:
+          WEB_DIR: ${{ env.WEB_DIR }}
+          API_BASE: ${{ inputs.api_base }}
+        run: |
+          sed -i "s#__API_BASE__#${API_BASE}#g" "$WEB_DIR/offline.html"
+          grep -c "$API_BASE" "$WEB_DIR/offline.html"
 
       - name: Write Capacitor config (package name + cookies)
         working-directory: client

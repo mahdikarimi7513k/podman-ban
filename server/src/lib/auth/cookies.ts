@@ -52,6 +52,11 @@ function authCookieAttrs(maxAgeSec: number, path = "/") {
   }
 }
 
+/** Set ONLY the access cookie (grace path — the refresh/csrf pair is untouched). */
+export function setAccessCookie(res: Response, accessToken: string): void {
+  res.cookie(ACCESS_COOKIE, accessToken, authCookieAttrs(ACCESS_TTL_SEC, "/"))
+}
+
 /** Set access + refresh + csrf cookies on the Express response. */
 export function setAuthCookies(
   res: Response,
@@ -61,7 +66,7 @@ export function setAuthCookies(
     csrfToken: string
   },
 ): void {
-  res.cookie(ACCESS_COOKIE, args.accessToken, authCookieAttrs(ACCESS_TTL_SEC, "/"))
+  setAccessCookie(res, args.accessToken)
   res.cookie(
     REFRESH_COOKIE,
     args.refreshToken,

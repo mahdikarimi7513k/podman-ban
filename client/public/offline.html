@@ -42,17 +42,32 @@
     </div>
     <h1>به اینترنت متصل نیستی!</h1>
     <p>پودمان‌بان برای کار کردن به اینترنت نیاز دارد.<br>لطفاً اینترنت گوشی را روشن کن و دوباره تلاش کن.</p>
-    <button onclick="location.reload()">تلاش مجدد</button>
+    <button onclick="retry()">تلاش مجدد</button>
     <div class="status" id="status"></div>
   </div>
   <script>
+    // Capacitor shows this page (errorPath) inside the app WebView when the
+    // remote site is unreachable. Retry must navigate back to the real
+    // server URL — location.reload() would just reload this error page
+    // itself (and on some setups escape to an external browser).
+    var API_BASE = "__API_BASE__";
+    function apiUrl() {
+      return (typeof API_BASE === "string" && API_BASE.indexOf("https://") === 0)
+        ? API_BASE
+        : null;
+    }
+    function retry() {
+      var u = apiUrl();
+      if (u) location.href = u;
+      else location.reload();
+    }
     var s = document.getElementById('status');
     function upd() {
       s.textContent = navigator.onLine ? 'اینترنت وصل شد — در حال اتصال...' : 'در انتظار اتصال اینترنت...';
     }
-    window.addEventListener('online', function(){ upd(); setTimeout(function(){ location.reload(); }, 800); });
+    window.addEventListener('online', function(){ upd(); setTimeout(retry, 800); });
     window.addEventListener('offline', upd);
-    setInterval(function(){ if (navigator.onLine) location.reload(); }, 5000);
+    setInterval(function(){ if (navigator.onLine) retry(); }, 5000);
     upd();
   </script>
 </body>

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "crypto"
 import type { Request, Response } from "express"
-import { and, eq, isNull, lte } from "drizzle-orm"
+import { and, eq, gt, gte, isNull, lte } from "drizzle-orm"
 import { db } from "../db.js"
 import { refreshTokens, users } from "../db/schema.js"
 import { clientIp } from "./rate-limit.js"
@@ -15,6 +15,7 @@ import {
 } from "./jwt"
 import {
   setAuthCookies,
+  setAccessCookie,
   clearAuthCookies,
   readCookie,
   ACCESS_COOKIE,
@@ -191,6 +192,15 @@ export async function issueSession(
  * compromised — every token in it is revoked and the caller is forced to
  * re-login (returns null without setting new cookies).
  *
+ * Grace window (120s): a token superseded MOMENTS ago that is presented again
+ * is far more likely a race than theft — parallel refreshes, or a mobile
+ * client killed before persisting the rotated cookies (then the ONLY
+ * credential it still holds is the old one). When the family provably
+ * rotated past it (a live successor created at/after its revocation) we
+ * re-issue ACCESS ONLY (15 min, no new refresh) and leave the family alone.
+ * Logout-revoked tokens have no successor, so logout still kills instantly;
+ * anything older, expired, or successor-less keeps the strict family-nuke.
+ *
  * On success, sets fresh access/refresh/csrf cookies on `res` and returns the
  * session user.
  */
@@ -223,6 +233,9 @@ export async function rotateRefreshToken(
   // Expired/revoked already → presenting it is STILL reuse: an attacker holding
   // a rotated-out token likely holds the current one too. Kill the whole family.
   if (record.revokedAt || record.expiresAt.getTime() <= Date.now()) {
+    const graced = await tryGraceReuse(res, payload.sub, payload.fam, record.revokedAt)
+    if (graced) return graced
+
     await db
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
@@ -283,6 +296,54 @@ export async function rotateRefreshToken(
     refreshToken: newRefresh,
     csrfToken: issueCsrfToken(user.id),
   })
+
+  return sessionUser
+}
+
+/** Grace window for recently-superseded refresh tokens (see rotateRefreshToken). */
+const GRACE_MS = 120_000
+
+async function tryGraceReuse(
+  res: Response,
+  userId: string,
+  family: string,
+  revokedAt: Date | null,
+): Promise<SessionUser | null> {
+  // Only rotation-superseded tokens qualify: logout (and natural expiry)
+  // creates no successor, so those stay on the strict path.
+  if (!revokedAt || Date.now() - revokedAt.getTime() > GRACE_MS) return null
+
+  const successor = await db
+    .select({ userId: refreshTokens.userId })
+    .from(refreshTokens)
+    .where(
+      and(
+        eq(refreshTokens.family, family),
+        isNull(refreshTokens.revokedAt),
+        gt(refreshTokens.expiresAt, new Date()),
+        gte(refreshTokens.createdAt, revokedAt),
+      ),
+    )
+    .limit(1)
+    .get()
+  if (!successor) return null
+
+  const user = await db.select().from(users).where(eq(users.id, successor.userId)).get()
+  if (!user || user.id !== userId) return null
+
+  const sessionUser: SessionUser = {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    field: user.field,
+  }
+  const accessToken = await signAccessToken({
+    sub: user.id,
+    role: user.role,
+    name: user.name,
+    field: user.field,
+  })
+  setAccessCookie(res, accessToken)
 
   return sessionUser
 }
