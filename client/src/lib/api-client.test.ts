@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { apiUpload } from "./api-client"
+import { apiFetch, apiUpload, ApiError, DEFAULT_TIMEOUT_MS } from "./api-client"
 
 /**
  * Seam: upload transport. Web sends raw bytes; the native app must send a
@@ -53,5 +53,87 @@ describe("apiUpload", () => {
     const body = fetchMock.mock.calls[0][1].body as string
     expect(typeof body).toBe("string")
     expect(Buffer.from(body, "base64")).toEqual(Buffer.from(bytes))
+  })
+})
+
+/**
+ * Seam: network timeout. A stalled connection must fail fast (Persian
+ * ApiError) instead of hanging boot/views forever; caller signals win.
+ */
+describe("apiFetch timeout", () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal("fetch", fetchMock)
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it("aborts a hung request after the default timeout", async () => {
+    const controller = new AbortController()
+
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation(() => controller.signal)
+
+    const abortErr = () => new DOMException("AbortError", "AbortError")
+    fetchMock.mockImplementation(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_, reject) => {
+          if (init?.signal?.aborted) {
+            reject(abortErr())
+
+            return
+          }
+
+          init?.signal?.addEventListener("abort", () => {
+            reject(abortErr())
+          })
+        }),
+    )
+
+    const pending = apiFetch("/api/config")
+
+    const check = expect(pending).rejects.toMatchObject({
+      message: expect.stringContaining("اینترنت"),
+    })
+
+    controller.abort()
+    await check
+
+    expect(timeoutSpy).toHaveBeenCalledWith(DEFAULT_TIMEOUT_MS)
+    timeoutSpy.mockRestore()
+  })
+
+  it("respects a caller-provided signal without imposing its own", async () => {
+    fetchMock.mockImplementation(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_, reject) => {
+          if (init?.signal?.aborted) {
+            reject(new DOMException("AbortError", "AbortError"))
+
+            return
+          }
+
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("AbortError", "AbortError"))
+          })
+        }),
+    )
+    const controller = new AbortController()
+
+    const pending = apiFetch("/api/config", { signal: controller.signal })
+    controller.abort()
+    await expect(pending).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it("fast responses never touch the timeout", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) })
+
+    await expect(apiFetch("/api/config")).resolves.toEqual({})
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

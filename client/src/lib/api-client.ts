@@ -20,6 +20,16 @@ const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
 export { API_BASE }
 
+/**
+ * Default network timeout. On flaky networks a request can hang forever
+ * (no bytes, no error) — without this, boot and every view would spin
+ * indefinitely instead of failing fast into the offline/error UI.
+ * Uploads opt out via their own longer signal (see apiUpload).
+ */
+export const DEFAULT_TIMEOUT_MS = 20000
+
+export const UPLOAD_TIMEOUT_MS = 120000
+
 function readCsrfCookie(): string | null {
   const raw = document.cookie
   for (const part of raw.split(";")) {
@@ -75,10 +85,29 @@ export async function apiFetch<T = unknown>(
     if (csrf) headers.set("x-csrf-token", csrf)
   }
 
-  const doFetch = () =>
-    fetch(`${API_BASE}${input}`, { ...init, headers, credentials: "include" })
+  // Caller-provided signal wins (uploads pass a longer one); otherwise fail
+  // fast instead of hanging forever on a stalled connection.
+  const signal = init.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
 
-  let res = await doFetch()
+  const doFetch = () =>
+    fetch(`${API_BASE}${input}`, { ...init, headers, credentials: "include", signal })
+
+  let res: Response
+
+  try {
+    res = await doFetch()
+  } catch (err) {
+    const aborted =
+      err instanceof DOMException
+        ? err.name === "AbortError"
+        : err instanceof Error && err.name === "AbortError"
+
+    if (aborted) {
+      throw new ApiError("اتصال اینترنت کند است یا قطع شده — دوباره تلاش کنید", 0, null)
+    }
+
+    throw err
+  }
 
   // Expired access token → try one refresh, then retry.
   if (res.status === 401 && isMutation === false) {
@@ -124,26 +153,39 @@ export async function apiFetch<T = unknown>(
  * `x-transfer-encoding: base64`. Web keeps sending raw bytes.
  */
 export async function apiUpload<T = unknown>(input: string, file: File): Promise<T> {
+  // Large files on slow networks need far longer than the default timeout.
+  const signal = AbortSignal.timeout(UPLOAD_TIMEOUT_MS)
+
   if (isNativeApp()) {
-    return apiFetch<T>(input, {
+    return apiFetch<T>(
+      input,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-file-name": encodeURIComponent(file.name),
+          "x-transfer-encoding": "base64",
+        },
+        body: await fileToBase64(file),
+        signal,
+      },
+    )
+  }
+
+  const bytes = await file.arrayBuffer()
+
+  return apiFetch<T>(
+    input,
+    {
       method: "POST",
       headers: {
         "content-type": "application/octet-stream",
         "x-file-name": encodeURIComponent(file.name),
-        "x-transfer-encoding": "base64",
       },
-      body: await fileToBase64(file),
-    })
-  }
-  const bytes = await file.arrayBuffer()
-  return apiFetch<T>(input, {
-    method: "POST",
-    headers: {
-      "content-type": "application/octet-stream",
-      "x-file-name": encodeURIComponent(file.name),
+      body: bytes,
+      signal,
     },
-    body: bytes,
-  })
+  )
 }
 
 // Same detection as Capacitor core (androidBridge / webkit.messageHandlers),
