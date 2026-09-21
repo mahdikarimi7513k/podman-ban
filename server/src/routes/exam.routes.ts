@@ -317,7 +317,7 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
   const userRows =
     grouped.length > 0
       ? await db
-          .select({ id: users.id, name: users.name, field: users.field })
+          .select({ id: users.id, name: users.name, field: users.field, role: users.role })
           .from(users)
           .where(
             inArray(
@@ -329,10 +329,12 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
       : []
   const userById = new Map(userRows.map((u) => [u.id, u]))
 
+  // Students only — staff (ADMIN/CONTENT_ADMIN) test accounts must never
+  // outrank real students on a public board.
   const ranked = grouped
     .map((g) => {
       const u = userById.get(g.userId)
-      if (!u) return null
+      if (!u || u.role !== "STUDENT") return null
       return {
         id: u.id,
         name: u.name,
