@@ -72,9 +72,14 @@ jobs:
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
-      - name: Install client deps (reproducible)
+      - name: Install client deps (reproducible, self-healing lock)
         working-directory: client
-        run: npm ci
+        run: |
+          npm ci --no-audit --no-fund || {
+            echo "⚠️ lock file هم‌گام نیست — بازسازی و تلاش مجدد"
+            npm install --package-lock-only --no-audit --no-fund
+            npm ci --no-audit --no-fund
+          }
 
       - name: Typecheck + tests
         working-directory: client
@@ -166,9 +171,14 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('client/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Install client deps (reproducible)
+      - name: Install client deps (reproducible, self-healing lock)
         working-directory: client
-        run: npm ci
+        run: |
+          npm ci --no-audit --no-fund || {
+            echo "⚠️ lock file هم‌گام نیست — بازسازی و تلاش مجدد"
+            npm install --package-lock-only --no-audit --no-fund
+            npm ci --no-audit --no-fund
+          }
 
       # --- notification smallIcon باید به آیکون تک‌رنگ اشاره کند، نه ic_launcher ---
       # (سورس از قبل ic_notification است؛ این sed فقط تور ایمنی برای رگرسیون است)
