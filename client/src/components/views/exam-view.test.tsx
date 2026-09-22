@@ -184,3 +184,31 @@ describe("ExamView question navigation stability", () => {
     }
   })
 })
+
+/**
+ * Seam: sessionless ExamView (view "exam" with no live session id).
+ * History retagging normally makes this unreachable, but if it ever
+ * happens the view must offer the exit path — never spin forever and
+ * never touch the API without a session to load.
+ */
+describe("ExamView without a session", () => {
+  it("shows an exit fallback instead of the infinite spinner", () => {
+    useApp.setState({ view: "exam", examSessionId: null, startExamModuleId: null })
+    render(<ExamView />)
+
+    expect(apiFetchMock).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: /بازگشت به خانه/ })).toBeInTheDocument()
+  })
+
+  it("the fallback button leaves the exam view", () => {
+    useApp.setState({ view: "exam", examSessionId: null, startExamModuleId: null })
+    render(<ExamView />)
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /بازگشت به خانه/ }))
+    })
+
+    expect(useApp.getState().view).toBe("home")
+    expect(useApp.getState().examSessionId).toBeNull()
+  })
+})

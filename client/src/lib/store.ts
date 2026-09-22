@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { apiFetch, ApiError } from "@/lib/api-client"
+import { replaceViewState, type AppView } from "@/lib/view-history"
 
 // Shared in-flight boot (see useApp.boot)
 let bootPromise: Promise<void> | null = null
@@ -23,17 +24,8 @@ async function doBoot(
   set(next)
 }
 
-export type View =
-  | "auth"
-  | "home"
-  | "exam"
-  | "report"
-  | "settings"
-  | "calculator"
-  | "archive"
-  | "admin"
-  | "leaderboard"
-  | "achievements"
+/** Single source of truth: the history allowlist and the store share it. */
+export type View = AppView
 
 export interface AppUser {
   id: string
@@ -121,6 +113,9 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   exitExam() {
+    // The exam history entry dies with the session: retag it as "home" so a
+    // later Back can never land on a sessionless ExamView (spinner forever).
+    replaceViewState("home")
     set({ examSessionId: null, startExamModuleId: null, view: "home" })
   },
 

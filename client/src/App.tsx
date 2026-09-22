@@ -6,8 +6,12 @@ import { AppBootstrap } from "@/components/app-bootstrap"
 import { ServiceWorkerRegister } from "@/components/sw-register"
 import { Toaster } from "@/components/ui/toaster"
 import { useApp } from "@/lib/store"
-import type { View } from "@/lib/store"
-import { pushViewState, replaceViewState, readViewState } from "@/lib/view-history"
+import {
+  pushViewState,
+  replaceViewState,
+  readViewState,
+  resolvePopState,
+} from "@/lib/view-history"
 import { isNativeApp } from "@/lib/native-notify"
 import { TopBar } from "@/components/top-bar"
 import { BottomNav } from "@/components/bottom-nav"
@@ -59,47 +63,79 @@ const viewVariants = fadeUp
 
 /**
  * Browser back button + Android hardware back button.
- * Only the exam entry is pushed (everything else replaces), so Back can
- * never trap the user: popping past our entries exits naturally, and Back
- * inside an exam opens the exit-confirm dialog instead of killing it.
+ * Every UI view change pushes a history entry, so Back walks views
+ * backwards instead of leaving the site/app; leaving is only possible from
+ * the first entry. One pure function (resolvePopState) decides every pop,
+ * and Back inside an exam opens the exit-confirm dialog instead of killing
+ * it.
  */
 function useViewHistory(): void {
   const view = useApp((s) => s.view)
+  // Set by the popstate handler right before setView(follow): the view
+  // effect must not push a second entry for a navigation history already owns.
+  const popFollow = React.useRef(false)
 
   React.useEffect(() => {
     replaceViewState(view)
   }, [])
 
   React.useEffect(() => {
-    if (view === "exam") pushViewState("exam")
+    if (popFollow.current) {
+      popFollow.current = false
+
+      return
+    }
+
+    // Reconcile instead of blind push: exitExam() already retagged the exam
+    // entry as "home", and a duplicate entry would only cost one dead Back press.
+    if (readViewState() === view) return
+
+    pushViewState(view)
   }, [view])
 
   React.useEffect(() => {
     const onPop = () => {
       const st = useApp.getState()
 
-      if (st.exitConfirmOpen) {
-        st.dismissExitConfirm()
+      const action = resolvePopState(readViewState(), {
+        dialogOpen: st.exitConfirmOpen,
+        view: st.view,
+        signedIn: st.user !== null,
+        isAdmin: st.user?.role === "ADMIN" || st.user?.role === "CONTENT_ADMIN",
+        hasExamSession: st.examSessionId !== null,
+      })
 
-        return
+      switch (action.type) {
+        case "dismiss-dialog":
+          // The pop moved the stack while the view stayed put — re-stick it.
+          pushViewState(st.view)
+          st.dismissExitConfirm()
+
+          return
+        case "confirm-exit":
+          // Same drift, opposite direction: view is "exam" (policy guarantees).
+          pushViewState(st.view)
+          st.requestExitConfirm()
+
+          return
+        case "retag":
+          // Stale entry for the current session (auth/admin/exam): keep the
+          // visible view, rewrite the entry so the next Back walks past it
+          // instead of looping on it.
+          replaceViewState(st.view)
+
+          return
+        case "follow":
+          popFollow.current = true
+          st.setView(action.view)
+
+          return
+        case "ignore":
+        case "leave":
+          // "ignore": entry already matches the view. "leave": popped below
+          // our own stack — let the browser exit on its own.
+          return
       }
-
-      const v = readViewState()
-
-      if (v === st.view) return
-
-      if (st.view === "exam") {
-        st.requestExitConfirm()
-        pushViewState("exam")
-
-        return
-      }
-
-      if (v) {
-        // SAFETY: readViewState only returns allowlisted view names.
-        st.setView(v as View)
-      }
-      // v === null: popped past our entries — let the browser exit.
     }
 
     window.addEventListener("popstate", onPop)
@@ -107,10 +143,13 @@ function useViewHistory(): void {
     return () => window.removeEventListener("popstate", onPop)
   }, [])
 
-  // Android hardware back button (Capacitor). Same policy as popstate:
-  // dialog → close, exam → confirm, otherwise back-or-minimize.
+  // Android hardware back button (Capacitor). Same policy as popstate — but
+  // with a listener registered the WebView never pops on its own, so each
+  // branch performs its own history effect: dialog → close, exam → confirm,
+  // otherwise back-or-minimize.
   React.useEffect(() => {
     let remove: (() => void) | undefined
+    let cancelled = false
 
     void (async () => {
       if (!isNativeApp()) return
@@ -127,7 +166,9 @@ function useViewHistory(): void {
 
         if (st.view === "exam") {
           st.requestExitConfirm()
-          pushViewState("exam")
+
+          // Drift safety: keep the invariant (current entry === "exam").
+          if (readViewState() !== "exam") pushViewState("exam")
 
           return
         }
@@ -136,12 +177,21 @@ function useViewHistory(): void {
         else void CapApp.minimizeApp()
       })
 
+      if (cancelled) {
+        void sub.remove()
+
+        return
+      }
+
       remove = () => {
         void sub.remove()
       }
     })()
 
-    return () => remove?.()
+    return () => {
+      cancelled = true
+      remove?.()
+    }
   }, [])
 }
 

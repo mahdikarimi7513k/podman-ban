@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dialog"
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { firedThresholds, vibrate } from "@/lib/exam-timer"
-import { replaceViewState } from "@/lib/view-history"
 import { useToast } from "@/hooks/use-toast"
 
 interface ExamQuestion {
@@ -392,6 +391,19 @@ export function ExamView() {
     if (online && !was && autoFinished && !result && !finishing) void finish()
   }, [online, autoFinished, result, finishing, finish])
 
+  if (!examSessionId) {
+    // Sessionless exam view (history retag + resolvePopState normally make
+    // this unreachable): never spin forever — offer the one exit path.
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center bg-background px-6 text-center gap-4">
+        <p className="text-sm text-muted-foreground">نشست آزمون یافت نشد — لطفاً دوباره وارد شوید</p>
+        <Button variant="outline" onClick={exitExam} className="cursor-pointer">
+          بازگشت به خانه
+        </Button>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background">
@@ -451,7 +463,7 @@ export function ExamView() {
 
   const doExitExam = () => {
     closeDialog()
-    replaceViewState("home")
+    // exitExam() owns the history retag — one exit path, one place.
     exitExam()
   }
 
