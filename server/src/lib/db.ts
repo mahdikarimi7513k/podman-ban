@@ -105,11 +105,14 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `User` ADD `githubId` text",
 ]
 
-function ensureRuntimeTables(exec: (sql: string) => void): void {
+// Exported for the old-schema boot test (idempotent re-runs).
+export function ensureRuntimeTables(exec: (sql: string) => void): void {
   for (const stmt of RUNTIME_DDL) exec(stmt)
 
-  for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
-
+  // ORDER MATTERS: the User_* indexes reference the new columns, so the
+  // ALTERs must land first. On an old production database (pre-email
+  // columns) running the indexes first crashed the boot with
+  // "no such column" and took the whole site down with a 503.
   for (const stmt of RUNTIME_ALTERS) {
     try {
       exec(stmt)
@@ -121,6 +124,8 @@ function ensureRuntimeTables(exec: (sql: string) => void): void {
       }
     }
   }
+
+  for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
 }
 
 function openDatabase(): BetterSQLite3Database<typeof schema> {
