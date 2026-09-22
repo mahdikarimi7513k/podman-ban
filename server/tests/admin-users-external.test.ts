@@ -10,6 +10,15 @@ beforeAll(ensureFixtures)
 
 const uniq = (p: string) => `${p}${Date.now() % 1000000}`
 
+let emailCounter = 0
+
+/** Unique deliverable address per created user (same style as uniq). */
+const uniqEmail = (): string => {
+  emailCounter += 1
+
+  return `t${Date.now() % 1000000}-${emailCounter}@mail.com`
+}
+
 describe("registration gate", () => {
   it("blocks public sign-up when closed, allows admin-created users", async () => {
     const admin = await login("sec_admin", PASSWORD)
@@ -19,14 +28,14 @@ describe("registration gate", () => {
     try {
       const blocked = await http
         .post("/api/auth/register")
-        .send({ name: "گیت", username: u, password: "Gate-Pass-123", field: "FANI_HERFEI" })
+        .send({ name: "گیت", username: u, password: "Gate-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
       expect(blocked.status).toBe(403)
       expect(blocked.body.code).toBe("REGISTRATION_CLOSED")
 
       // Admin creation bypasses the gate…
       const created = await admin
         .post("/api/admin/users")
-        .send({ name: "گیت", username: u, password: "Gate-Pass-123", field: "FANI_HERFEI" })
+        .send({ name: "گیت", username: u, password: "Gate-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
       expect(created.status).toBe(201)
 
       // …and those credentials log in normally.
@@ -40,7 +49,7 @@ describe("registration gate", () => {
     // Gate open again → public sign-up works.
     const open = await http
       .post("/api/auth/register")
-      .send({ name: "باز", username: uniq("openuser"), password: "Open-Pass-123", field: "KARDANESH" })
+      .send({ name: "باز", username: uniq("openuser"), password: "Open-Pass-123", email: uniqEmail(), field: "KARDANESH" })
     expect(open.status).toBe(201)
   })
 })
@@ -72,14 +81,14 @@ describe("admin user creation", () => {
 
     const res = await admin
       .post("/api/admin/users")
-      .send({ name: "ساخته‌شده", username: u, password: "Mk-Pass-123", field: "FANI_HERFEI" })
+      .send({ name: "ساخته‌شده", username: u, password: "Mk-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
     expect(res.status).toBe(201)
     expect(res.body.user.role).toBe("STUDENT")
     expect(res.body.user).not.toHaveProperty("passwordHash")
 
     const dup = await admin
       .post("/api/admin/users")
-      .send({ name: "تکراری", username: u, password: "Mk-Pass-123", field: "FANI_HERFEI" })
+      .send({ name: "تکراری", username: u, password: "Mk-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
     expect(dup.status).toBe(409)
 
     const stu = await login("sec_student", PASSWORD)
@@ -180,7 +189,7 @@ describe("external register API", () => {
       const created = await http
         .post("/api/external/register")
         .set("x-api-key", key)
-        .send({ name: "ثبت خارجی", username: u, password: "Ext-Reg-123", field: "KARDANESH" })
+        .send({ name: "ثبت خارجی", username: u, password: "Ext-Reg-123", email: uniqEmail(), field: "KARDANESH" })
       expect(created.status).toBe(201)
       expect(created.body.ok).toBe(true)
       expect(created.body.user.role).toBe("STUDENT")
@@ -191,7 +200,7 @@ describe("external register API", () => {
       const dup = await http
         .post("/api/external/register")
         .set("x-api-key", key)
-        .send({ name: "تکراری", username: u, password: "Ext-Reg-123", field: "KARDANESH" })
+        .send({ name: "تکراری", username: u, password: "Ext-Reg-123", email: uniqEmail(), field: "KARDANESH" })
       expect(dup.status).toBe(409)
       expect(dup.body.code).toBe("USERNAME_TAKEN")
 

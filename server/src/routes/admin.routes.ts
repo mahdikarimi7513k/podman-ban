@@ -816,6 +816,7 @@ adminRouter.get("/users", async (req, res) => {
       id: users.id,
       username: users.username,
       name: users.name,
+      email: users.email,
       field: users.field,
       role: users.role,
       totalTests: users.totalTests,
@@ -845,6 +846,14 @@ adminRouter.post("/users", async (req, res) => {
     return
   }
 
+  const emailTaken = await db.select({ id: users.id }).from(users).where(eq(users.email, data.email)).get()
+
+  if (emailTaken) {
+    res.status(409).json({ error: "این ایمیل قبلاً ثبت شده است" })
+
+    return
+  }
+
   const passwordHash = await hashPassword(data.password)
   const created = await db
     .insert(users)
@@ -852,6 +861,7 @@ adminRouter.post("/users", async (req, res) => {
       name: data.name,
       username: data.username,
       passwordHash,
+      email: data.email,
       field: data.field,
       role: "STUDENT",
     })
@@ -859,6 +869,7 @@ adminRouter.post("/users", async (req, res) => {
       id: users.id,
       username: users.username,
       name: users.name,
+      email: users.email,
       field: users.field,
       role: users.role,
       totalTests: users.totalTests,

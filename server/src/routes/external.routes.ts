@@ -7,7 +7,7 @@
  *   otherwise 401 { ok: false, code: "FIELD_MISMATCH" }.
  *
  *   POST /external/register
- *   Body: { "name", "username", "password", "field" } — ALL required.
+ *   Body: { "name", "username", "password", "email", "field" } — ALL required.
  *   Creates a STUDENT exactly like public sign-up, but ALWAYS allowed:
  *   it bypasses the admin's registration gate (same as admin-created users).
  *
@@ -151,6 +151,7 @@ externalRouter.post("/external/verify", async (req, res) => {
         id: user.id,
         username: user.username,
         name: user.name,
+        email: user.email,
         field: user.field,
         role: user.role,
       },
@@ -164,6 +165,7 @@ externalRouter.post("/external/verify", async (req, res) => {
       id: user.id,
       username: user.username,
       name: user.name,
+      email: user.email,
       field: user.field,
       role: user.role,
     },
@@ -211,12 +213,24 @@ externalRouter.post("/external/register", async (req, res) => {
     return
   }
 
+  const emailTaken = await db.select({ id: users.id }).from(users).where(eq(users.email, parsed.data.email)).get()
+
+  if (emailTaken) {
+    res.status(409).json({
+      ok: false,
+      error: "این ایمیل قبلاً ثبت شده است",
+      code: "EMAIL_TAKEN",
+    })
+
+    return
+  }
+
   // ponytail: same row shape as public sign-up — no separate "external user"
   // concept; the account logs in everywhere like any other STUDENT.
   const created = await db
     .insert(users)
-    .values({ name, username, passwordHash: await hashPassword(password), field, role: "STUDENT" })
-    .returning({ id: users.id, username: users.username, name: users.name, field: users.field, role: users.role })
+    .values({ name, username, passwordHash: await hashPassword(password), email: parsed.data.email, field, role: "STUDENT" })
+    .returning({ id: users.id, username: users.username, name: users.name, email: users.email, field: users.field, role: users.role })
     .get()
   res.status(201).json({ ok: true, user: created })
 })

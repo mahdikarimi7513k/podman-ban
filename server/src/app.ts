@@ -13,6 +13,7 @@ import { supportRouter } from "./routes/support.routes.js"
 import { archiveRouter } from "./routes/archive.routes.js"
 import { adminRouter } from "./routes/admin.routes.js"
 import { externalRouter } from "./routes/external.routes.js"
+import { oauthRouter } from "./routes/oauth.routes.js"
 import { getSession } from "./lib/auth/index.js"
 import { getAppState } from "./lib/remote-config.js"
 
@@ -142,6 +143,7 @@ export function buildApp(): express.Express {
   app.use("/api/archive", archiveRouter) // /api/archive
   app.use("/api/admin", adminRouter) // /api/admin/*
   app.use("/api", externalRouter) // /api/external/verify (API-key auth)
+  app.use("/api", oauthRouter) // /api/auth/oauth/* (social login)
 
   // Unknown /api/* must not leak the Express HTML error page (framework
   // fingerprint + wrong content-type) — JSON 404 instead. Placed after every

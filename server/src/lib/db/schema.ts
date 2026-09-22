@@ -39,6 +39,16 @@ export const users = sqliteTable("User", {
   username: text("username").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("passwordHash").notNull(),
+  // Login email, normalized to lowercase at the validation boundary.
+  // Nullable so pre-existing rows survive the migration; UNIQUE (SQLite
+  // treats each NULL as distinct) plus an application pre-check reject
+  // a second account on the same address.
+  email: text("email").unique(),
+  // OAuth provider subjects, set on first social login (or linked when a
+  // verified provider email matches an existing account). UNIQUE so one
+  // provider identity can never attach to two accounts.
+  googleSub: text("googleSub").unique(),
+  githubId: text("githubId").unique(),
   field: text("field").notNull().$type<StudyField>(),
   role: text("role").notNull().default("STUDENT").$type<UserRole>(),
   prefs: text("prefs").notNull().default("{}"),
@@ -63,6 +73,20 @@ export const refreshTokens = sqliteTable("RefreshToken", {
   expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
   revokedAt: integer("revokedAt", { mode: "timestamp_ms" }),
 }, (t) => [index("RefreshToken_userId_idx").on(t.userId), index("RefreshToken_family_idx").on(t.family)])
+
+// One-time OAuth handoff tickets (native-app return path) and pending
+// social signups waiting for a study-field pick. ticketHash is sha256 of
+// the random ticket; userId is null until the ticket is linked to an
+// account, pendingProfile holds the verified provider profile JSON.
+export const oauthTickets = sqliteTable("OauthTicket", {
+  id: id("id"),
+  ticketHash: text("ticketHash").notNull().unique(),
+  userId: text("userId").references(() => users.id, { onDelete: "cascade" }),
+  pendingProfile: text("pendingProfile"),
+  createdAt: createdAt("createdAt"),
+  expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
+  usedAt: integer("usedAt", { mode: "timestamp_ms" }),
+}, (t) => [index("OauthTicket_userId_idx").on(t.userId)])
 
 export const books = sqliteTable("Book", {
   id: id("id"),
@@ -210,6 +234,7 @@ export const archiveFiles = sqliteTable("ArchiveFile", {
 
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
+  oauthTickets: many(oauthTickets),
   examSessions: many(examSessions),
   chatMessages: many(chatMessages),
   notifications: many(notifications),
@@ -218,6 +243,23 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
 }))
+
+export const oauthTicketsRelations = relations(oauthTickets, ({ one }) => ({
+  user: one(users, { fields: [oauthTickets.userId], references: [users.id] }),
+}))
+
+// Short-lived OAuth start records (authorization-code + PKCE handshake).
+// The code_verifier must live server-side: the native app opens the
+// provider in the system browser (a different cookie jar), so cookies
+// cannot carry it. Rows expire in 10 minutes and are deleted on use.
+export const oauthStates = sqliteTable("OauthState", {
+  id: id("id"),
+  stateHash: text("stateHash").notNull().unique(),
+  verifier: text("verifier").notNull(),
+  mode: text("mode").notNull().$type<"web" | "native">(),
+  createdAt: createdAt("createdAt"),
+  expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
+})
 
 export const booksRelations = relations(books, ({ many }) => ({
   modules: many(modules),

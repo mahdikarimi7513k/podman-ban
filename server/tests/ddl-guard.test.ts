@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest"
 import { readFileSync } from "fs"
 import { resolve, dirname } from "path"
 import { fileURLToPath } from "url"
-import { RUNTIME_DDL } from "../src/lib/db.js"
+import { RUNTIME_DDL, RUNTIME_DDL_OAUTH, RUNTIME_ALTERS } from "../src/lib/db.js"
 
 const here =
   typeof __dirname !== "undefined"
@@ -39,5 +39,24 @@ describe("notification DDL parity", () => {
       .filter(Boolean)
 
     expect(RUNTIME_DDL.map(norm)).toEqual(migrated)
+  })
+})
+
+describe("oauth DDL parity", () => {
+  it("RUNTIME_DDL_OAUTH + RUNTIME_ALTERS mirror 0003 and 0004", () => {
+    const migrated = [
+      "0003_add-user-email-oauth.sql",
+      "0004_add-user-email-oauth.sql",
+    ].flatMap((f) =>
+      readFileSync(resolve(here, "..", "drizzle", f), "utf8")
+        .split("--> statement-breakpoint")
+        .map((s) => norm(s))
+        .filter(Boolean),
+    )
+
+    // Order between the two arrays is a runtime detail — content must match.
+    expect([...RUNTIME_DDL_OAUTH, ...RUNTIME_ALTERS].map(norm).sort()).toEqual(
+      migrated.sort(),
+    )
   })
 })

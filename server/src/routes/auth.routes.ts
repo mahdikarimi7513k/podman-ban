@@ -22,6 +22,7 @@ import {
   hashPassword,
   verifyPassword,
   issueCsrfToken,
+  oauthProviders,
   rateLimit,
   clientIp,
   socketIp,
@@ -64,7 +65,7 @@ authRouter.post("/auth/register", async (req, res) => {
     return
   }
 
-  const { name, username, password, field } = data
+  const { name, username, password, email, field } = data
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).get()
   if (existing) {
@@ -72,10 +73,18 @@ authRouter.post("/auth/register", async (req, res) => {
     return
   }
 
+  const emailTaken = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
+
+  if (emailTaken) {
+    res.status(409).json({ error: "این ایمیل قبلاً ثبت شده است" })
+
+    return
+  }
+
   const passwordHash = await hashPassword(password)
   const user = await db
     .insert(users)
-    .values({ name, username, passwordHash, field, role: "STUDENT" })
+    .values({ name, username, passwordHash, email, field, role: "STUDENT" })
     .returning()
     .get()
 
@@ -95,6 +104,7 @@ authRouter.post("/auth/register", async (req, res) => {
       id: user.id,
       name: user.name,
       username: user.username,
+      email: user.email,
       field: user.field,
       role: user.role,
     },
@@ -168,6 +178,7 @@ authRouter.post("/auth/login", async (req, res) => {
       id: user.id,
       name: user.name,
       username: user.username,
+      email: user.email,
       field: user.field,
       role: user.role,
       totalTests: user.totalTests,
@@ -236,6 +247,7 @@ authRouter.get("/auth/me", async (req, res) => {
       id: users.id,
       name: users.name,
       username: users.username,
+      email: users.email,
       field: users.field,
       role: users.role,
       totalTests: users.totalTests,
@@ -270,7 +282,9 @@ authRouter.get("/csrf", async (req, res) => {
 
 authRouter.get("/config", async (_req, res) => {
   const state = await getAppState()
-  res.json({ state })
+  // Social-login capability rides along (computed from env, never stored):
+  // the client renders the Google/GitHub buttons only when enabled.
+  res.json({ state: { ...state, oauth: oauthProviders() } })
 })
 
 // ---- GET /notifications/latest (PUBLIC) -------------------------------

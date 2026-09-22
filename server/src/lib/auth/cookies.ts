@@ -40,6 +40,14 @@ function cookieSecure(): boolean {
   return process.env.COOKIE_SECURE === "true"
 }
 
+/**
+ * Shared Secure/SameSite resolution for non-session cookies (OAuth
+ * pending). Same deployment contract as the auth cookies above.
+ */
+export function cookieSecurity() {
+  return { secure: cookieSecure(), sameSite: cookieSameSite() }
+}
+
 /** Common attributes for auth cookies — the security core. */
 function authCookieAttrs(maxAgeSec: number, path = "/") {
   const expires = new Date(Date.now() + maxAgeSec * 1000)

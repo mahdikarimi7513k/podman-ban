@@ -31,6 +31,22 @@ export const passwordSchema = z
     message: "رمز عبور باید شامل حرف و عدد باشد",
   })
 
+// Login email: trimmed, lowercased, invisible chars stripped (mobile
+// keyboards insert ZWNJ/spaces). Format is enforced by .email(); the
+// UNIQUE constraint plus the application pre-check reject duplicates.
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .transform((v) =>
+    v
+      .replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u200B-\u200D\u2060\uFEFF]/g, "")
+      .replace(/[\s]/g, ""),
+  )
+  .refine((v) => v.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+    message: "ایمیل معتبر نیست",
+  })
+
 export const nameSchema = z
   .string()
   .trim()
@@ -41,6 +57,7 @@ export const registerSchema = z.object({
   name: nameSchema,
   username: usernameSchema,
   password: passwordSchema,
+  email: emailSchema,
   field: z.enum(["FANI_HERFEI", "KARDANESH"]),
 })
 

@@ -17,6 +17,9 @@ import {
   getSession,
   requireAdmin,
   requireCsrf,
+  rateLimit,
+  clientIp,
+  socketIp,
 } from "../lib/auth/index.js"
 import { ioEmitChatMessage, ioEmitChatRead } from "../lib/chat-socket.js"
 import { parseBody } from "../lib/validations.js"
@@ -75,6 +78,26 @@ supportRouter.post("/messages", async (req, res) => {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
     return
   }
+
+  // Chat is the only unbounded write path left: without a quota one
+  // account (or one NAT address) can flood the table and fan out noise
+  // to every admin socket. 30/5min per sender never trips a real
+  // conversation; the IP + socket floors mirror the login hardening.
+  const ip = clientIp(req)
+  const sip = socketIp(req)
+  const rlSelf = rateLimit(`chat-u:${user.id}`, 30, 300)
+  const rlIp = rateLimit(`chat-ip:${ip}`, 60, 300)
+  const rlSock = rateLimit(`chat-ip-sock:${sip}`, 300, 300)
+
+  if (!rlSelf.ok || !rlIp.ok || !rlSock.ok) {
+    res.status(429).json({
+      error: "تلاش‌های بیش از حد",
+      retryAfterSec: Math.max(rlSelf.retryAfterSec, rlIp.retryAfterSec, rlSock.retryAfterSec),
+    })
+
+    return
+  }
+
   const data = parseBody(chatSendSchemaWithUser, req.body, res)
   if (!data) return
   const { text, userId: bodyUserId } = data

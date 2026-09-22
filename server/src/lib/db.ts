@@ -63,8 +63,64 @@ export const RUNTIME_DDL = [
   "CREATE INDEX IF NOT EXISTS `Notification_createdAt_idx` ON `Notification` (`createdAt`)",
 ]
 
+// Mirrors drizzle/0003_add-user-email-oauth.sql + 0004 (IF NOT EXISTS is
+// legal for tables and indexes — only the ALTERs below need the wrapper).
+// Kept as a separate array so the 0001 parity test keeps asserting its
+// exact two statements; see the oauth parity test beside it.
+export const RUNTIME_DDL_OAUTH = [
+  `CREATE TABLE IF NOT EXISTS \`OauthTicket\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`ticketHash\` text NOT NULL,
+	\`userId\` text,
+	\`pendingProfile\` text,
+	\`createdAt\` integer NOT NULL,
+	\`expiresAt\` integer NOT NULL,
+	\`usedAt\` integer,
+	FOREIGN KEY (\`userId\`) REFERENCES \`User\`(\`id\`) ON UPDATE no action ON DELETE cascade
+)`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS `OauthTicket_ticketHash_unique` ON `OauthTicket` (`ticketHash`)",
+  "CREATE INDEX IF NOT EXISTS `OauthTicket_userId_idx` ON `OauthTicket` (`userId`)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS `User_email_unique` ON `User` (`email`)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS `User_googleSub_unique` ON `User` (`googleSub`)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS `User_githubId_unique` ON `User` (`githubId`)",
+  // Mirrors drizzle/0004_add-user-email-oauth.sql.
+  `CREATE TABLE IF NOT EXISTS \`OauthState\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`stateHash\` text NOT NULL,
+	\`verifier\` text NOT NULL,
+	\`mode\` text NOT NULL,
+	\`createdAt\` integer NOT NULL,
+	\`expiresAt\` integer NOT NULL
+)`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS `OauthState_stateHash_unique` ON `OauthState` (`stateHash`)",
+]
+
+// SQLite has no ADD COLUMN IF NOT EXISTS: each ALTER throws "duplicate
+// column name" on every boot after the first, so they run through this
+// tolerant wrapper instead of the blind loop above. Any other error
+// (e.g. missing User table) still fails fast.
+export const RUNTIME_ALTERS = [
+  "ALTER TABLE `User` ADD `email` text",
+  "ALTER TABLE `User` ADD `googleSub` text",
+  "ALTER TABLE `User` ADD `githubId` text",
+]
+
 function ensureRuntimeTables(exec: (sql: string) => void): void {
   for (const stmt of RUNTIME_DDL) exec(stmt)
+
+  for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
+
+  for (const stmt of RUNTIME_ALTERS) {
+    try {
+      exec(stmt)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+
+      if (!/duplicate column name/i.test(msg)) {
+        throw err
+      }
+    }
+  }
 }
 
 function openDatabase(): BetterSQLite3Database<typeof schema> {
