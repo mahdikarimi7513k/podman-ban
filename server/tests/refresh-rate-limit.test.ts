@@ -46,7 +46,7 @@ describe("refresh rate limit", () => {
     const probe = await refreshWithGarbage(HAMMER_XFF)
 
     expect(probe.status).toBe(429)
-    expect(typeof probe.body.retryAfterSec).toBe("number")
+    expect(Number.isInteger(probe.body.retryAfterSec)).toBe(true)
     expect(probe.body.error).toBe("تلاش‌های بیش از حد")
   })
 
