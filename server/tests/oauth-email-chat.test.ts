@@ -509,6 +509,24 @@ describe("oauth callback via stub provider", () => {
   })
 })
 
+describe("oauth route order", () => {
+  it("serves /pending as itself instead of a provider name", async () => {
+    // Regression: Express matches in definition order — when /pending sat
+    // below /:provider, "pending" was captured as a provider and answered
+    // 400, so the web field picker never appeared after the redirect.
+    const res = await http.get("/api/auth/oauth/pending")
+
+    expect(res.status).toBe(404)
+  })
+
+  it("still routes unknown providers to the start handler", async () => {
+    const res = await http.get("/api/auth/oauth/nope")
+
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe("ارائه‌دهنده نامعتبر است")
+  })
+})
+
 describe("chat rate limit", () => {
   it("trips to 429 on message floods, per sender", async () => {
     const spam = await ensureUser("chat_spam", "STUDENT", "FANI_HERFEI")

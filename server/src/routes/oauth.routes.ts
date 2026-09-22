@@ -112,6 +112,27 @@ function queryText(v: string | string[] | undefined): string {
   return String(v)
 }
 
+// ---- GET /auth/oauth/pending (field-picker bootstrap) ---------------------
+// NOTE: this literal route MUST stay above "/auth/oauth/:provider" —
+// Express matches in definition order, and otherwise "pending" is
+// captured as :provider and answered 400 (broke web social signup:
+// the field picker never appeared after the provider redirect).
+
+oauthRouter.get("/auth/oauth/pending", async (req, res) => {
+  const raw = readCookie(req, PENDING_COOKIE)
+  const profile = raw ? verifyPendingProfile(raw) : null
+
+  if (!profile) {
+    res.status(404).json({ error: "یافت نشد" })
+
+    return
+  }
+
+  res.json({
+    profile: { provider: profile.provider, email: profile.email, name: profile.name },
+  })
+})
+
 // ---- GET /auth/oauth/:provider (start) ---------------------------------
 
 oauthRouter.get("/auth/oauth/:provider", async (req, res) => {
@@ -320,23 +341,6 @@ oauthRouter.post("/auth/oauth/consume", async (req, res) => {
 
   res.json({
     user: { id: user.id, name: user.name, role: user.role, field: user.field },
-  })
-})
-
-// ---- GET /auth/oauth/pending (field-picker bootstrap) ---------------------
-
-oauthRouter.get("/auth/oauth/pending", async (req, res) => {
-  const raw = readCookie(req, PENDING_COOKIE)
-  const profile = raw ? verifyPendingProfile(raw) : null
-
-  if (!profile) {
-    res.status(404).json({ error: "یافت نشد" })
-
-    return
-  }
-
-  res.json({
-    profile: { provider: profile.provider, email: profile.email, name: profile.name },
   })
 })
 
