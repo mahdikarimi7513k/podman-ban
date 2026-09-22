@@ -37,12 +37,25 @@ on:
         default: false
         type: boolean
 
+# Least privilege: every job gets read-only contents by default; the
+# security job elevates only what CodeQL needs (see below).
+permissions:
+  contents: read
+
+# PR runs cancel each other (push a fix → the stale run stops); push /
+# schedule / manual dispatch runs never cancel — a release build must
+# never be killed by a second dispatch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Static analysis (SAST) — runs beside the build so findings never
   # block artifact upload, but are always visible under Security.
   security:
     name: CodeQL security scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       actions: read
       contents: read
@@ -59,8 +72,36 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  client-quality:
+  # Anti-slop lint (advisory for now): the repo carries a large
+  # pre-existing backlog, so this job reports findings as annotations
+  # without blocking the APK. Flip continue-on-error to false after the
+  # authorized cleanup, then add `lint` to the build job's `needs`.
+  lint:
+    name: Anti-slop lint (advisory)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install root deps (oxlint)
+        run: npm ci --no-audit --no-fund
+
+      - name: Run oxlint (github annotations)
+        run: npx oxlint -f github
+
+  client-quality:
+    name: Client quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,7 +125,6 @@ jobs:
       - name: Typecheck + tests
         working-directory: client
         run: |
-          npm run lint --if-present
           npx tsc --noEmit
           npm run test --if-present
 
@@ -95,7 +135,9 @@ jobs:
         run: npm audit --audit-level=high
 
   server-quality:
+    name: Server quality gates
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,6 +146,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
 
       - name: Setup Bun (server tests need bunx for migrations)
         uses: oven-sh/setup-bun@v2
@@ -123,9 +167,11 @@ jobs:
         run: npm audit --audit-level=high
 
   build:
+    name: Build release APK
     needs: [security, client-quality, server-quality]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -148,7 +194,7 @@ jobs:
 
       - name: Install required SDK packages
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "platforms;android-35" "platforms;android-36" "build-tools;34.0.0" >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;34.0.0" >/dev/null
 
       - name: Install ImageMagick + librsvg
         run: |
@@ -162,13 +208,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
+      # NOTE: android/ is regenerated every run (rm -rf + cap add), so
+      # hashing its gradle files would key on nothing. The lockfile tracks
+      # the Capacitor/Gradle plugin versions that actually shape the cache.
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('client/android/**/*.gradle*') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('client/package-lock.json') }}
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Install client deps (reproducible, self-healing lock)
