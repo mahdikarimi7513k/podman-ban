@@ -70,8 +70,11 @@ export function SocialButtons({ enabled, disabled, onDone, onPending, onError }:
   }
 
   const startNative = async (provider: "google" | "github"): Promise<void> => {
+    // apiFetch prepends API_BASE itself — passing an absolute URL here
+    // used to double it (https://…https://…) and every APK tap died with
+    // "login failed" before the browser even opened. Relative path only.
     const { url } = await apiFetch<{ url: string }>(
-      `${API_BASE}/api/auth/oauth/${provider}?mode=native`,
+      `/api/auth/oauth/${provider}?mode=native`,
     )
 
     const { Browser } = await import("@capacitor/browser")

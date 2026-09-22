@@ -14,10 +14,21 @@ const apiFetch = vi.fn()
 vi.mock("@/lib/api-client", () => ({
   apiFetch: (url: string, init?: RequestInit) => apiFetch(url, init),
   ApiError: class extends Error {},
-  API_BASE: "",
+  // Absolute on purpose: the APK build bakes the real origin in, which is
+  // exactly what caught the double-prefix bug below.
+  API_BASE: "https://api.example.com",
 }))
 
 import { AuthView } from "./views/auth-view"
+import { SocialButtons } from "./social-buttons"
+
+declare global {
+  // Test-only bridge flag so isNativeApp() takes the APK path. Only ever
+  // assigned/deleted inside the native test below.
+  interface Window {
+    androidBridge?: unknown
+  }
+}
 
 function setConfig(oauth: { google: boolean; github: boolean }) {
   useApp.setState({
@@ -122,5 +133,37 @@ describe("OAuthPending field picker", () => {
     })
 
     expect(useApp.getState().user?.id).toBe("u9")
+  })
+})
+
+describe("SocialButtons native start", () => {
+  it("requests a relative start URL (apiFetch adds the origin itself)", async () => {
+    const user = userEvent.setup()
+
+    // Simulate the APK WebView for bridge detection.
+    window.androidBridge = {}
+
+    try {
+      render(
+        <SocialButtons
+          enabled={{ google: true, github: false }}
+          onDone={vi.fn()}
+          onPending={vi.fn()}
+          onError={vi.fn()}
+        />,
+      )
+
+      await user.click(await screen.findByText("ادامه با گوگل"))
+
+      // Regression: an absolute URL here got prefixed a second time
+      // (https://…https://…), so every APK tap failed before the system
+      // browser even opened. (The trailing undefined is the absent init,
+      // forwarded explicitly by the mock wrapper below.)
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith("/api/auth/oauth/google?mode=native", undefined),
+      )
+    } finally {
+      delete window.androidBridge
+    }
   })
 })
