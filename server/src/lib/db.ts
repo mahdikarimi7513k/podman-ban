@@ -1,4 +1,5 @@
 import { createRequire } from "node:module"
+import { existsSync } from "node:fs"
 import { dirname, isAbsolute, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { DefaultLogger } from "drizzle-orm"
@@ -68,6 +69,24 @@ function ensureRuntimeTables(exec: (sql: string) => void): void {
 
 function openDatabase(): BetterSQLite3Database<typeof schema> {
   const path = dbPath()
+
+  // Operational visibility: log the resolved file on every boot, and fail
+  // fast with an actionable message when its directory is missing. The raw
+  // better-sqlite3 TypeError ("directory does not exist") once surfaced on
+  // cPanel as a bare 503 with no hint which path or variable was wrong.
+  if (path !== ":memory:") {
+    console.log(`[db] sqlite file: ${path}`)
+
+    const parent = dirname(path)
+
+    if (!existsSync(parent)) {
+      throw new Error(
+        `Cannot open SQLite database at ${path}: directory ${parent} does not exist. ` +
+        `Upload the bundle's prisma/ directory or fix DATABASE_URL.`,
+      )
+    }
+  }
+
   // NOTE: drivers are require()d lazily (never statically imported) because
   // drizzle-orm/bun-sqlite hard-imports the bun: builtin, which crashes the
   // Node-based test runner at load time.
