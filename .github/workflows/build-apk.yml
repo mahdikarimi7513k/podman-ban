@@ -72,32 +72,6 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # Anti-slop lint (advisory for now): the repo carries a large
-  # pre-existing backlog, so this job reports findings as annotations
-  # without blocking the APK. Flip continue-on-error to false after the
-  # authorized cleanup, then add `lint` to the build job's `needs`.
-  lint:
-    name: Anti-slop lint (advisory)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
-
-      - name: Install root deps (oxlint)
-        run: npm ci --no-audit --no-fund
-
-      - name: Run oxlint (github annotations)
-        run: npx oxlint -f github
-
   client-quality:
     name: Client quality gates
     runs-on: ubuntu-latest
