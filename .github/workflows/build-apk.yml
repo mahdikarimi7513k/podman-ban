@@ -504,6 +504,37 @@ jobs:
           echo "--- variables.gradle ---"
           grep -E 'compileSdkVersion|targetSdkVersion|minSdkVersion' "$V" || true
 
+      # OAuth return path: after the system browser finishes the provider
+      # flow, the server redirects to <appId>://oauth?ticket=… — this
+      # intent-filter routes it back into the app (plain custom scheme,
+      # no assetlinks needed). Must match the server's OAUTH_APP_SCHEME.
+      - name: Register OAuth return scheme
+        working-directory: client/android
+        env:
+          APP_ID: ${{ inputs.app_id }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          p = "app/src/main/AndroidManifest.xml"
+          s = open(p, encoding="utf-8").read()
+          scheme = os.environ["APP_ID"].strip().lower()
+          assert scheme and scheme[0].isalpha(), "bad app_id for scheme"
+          marker = f'android:scheme="{scheme}"'
+          if marker not in s:
+              block = (
+                  "            <intent-filter>\n"
+                  '                <action android:name="android.intent.action.VIEW" />\n'
+                  '                <category android:name="android.intent.category.DEFAULT" />\n'
+                  '                <category android:name="android.intent.category.BROWSABLE" />\n'
+                  f'                <data android:scheme="{scheme}" />\n'
+                  "            </intent-filter>"
+              )
+              assert "</intent-filter>" in s, "no intent-filter anchor in manifest"
+              s = s.replace("</intent-filter>", "</intent-filter>\n" + block, 1)
+              open(p, "w", encoding="utf-8").write(s)
+          print("oauth return scheme:", scheme)
+          PYEOF
+
       # Release builds REQUIRE real signing secrets. A throwaway keystore
       # is only ever minted for explicit ad-hoc test builds (adhoc_sign),
       # which upload under a distinct -adhoc name with short retention —
