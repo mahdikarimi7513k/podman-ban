@@ -168,7 +168,7 @@ userRouter.put("/password", async (req, res) => {
   await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, user.id)).run()
 
   // A password change must kill every existing session — stolen refresh
-  // families would otherwise survive up to their full 7-day lifetime.
+  // families would otherwise survive up to their full 30-day lifetime.
   await db
     .update(refreshTokens)
     .set({ revokedAt: new Date() })

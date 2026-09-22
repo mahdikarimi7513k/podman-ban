@@ -9,7 +9,14 @@ function secret(): Uint8Array {
 }
 
 export const ACCESS_TTL_SEC = Number(process.env.JWT_ACCESS_TTL_SEC ?? 900)
-export const REFRESH_TTL_SEC = Number(process.env.JWT_REFRESH_TTL_SEC ?? 604800)
+
+// 30 days: rotation already extends this for active users, but students
+// use the app intermittently (weekly rhythm, holidays) — a 7-day window
+// logged them out "out of nowhere" and felt like a bug. The theft
+// posture is unchanged: 15-minute access tokens, rotation with reuse
+// detection, and httpOnly cookies all stay as they are.
+// Override per deployment with JWT_REFRESH_TTL_SEC (seconds).
+export const REFRESH_TTL_SEC = Number(process.env.JWT_REFRESH_TTL_SEC ?? 2592000)
 
 export interface AccessPayload extends JWTPayload {
   sub: string          // user id

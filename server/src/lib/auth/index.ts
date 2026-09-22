@@ -4,7 +4,7 @@
  * Barrel re-exports so callers can `import { ... } from "@/lib/auth"`.
  *
  *  - password.ts  : bcrypt hashing (12 rounds)
- *  - jwt.ts       : HS256 access (15m) + refresh (7d) with issuer/audience
+ *  - jwt.ts       : HS256 access (15m) + refresh (30d) with issuer/audience
  *  - csrf.ts      : HMAC-SHA256 double-submit token tied to userId
  *  - rate-limit.ts: in-memory sliding-window limiter
  *  - cookies.ts   : httpOnly + Secure + SameSite=Strict cookie helpers (Express)

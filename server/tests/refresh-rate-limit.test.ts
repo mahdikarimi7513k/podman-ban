@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from "vitest"
 import { http } from "./helpers.js"
+import { REFRESH_TTL_SEC } from "../src/lib/auth/jwt.js"
 
 // Unique spoofed source for this file (TRUST_PROXY=true): the per-IP bucket
 // is keyed off it, so hammering here can never throttle other files.
@@ -54,5 +55,14 @@ describe("refresh rate limit", () => {
     const res = await refreshWithGarbage(OTHER_XFF)
 
     expect(res.status).toBe(401)
+  })
+})
+
+describe("refresh lifetime", () => {
+  it("defaults to 30 days so intermittent users stay logged in", () => {
+    // Regression pin: a 7-day window logged weekly users out "out of
+    // nowhere". Rotation still extends this for active users; override
+    // per deployment with JWT_REFRESH_TTL_SEC (seconds).
+    expect(REFRESH_TTL_SEC).toBe(30 * 24 * 3600)
   })
 })
