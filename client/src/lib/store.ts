@@ -31,6 +31,7 @@ export interface AppUser {
   id: string
   name: string
   username: string
+  email: string | null
   field: "FANI_HERFEI" | "KARDANESH"
   role: "STUDENT" | "ADMIN" | "CONTENT_ADMIN"
   totalTests: number
@@ -48,6 +49,9 @@ export interface RemoteConfigState {
   negativeMarking: boolean
   // Nightly daily-goal reminder (23:00 Tehran) kill-switch.
   dailyGoalNotify: boolean
+  // Social-login capability (computed from server env, never stored).
+  // Absent on old cached payloads → no social buttons (server enforces).
+  oauth?: { google: boolean; github: boolean }
   // absent on old cached payloads → treat as open (server enforces anyway)
   registrationOpen?: boolean
   registrationMessage?: string

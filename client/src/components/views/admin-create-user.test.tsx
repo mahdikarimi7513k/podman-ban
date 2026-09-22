@@ -58,7 +58,7 @@ describe("AdminUsers create-user password field", () => {
     expect(screen.getByText("ساخت کاربر")).toBeInTheDocument()
   })
 
-  it("submits name/username/password/field and clears the form", async () => {
+  it("submits name/username/password/email/field and clears the form", async () => {
     const user = userEvent.setup()
     render(<AdminView />)
     await user.click(screen.getByText("کاربران"))
@@ -66,6 +66,7 @@ describe("AdminUsers create-user password field", () => {
     await user.type(screen.getByPlaceholderText("نام و نام خانوادگی"), "تست تازه")
     await user.type(screen.getByPlaceholderText("username"), "freshuser1")
     await user.type(screen.getByPlaceholderText(PW_PLACEHOLDER), "Fresh-1234")
+    await user.type(screen.getByPlaceholderText(/ایمیل/), "fresh1@mail.com")
     await user.click(screen.getByText("ساخت کاربر"))
 
     await waitFor(() =>
@@ -78,6 +79,6 @@ describe("AdminUsers create-user password field", () => {
       (c) => c[0] === "/api/admin/users" && (c[1] as RequestInit)?.method === "POST",
     )
     const body = JSON.parse((postCall?.[1] as RequestInit)?.body as string)
-    expect(body).toMatchObject({ username: "freshuser1", password: "Fresh-1234" })
+    expect(body).toMatchObject({ username: "freshuser1", password: "Fresh-1234", email: "fresh1@mail.com" })
   })
 })

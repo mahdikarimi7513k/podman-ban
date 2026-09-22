@@ -73,6 +73,7 @@ function setUser(id: string | null): void {
     id,
     name: "مدیر",
     username: "admin",
+    email: null,
     field: "FANI_HERFEI",
     role: "ADMIN",
     totalTests: 0,

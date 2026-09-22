@@ -5,8 +5,9 @@ import { transitionBase } from "@/lib/motion"
 import { GraduationCap, Loader2, User, UserX } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
-import { sanitizeUsername, sanitizeName, clampPassword } from "@/lib/sanitize"
+import { sanitizeUsername, sanitizeName, sanitizeEmail, clampPassword } from "@/lib/sanitize"
 import type { AppUser } from "@/lib/store"
+import { SocialButtons, type PendingOAuth } from "@/components/social-buttons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,6 +25,7 @@ const FIELD_LABELS = {
   username: "نام کاربری",
   password: "رمز عبور",
   name: "نام و نام خانوادگی",
+  email: "ایمیل",
 } as const
 
 export function AuthView() {
@@ -37,11 +39,35 @@ export function AuthView() {
   const [name, setName] = React.useState<FieldState>({ value: "" })
   const [username, setUsername] = React.useState<FieldState>({ value: "" })
   const [password, setPassword] = React.useState<FieldState>({ value: "" })
+  const [email, setEmail] = React.useState<FieldState>({ value: "" })
   const [field, setField] = React.useState<"FANI_HERFEI" | "KARDANESH">(
     "FANI_HERFEI",
   )
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
+  // Social signup waiting for a study-field pick (verified profile is
+  // parked server-side; nothing here is trusted input).
+  const [pending, setPending] = React.useState<PendingOAuth | null>(null)
+
+  // Social web flow lands back here with a pending cookie (no session
+  // yet): pick up the verified profile for the field picker. 404 means
+  // no pending signup — the normal case.
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch<{ profile: PendingOAuth }>("/api/auth/oauth/pending")
+
+        if (!cancelled) setPending(res.profile)
+      } catch {
+        /* none pending */
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const validate = (): boolean => {
     let ok = true
@@ -71,6 +97,13 @@ export function AuthView() {
         setName((s) => ({ ...s, error: "نام حداقل ۲ نویسه باشد" }))
         ok = false
       } else setName((s) => ({ ...s, error: undefined }))
+
+      const e = email.value.trim().toLowerCase().replace(/\s+/g, "")
+
+      if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+        setEmail((s) => ({ ...s, error: "ایمیل معتبر وارد کنید" }))
+        ok = false
+      } else setEmail((s) => ({ ...s, error: undefined }))
     }
     return ok
   }
@@ -89,6 +122,7 @@ export function AuthView() {
               name: name.value.trim(),
               username: username.value,
               password: password.value,
+              email: email.value.trim().toLowerCase().replace(/\s+/g, ""),
               field,
             }
       const res = await apiFetch<{ user: AppUser }>(endpoint, {
@@ -120,6 +154,16 @@ export function AuthView() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            {pending ? (
+              <OAuthPending
+                pending={pending}
+                onDone={(u) => {
+                  setPending(null)
+                  setUser(u)
+                }}
+                onCancel={() => setPending(null)}
+              />
+            ) : (
             <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
               <TabsList className="grid grid-cols-2 w-full">
                 <TabsTrigger value="login" className="cursor-pointer">ورود</TabsTrigger>
@@ -140,14 +184,23 @@ export function AuthView() {
                   name={name}
                   username={username}
                   password={password}
+                  email={email}
                   field={field}
                   submitting={submitting}
                   formError={formError}
                   onNameChange={(v) => setName({ value: sanitizeName(v) })}
                   onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
                   onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
+                  onEmailChange={(v) => setEmail({ value: sanitizeEmail(v) })}
                   onFieldChange={setField}
                   onSubmit={submit}
+                />
+                <SocialButtons
+                  enabled={config?.oauth ?? { google: false, github: false }}
+                  disabled={submitting}
+                  onDone={setUser}
+                  onPending={setPending}
+                  onError={setFormError}
                 />
                 </motion.div>
                 </AnimatePresence>
@@ -162,30 +215,51 @@ export function AuthView() {
                   transition={transitionBase}
                 >
                 {!registrationOpen ? (
-                  <RegistrationClosed
-                    message={registrationMessage}
-                    onBackToLogin={() => setMode("login")}
-                  />
+                  <>
+                    <RegistrationClosed
+                      message={registrationMessage}
+                      onBackToLogin={() => setMode("login")}
+                    />
+                    <SocialButtons
+                      enabled={config?.oauth ?? { google: false, github: false }}
+                      disabled={submitting}
+                      onDone={setUser}
+                      onPending={setPending}
+                      onError={setFormError}
+                    />
+                  </>
                 ) : (
-                  <AuthForm
-                    mode="register"
-                    name={name}
-                    username={username}
-                    password={password}
-                    field={field}
-                    submitting={submitting}
-                    formError={formError}
-                  onNameChange={(v) => setName({ value: sanitizeName(v) })}
-                  onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
-                  onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
-                    onFieldChange={setField}
-                    onSubmit={submit}
-                  />
+                  <>
+                    <AuthForm
+                      mode="register"
+                      name={name}
+                      username={username}
+                      password={password}
+                      email={email}
+                      field={field}
+                      submitting={submitting}
+                      formError={formError}
+                    onNameChange={(v) => setName({ value: sanitizeName(v) })}
+                    onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
+                    onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
+                    onEmailChange={(v) => setEmail({ value: sanitizeEmail(v) })}
+                      onFieldChange={setField}
+                      onSubmit={submit}
+                    />
+                    <SocialButtons
+                      enabled={config?.oauth ?? { google: false, github: false }}
+                      disabled={submitting}
+                      onDone={setUser}
+                      onPending={setPending}
+                      onError={setFormError}
+                    />
+                  </>
                 )}
                 </motion.div>
                 </AnimatePresence>
               </TabsContent>
             </Tabs>
+            )}
           </div>
         </div>
       </main>
@@ -223,17 +297,111 @@ function RegistrationClosed({
   )
 }
 
+/**
+ * Study-field picker for a verified social profile that has no account
+ * yet. The profile is parked server-side; this screen only collects the
+ * one NOT NULL column the signup still needs.
+ */
+function OAuthPending({
+  pending,
+  onDone,
+  onCancel,
+}: {
+  pending: PendingOAuth
+  onDone: (user: AppUser) => void
+  onCancel: () => void
+}) {
+  const [field, setField] = React.useState<"FANI_HERFEI" | "KARDANESH">("FANI_HERFEI")
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const confirm = async (): Promise<void> => {
+    if (submitting) return
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      const res = await apiFetch<{ user: AppUser }>("/api/auth/oauth/complete", {
+        method: "POST",
+        body: JSON.stringify({ field }),
+      })
+
+      onDone(res.user)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "خطایی رخ داد. دوباره تلاش کنید.")
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="space-y-1 text-center">
+        <p className="text-base font-semibold">یک قدم مانده، {pending.name}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed" dir="ltr">
+          {pending.email}
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          رشته‌ات را انتخاب کن تا حسابت ساخته شود
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="رشته تحصیلی">
+        {(["FANI_HERFEI", "KARDANESH"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            role="radio"
+            aria-checked={field === f}
+            onClick={() => setField(f)}
+            className={cn(
+              "min-h-[44px] rounded-md border text-sm font-medium transition-colors cursor-pointer",
+              field === f
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-background hover:bg-accent",
+            )}
+          >
+            {f === "FANI_HERFEI" ? "شبکه" : "حسابداری"}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+          {error}
+        </p>
+      )}
+      <Button
+        type="button"
+        onClick={() => void confirm()}
+        disabled={submitting}
+        className="w-full h-11 text-base cursor-pointer"
+      >
+        {submitting ? "در حال ساخت حساب…" : "ساخت حساب"}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onCancel}
+        disabled={submitting}
+        className="w-full cursor-pointer"
+      >
+        انصراف
+      </Button>
+    </div>
+  )
+}
+
 interface AuthFormProps {
   mode: Mode
   name: FieldState
   username: FieldState
   password: FieldState
+  email: FieldState
   field: "FANI_HERFEI" | "KARDANESH"
   submitting: boolean
   formError: string | null
   onNameChange: (v: string) => void
   onUsernameChange: (v: string) => void
   onPasswordChange: (v: string) => void
+  onEmailChange: (v: string) => void
   onFieldChange: (f: "FANI_HERFEI" | "KARDANESH") => void
   onSubmit: (e: React.FormEvent) => void
 }
@@ -244,12 +412,14 @@ function AuthForm(props: AuthFormProps) {
     name,
     username,
     password,
+    email,
     field,
     submitting,
     formError,
     onNameChange,
     onUsernameChange,
     onPasswordChange,
+    onEmailChange,
     onFieldChange,
     onSubmit,
   } = props
@@ -276,6 +446,28 @@ function AuthForm(props: AuthFormProps) {
             placeholder="مثلاً: علی رضایی"
             maxLength={40}
             className="h-11"
+          />
+        </Field>
+      )}
+
+      {mode === "register" && (
+        <Field label={FIELD_LABELS.email} htmlFor="auth-email" error={email.error}>
+          <Input
+            id="auth-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            dir="ltr"
+            value={email.value}
+            onChange={(e) => onEmailChange(e.target.value)}
+            aria-invalid={!!email.error}
+            aria-describedby={email.error ? "auth-email-error" : undefined}
+            placeholder="name@mail.com"
+            maxLength={254}
+            className="h-11 text-right"
+            spellCheck={false}
+            autoCapitalize="off"
           />
         </Field>
       )}

@@ -73,6 +73,7 @@ beforeEach(() => {
       id: "u1",
       name: "تست",
       username: "test",
+      email: null,
       field: "FANI_HERFEI",
       role: "STUDENT",
       totalTests: 0,

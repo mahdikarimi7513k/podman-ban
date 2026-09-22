@@ -77,6 +77,7 @@ interface AppUserLite {
   id: string
   username: string
   name: string
+  email: string | null
   field: "FANI_HERFEI" | "KARDANESH"
   role: "STUDENT" | "ADMIN"
   totalTests: number
@@ -661,6 +662,7 @@ function AdminUsers() {
   const [cName, setCName] = React.useState("")
   const [cUsername, setCUsername] = React.useState("")
   const [cPassword, setCPassword] = React.useState("")
+  const [cEmail, setCEmail] = React.useState("")
   const [cField, setCField] = React.useState<"FANI_HERFEI" | "KARDANESH">("FANI_HERFEI")
   const [creating, setCreating] = React.useState(false)
 
@@ -678,15 +680,24 @@ function AdminUsers() {
       toast({ variant: "destructive", title: "رمز معتبر نیست", description: "حداقل ۸ نویسه شامل حرف و عدد" })
       return
     }
+
+    const email = cEmail.trim().toLowerCase().replace(/\s+/g, "")
+
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ variant: "destructive", title: "ایمیل معتبر نیست", description: "یک ایمیل معتبر وارد کنید" })
+
+      return
+    }
     setCreating(true)
     try {
       await apiFetch("/api/admin/users", {
         method: "POST",
-        body: JSON.stringify({ name: cName.trim(), username, password: cPassword, field: cField }),
+        body: JSON.stringify({ name: cName.trim(), username, password: cPassword, email, field: cField }),
       })
       setCName("")
       setCUsername("")
       setCPassword("")
+      setCEmail("")
       await load()
       toast({ title: "کاربر ساخته شد", description: `«${username}» حالا می‌تواند وارد شود.` })
     } catch (err) {
@@ -734,7 +745,8 @@ function AdminUsers() {
   const filtered = users?.filter(
     (u) =>
       u.name.includes(search) ||
-      u.username.toLowerCase().includes(search.toLowerCase()),
+      u.username.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()),
   )
 
   if (loading) {
@@ -781,6 +793,18 @@ function AdminUsers() {
             dir="ltr"
             autoComplete="new-password"
           />
+          <Input
+            placeholder="ایمیل (مثل name@mail.com)"
+            type="email"
+            inputMode="email"
+            value={cEmail}
+            onChange={(e) => setCEmail(e.target.value)}
+            className="h-10 text-left"
+            dir="ltr"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={254}
+          />
           <Select value={cField} onValueChange={(v) => setCField(v as "FANI_HERFEI" | "KARDANESH")}>
             <SelectTrigger className="h-10 cursor-pointer"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -817,7 +841,7 @@ function AdminUsers() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{u.name}</p>
                 <p className="text-[11px] text-muted-foreground truncate" dir="ltr">
-                  {u.username}
+                  {u.username}{u.email ? ` · ${u.email}` : ""}
                 </p>
               </div>
               <div className="text-left shrink-0">

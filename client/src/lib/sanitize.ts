@@ -49,6 +49,15 @@ export function sanitizeName(value: string): string {
     .slice(0, 40)
 }
 
+/** Login email: readable text, lowercased, no whitespace, ≤254. The
+ *  server re-validates the format and rejects duplicates. */
+export function sanitizeEmail(value: string): string {
+  return stripInvisible(value, false)
+    .toLowerCase()
+    .replace(WHITESPACE_RUN_RE, "")
+    .slice(0, 254)
+}
+
 /** Password: invisible chars stripped, ≤72 (bcrypt limit). Never trimmed —
  *  visible spaces are legal password characters. */
 export function clampPassword(value: string): string {

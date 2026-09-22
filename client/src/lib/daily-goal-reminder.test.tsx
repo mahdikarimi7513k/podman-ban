@@ -59,6 +59,7 @@ function setConfigAndUser(notify: boolean, prefs: string): void {
       id: "u1",
       name: "کاربر",
       username: "user1",
+      email: null,
       field: "FANI_HERFEI",
       role: "STUDENT",
       totalTests: 0,
