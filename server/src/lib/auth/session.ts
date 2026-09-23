@@ -247,36 +247,55 @@ export async function rotateRefreshToken(
   const user = await db.select().from(users).where(eq(users.id, payload.sub)).get()
   if (!user) return null
 
-    // Revoke the presented token — conditionally, so two parallel rotations with
-  // the same cookie cannot both win (TOCTOU): the loser is treated as reuse.
-  const revoked = await db
-    .update(refreshTokens)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(refreshTokens.id, record.id), isNull(refreshTokens.revokedAt)))
-    .run()
-    if (revoked.changes === 0) {
-    await db
-      .update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(refreshTokens.family, payload.fam), isNull(refreshTokens.revokedAt)))
-      .run()
-    return null
-  }
-
+  // Sign BEFORE the swap: better-sqlite3 transactions are synchronous and
+  // cannot span the async jose call, so the successor is minted first and
+  // the revoke+insert below commit as one atomic unit.
   const newJti = randomUUID()
   const newRefresh = await signRefreshToken({
     sub: user.id,
     jti: newJti,
     fam: payload.fam,
   })
-  await db.insert(refreshTokens).values({
+
+  const newRow = {
     userId: user.id,
     tokenHash: sha256(newRefresh),
     family: payload.fam,
     userAgent: headerString(req.headers["user-agent"]) ?? null,
     ip: clientIp(req),
     expiresAt: new Date(Date.now() + REFRESH_TTL_SEC * 1000),
+  }
+
+  // Atomic swap — revoke the presented token and insert its successor in
+  // ONE transaction. Revoke and insert used to be two separate statements
+  // with an async gap between them: a parallel request losing the
+  // conditional revoke nuked a family whose successor did not exist yet,
+  // so the winner's token survived the nuke and the replay kept scoring
+  // 200 in the grace window. Now the loser can only lose after the winner
+  // committed, which means the successor exists and the nuke is effective.
+  const swapped = db.transaction((tx) => {
+    const revoked = tx
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.id, record.id), isNull(refreshTokens.revokedAt)))
+      .run()
+
+    if (revoked.changes === 0) return false
+
+    tx.insert(refreshTokens).values(newRow).run()
+
+    return true
   })
+
+  if (!swapped) {
+    await db
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.family, payload.fam), isNull(refreshTokens.revokedAt)))
+      .run()
+
+    return null
+  }
 
   const sessionUser: SessionUser = {
     id: user.id,

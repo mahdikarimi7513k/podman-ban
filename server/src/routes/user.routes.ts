@@ -17,6 +17,9 @@ import { answers, examSessions, refreshTokens, users } from "../lib/db/schema.js
 import {
   getSession,
   requireCsrf,
+  rateLimit,
+  clientIp,
+  socketIp,
 } from "../lib/auth/index.js"
 import {
   hashPassword,
@@ -136,6 +139,24 @@ userRouter.put("/password", async (req, res) => {
   }
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+    return
+  }
+
+  // A stolen session must not grant unlimited guesses at the current
+  // password: changing it is rare, so the quota is tight (5/5min per
+  // account, with IP + socket floors like the login hardening).
+  const ip = clientIp(req)
+  const sip = socketIp(req)
+  const rlSelf = rateLimit(`pwd-u:${user.id}`, 5, 300)
+  const rlIp = rateLimit(`pwd-ip:${ip}`, 20, 300)
+  const rlSock = rateLimit(`pwd-ip-sock:${sip}`, 300, 300)
+
+  if (!rlSelf.ok || !rlIp.ok || !rlSock.ok) {
+    res.status(429).json({
+      error: "تلاش‌های بیش از حد",
+      retryAfterSec: Math.max(rlSelf.retryAfterSec, rlIp.retryAfterSec, rlSock.retryAfterSec),
+    })
+
     return
   }
 

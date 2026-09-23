@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 /**
- * Seam: ThemeToggle rendered behavior (DOM), with next-themes mocked.
+ * Seam: ThemeToggle rendered behavior (DOM), with the local provider mocked.
  *
  * Contract:
  *   - The button's accessible label states the CURRENT theme in Persian
@@ -17,7 +17,7 @@ const mockState = vi.hoisted(() => ({
   setThemeImpl: null as null | ((t: string) => void),
 }))
 
-vi.mock("next-themes", () => ({
+vi.mock("@/lib/theme-provider", () => ({
   useTheme: () => ({
     theme: mockState.theme,
     setTheme: (t: string) => mockState.setThemeImpl?.(t),

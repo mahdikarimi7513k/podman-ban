@@ -1,0 +1,1 @@
+ALTER TABLE `ExamSession` ADD `pausedAt` integer;

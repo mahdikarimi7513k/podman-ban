@@ -1,7 +1,7 @@
 import * as React from "react"
 import { motion, AnimatePresence, MotionConfig } from "framer-motion"
 import { fadeUp, transitionFast } from "@/lib/motion"
-import { ThemeProvider } from "next-themes"
+import { ThemeProvider } from "@/lib/theme-provider"
 import { AppBootstrap } from "@/components/app-bootstrap"
 import { ServiceWorkerRegister } from "@/components/sw-register"
 import { Toaster } from "@/components/ui/toaster"
@@ -271,12 +271,7 @@ function Footer() {
 
 export default function App() {
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem
-      disableTransitionOnChange
-    >
+    <ThemeProvider>
       <MotionConfig reducedMotion="user">
         <AppBootstrap>
           <AppContent />

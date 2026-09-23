@@ -153,6 +153,41 @@ export function buildApp(): express.Express {
     res.status(404).json({ error: "یافت نشد" })
   })
 
+  // --- body-parser failures are client errors, not server faults ---
+  // Malformed JSON (entity.parse.failed) and oversized bodies
+  // (entity.too.large, over the 3mb json limit) must answer 4xx JSON.
+  // Letting them fall through to the 500 handler below pollutes the
+  // error log with client garbage and hands probers a distinguishable
+  // failure mode to fingerprint against.
+
+  // Express types the middleware error as any; naming the handler type
+  // keeps the unknown-param rule quiet without weakening anything —
+  // the instanceof gate below still narrows before any property read.
+  const jsonBodyError: express.ErrorRequestHandler = (err, _req, res, next) => {
+    if (err instanceof Error) {
+      // SAFETY: body-parser tags its body errors with a type string
+      // (entity.parse.failed / entity.too.large) — anything else falls
+      // through to the generic handler below.
+      const tagged = err as Error & { type?: string }
+
+      if (tagged.type === "entity.parse.failed") {
+        res.status(400).json({ error: "قالب درخواست نامعتبر است" })
+
+        return
+      }
+
+      if (tagged.type === "entity.too.large") {
+        res.status(413).json({ error: "بدنه‌ی درخواست بیش از حد بزرگ است" })
+
+        return
+      }
+    }
+
+    next(err)
+  }
+
+  app.use(jsonBodyError)
+
   // --- generic error handler (no stack leak to clients) ---
   // Express default sends HTML + stack in dev; production must get JSON only.
   // ponytail: one handler, no per-route try/catch sprawl.

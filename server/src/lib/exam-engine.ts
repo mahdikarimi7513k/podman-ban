@@ -329,6 +329,165 @@ export function computeScore(args: {
   return Math.max(0, Math.min(100, pct))
 }
 
+/**
+ * Remaining seconds for a session, pure and unit-testable.
+ * A paused session reports what was left at the freeze moment; a running
+ * one counts down from startedAt. Never negative — expiry is 0.
+ */
+export function remainingSec(
+  startedAtMs: number,
+  durationSec: number,
+  pausedAtMs: number | null,
+  nowMs = Date.now(),
+): number {
+  const refMs = pausedAtMs ?? nowMs
+
+  return Math.max(0, durationSec - Math.floor((refMs - startedAtMs) / 1000))
+}
+
+export interface PauseResult {
+  pausedAt: Date
+  remainingSec: number
+}
+
+/**
+ * Freeze a running session's clock at this instant (user pressed exit).
+ * Idempotent: pausing twice keeps the FIRST freeze moment. Refused once
+ * the deadline already passed — freezing zero buys nothing and would
+ * only mask an expired exam as pausable.
+ */
+export async function pauseExam(
+  sessionId: string,
+  userId: string,
+): Promise<{ ok: true; result: PauseResult } | { ok: false; code: string }> {
+  const session = await db
+    .select({
+      id: examSessions.id,
+      userId: examSessions.userId,
+      status: examSessions.status,
+      startedAt: examSessions.startedAt,
+      durationSec: examSessions.durationSec,
+      pausedAt: examSessions.pausedAt,
+    })
+    .from(examSessions)
+    .where(eq(examSessions.id, sessionId))
+    .get()
+
+  if (!session || session.userId !== userId) return { ok: false, code: "NOT_FOUND" }
+
+  if (session.status !== "IN_PROGRESS") return { ok: false, code: "NOT_IN_PROGRESS" }
+
+  if (session.pausedAt) {
+    return {
+      ok: true,
+      result: {
+        pausedAt: session.pausedAt,
+        remainingSec: remainingSec(
+          session.startedAt.getTime(),
+          session.durationSec,
+          session.pausedAt.getTime(),
+        ),
+      },
+    }
+  }
+
+  const now = new Date()
+
+  if (remainingSec(session.startedAt.getTime(), session.durationSec, null, now.getTime()) <= 0) {
+    return { ok: false, code: "EXPIRED" }
+  }
+
+  await db
+    .update(examSessions)
+    .set({ pausedAt: now })
+    .where(
+      and(
+        eq(examSessions.id, sessionId),
+        eq(examSessions.status, "IN_PROGRESS"),
+        isNull(examSessions.pausedAt),
+      ),
+    )
+    .run()
+
+  return {
+    ok: true,
+    result: {
+      pausedAt: now,
+      remainingSec: remainingSec(
+        session.startedAt.getTime(),
+        session.durationSec,
+        now.getTime(),
+      ),
+    },
+  }
+}
+
+export interface ResumeResult {
+  startedAt: Date
+  pausedAt: null
+  remainingSec: number
+}
+
+/**
+ * Restart a paused clock: startedAt shifts forward by the away time, so
+ * every deadline/timer computation downstream (recordAnswer, ExamTimer)
+ * transparently continues with the frozen remainder. Conditional on
+ * still-paused so double resumes cannot stack shifts.
+ */
+export async function resumeExam(
+  sessionId: string,
+  userId: string,
+): Promise<{ ok: true; result: ResumeResult } | { ok: false; code: string }> {
+  const session = await db
+    .select({
+      id: examSessions.id,
+      userId: examSessions.userId,
+      status: examSessions.status,
+      startedAt: examSessions.startedAt,
+      durationSec: examSessions.durationSec,
+      pausedAt: examSessions.pausedAt,
+    })
+    .from(examSessions)
+    .where(eq(examSessions.id, sessionId))
+    .get()
+
+  if (!session || session.userId !== userId) return { ok: false, code: "NOT_FOUND" }
+
+  if (session.status !== "IN_PROGRESS") return { ok: false, code: "NOT_IN_PROGRESS" }
+
+  if (!session.pausedAt) return { ok: false, code: "NOT_PAUSED" }
+
+  const now = new Date()
+
+  const shifted = new Date(
+    session.startedAt.getTime() + (now.getTime() - session.pausedAt.getTime()),
+  )
+
+  const moved = await db
+    .update(examSessions)
+    .set({ startedAt: shifted, pausedAt: null })
+    .where(
+      and(
+        eq(examSessions.id, sessionId),
+        eq(examSessions.userId, userId),
+        eq(examSessions.status, "IN_PROGRESS"),
+        eq(examSessions.pausedAt, session.pausedAt),
+      ),
+    )
+    .run()
+
+  if (moved.changes === 0) return { ok: false, code: "NOT_PAUSED" }
+
+  return {
+    ok: true,
+    result: {
+      startedAt: shifted,
+      pausedAt: null,
+      remainingSec: remainingSec(shifted.getTime(), session.durationSec, null, now.getTime()),
+    },
+  }
+}
+
 /** Per-module progress for the report card. */
 export interface ModuleProgress {
   moduleId: string

@@ -1,6 +1,6 @@
 
 import * as React from "react"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/lib/theme-provider"
 import { Moon, Sun, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { nextTheme, themeLabel, themeAnnouncement } from "@/lib/theme"

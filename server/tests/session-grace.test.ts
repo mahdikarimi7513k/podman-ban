@@ -101,3 +101,38 @@ describe("refresh grace window", () => {
     expect(dead.status).toBe(401)
   })
 })
+
+/**
+ * Seam: parallel refresh atomicity.
+ *
+ * Revoke+insert used to be two statements with an async gap: a parallel
+ * request losing the conditional revoke nuked a family whose successor
+ * did not exist yet, so the winner's token survived the nuke and replays
+ * kept scoring 200 in the grace window. The swap is one transaction now,
+ * so whatever the interleave: exactly one successor is ever minted, no
+ * request errors, and no silent survivor.
+ */
+describe("parallel refresh atomicity", () => {
+  it("mints exactly one successor under a 6-way same-cookie race", async () => {
+    await ensureUser("race_user", "STUDENT", "FANI_HERFEI")
+    const jar1 = await loginJar("race_user", PASSWORD)
+    const before = cookieOf(jar1, "pb_refresh")
+
+    const attempts = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        http.post("/api/auth/refresh").set("Cookie", jar1).send(),
+      ),
+    )
+
+    for (const r of attempts) {
+      expect([200, 401]).toContain(r.status)
+    }
+
+    const minted = attempts
+      .map((r) => cookieOf(jarOf(r), "pb_refresh"))
+      .filter((c) => c !== "" && c !== before)
+
+    expect(minted.length).toBe(1)
+    expect(new Set(minted).size).toBe(1)
+  })
+})

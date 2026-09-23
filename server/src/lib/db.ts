@@ -63,10 +63,10 @@ export const RUNTIME_DDL = [
   "CREATE INDEX IF NOT EXISTS `Notification_createdAt_idx` ON `Notification` (`createdAt`)",
 ]
 
-// Mirrors drizzle/0003_add-user-email-oauth.sql + 0004 (IF NOT EXISTS is
-// legal for tables and indexes — only the ALTERs below need the wrapper).
-// Kept as a separate array so the 0001 parity test keeps asserting its
-// exact two statements; see the oauth parity test beside it.
+// Mirrors drizzle/0003_add-user-email-oauth.sql + 0004 + 0005 (IF NOT
+// EXISTS is legal for tables and indexes — only the ALTERs below need
+// the wrapper). Kept as a separate array so the 0001 parity test keeps
+// asserting its exact two statements; see the other parity test.
 export const RUNTIME_DDL_OAUTH = [
   `CREATE TABLE IF NOT EXISTS \`OauthTicket\` (
 	\`id\` text PRIMARY KEY NOT NULL,
@@ -103,6 +103,7 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `User` ADD `email` text",
   "ALTER TABLE `User` ADD `googleSub` text",
   "ALTER TABLE `User` ADD `githubId` text",
+  "ALTER TABLE `ExamSession` ADD `pausedAt` integer",
 ]
 
 // Exported for the old-schema boot test (idempotent re-runs).

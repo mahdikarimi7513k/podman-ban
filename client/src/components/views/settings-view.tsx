@@ -17,7 +17,8 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/lib/theme-provider"
+import type { Theme } from "@/lib/theme"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -95,7 +96,7 @@ export function SettingsView() {
   )
 
   const themeOptions: Array<{
-    value: string
+    value: Theme
     label: string
     icon: typeof Moon
   }> = [

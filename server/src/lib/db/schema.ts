@@ -133,6 +133,11 @@ export const examSessions = sqliteTable("ExamSession", {
     .notNull()
     .$defaultFn(() => new Date()),
   finishedAt: integer("finishedAt", { mode: "timestamp_ms" }),
+  // Set when the user exits mid-exam (pause): the wall clock stops here
+  // and resume shifts startedAt forward by the away time, so re-entry
+  // continues with the exact remaining time instead of bleeding it.
+  // NULL while running. Finish/score logic ignores it.
+  pausedAt: integer("pausedAt", { mode: "timestamp_ms" }),
   durationSec: integer("durationSec").notNull(),
   totalQuestions: integer("totalQuestions").notNull(),
   correctCount: integer("correctCount").notNull().default(0),

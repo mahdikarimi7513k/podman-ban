@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
+import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-library/react"
 import { ExamView } from "@/components/views/exam-view"
 import { useApp } from "@/lib/store"
 
@@ -59,6 +59,48 @@ function mockApi() {
   apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === "/api/exam/s1" && !init?.method) return sessionResponse()
     if (url === "/api/exam/s1/answer") return { ok: true }
+
+    if (url === "/api/exam/s1/pause" && init?.method === "POST") {
+      return { pausedAt: new Date().toISOString(), remainingSec: 1199 }
+    }
+
+    if (url === "/api/exam/s1/resume" && init?.method === "POST") {
+      return {
+        session: { id: "s1", startedAt: new Date().toISOString(), pausedAt: null, remainingSec: 1199 },
+      }
+    }
+
+    throw new Error(`unexpected fetch ${url}`)
+  })
+}
+
+/** Same session but timed (isPractice false) so the pause path engages. */
+function mockTimedApi(pausedAt: string | null = null) {
+  const timedSession = () => {
+    const base = sessionResponse()
+
+    return {
+      ...base,
+      // durationSec: 0 would expire the timer on mount and auto-submit.
+      session: { ...base.session, isPractice: false, durationSec: 1200, pausedAt },
+    }
+  }
+
+  apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === "/api/exam/s1" && !init?.method) return timedSession()
+
+    if (url === "/api/exam/s1/answer") return { ok: true }
+
+    if (url === "/api/exam/s1/pause" && init?.method === "POST") {
+      return { pausedAt: new Date().toISOString(), remainingSec: 1199 }
+    }
+
+    if (url === "/api/exam/s1/resume" && init?.method === "POST") {
+      return {
+        session: { id: "s1", startedAt: new Date().toISOString(), pausedAt: null, remainingSec: 1199 },
+      }
+    }
+
     throw new Error(`unexpected fetch ${url}`)
   })
 }
@@ -183,6 +225,78 @@ describe("ExamView question navigation stability", () => {
     } finally {
       Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true })
     }
+  })
+})
+
+/**
+ * Seam: exit freezes the server clock (pause), re-entry restarts it.
+ * Practice sessions have no timer, so exiting them must not pause.
+ */
+describe("ExamView pause on exit / resume on entry", () => {
+  it("POSTs pause when leaving a timed exam", async () => {
+    mockTimedApi()
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    expect(screen.getByText("متن سوال شماره سه")).toBeInTheDocument()
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /اتمام آزمون/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /خروج از آزمون/ }))
+    })
+
+    await waitFor(() =>
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/exam/s1/pause",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    )
+  })
+
+  it("skips pause when leaving a practice exam", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /رد شدن/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /اتمام آزمون/ }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /خروج از آزمون/ }))
+    })
+
+    await waitFor(() =>
+      expect(useApp.getState().view).toBe("home"),
+    )
+    expect(
+      apiFetchMock.mock.calls.some(([url]) => String(url).endsWith("/pause")),
+    ).toBe(false)
+  })
+
+  it("resumes a paused session on entry before painting questions", async () => {
+    mockTimedApi(new Date(Date.now() - 60_000).toISOString())
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    await waitFor(() =>
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/exam/s1/resume",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    )
   })
 })
 

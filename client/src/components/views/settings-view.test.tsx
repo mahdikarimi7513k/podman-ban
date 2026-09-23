@@ -34,7 +34,7 @@ vi.mock("@/lib/api-client", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
   ApiError: class extends Error {},
 }))
-vi.mock("next-themes", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }))
+vi.mock("@/lib/theme-provider", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }))
 vi.mock("@/components/chat-panel", () => ({ ChatPanel: () => <div /> }))
 
 import { SettingsView } from "./settings-view"

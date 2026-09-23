@@ -58,6 +58,7 @@ interface SessionInfo {
   isPractice?: boolean
   startedAt: string
   finishedAt: string | null
+  pausedAt: string | null
   scorePercent: number
 }
 
@@ -155,7 +156,28 @@ export function ExamView() {
     ;(async () => {
       try {
         const res = await fetchSessionOnce(examSessionId)
+
         if (cancelled) return
+
+        // Re-entering a paused exam restarts its clock first: resume
+        // shifts startedAt forward by the away time, so the timer below
+        // continues with the frozen remainder. A failed resume falls back
+        // to the loaded payload (same as before this feature).
+        if (res.session.pausedAt) {
+          try {
+            const resumed = await apiFetch<{ session: { startedAt: string; pausedAt: null } }>(
+              `/api/exam/${examSessionId}/resume`,
+              { method: "POST", body: JSON.stringify({}) },
+            )
+
+            if (cancelled) return
+
+            res.session = { ...res.session, startedAt: resumed.session.startedAt, pausedAt: null }
+          } catch {
+            /* frozen payload it is */
+          }
+        }
+
         setData(res)
         const initial: Record<string, number | null> = {}
         for (const q of res.questions) {
@@ -463,6 +485,18 @@ export function ExamView() {
 
   const doExitExam = () => {
     closeDialog()
+    // Freeze the server clock so re-entry resumes with the frozen remainder
+    // instead of bleeding it. Best-effort and non-blocking: an offline exit
+    // still leaves immediately (the timer just keeps running server-side),
+    // and practice has no timer to freeze.
+
+    if (data && !data.session.isPractice && examSessionId) {
+      void apiFetch(`/api/exam/${examSessionId}/pause`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).catch(() => {})
+    }
+
     // exitExam() owns the history retag — one exit path, one place.
     exitExam()
   }

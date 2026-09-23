@@ -7,6 +7,8 @@
  *   GET  /exam/:session               — get a running session + questions
  *   POST /exam/:session/answer       — record an answer (CSRF)
  *   POST /exam/:session/finish        — finish the session (CSRF)
+ *   POST /exam/:session/pause         — freeze the clock on exit (CSRF)
+ *   POST /exam/:session/resume        — restart a paused clock (CSRF)
  *   GET  /exam/:session/review        — review a finished session (with correct answers)
  *   POST /exam/:session/check         — practice-mode correct-answer peek (CSRF)
  *   GET  /exam/sessions               — finished-session history
@@ -16,7 +18,7 @@
  *   GET  /exam/leaderboard            — top students
  */
 
-import { Router } from "express"
+import { Router, type Response } from "express"
 import { z } from "zod"
 import { and, avg, count, desc, eq, inArray, max } from "drizzle-orm"
 import { db } from "../lib/db.js"
@@ -31,6 +33,9 @@ import {
   recordAnswer,
   finishExam,
   getUserProgress,
+  pauseExam,
+  resumeExam,
+  remainingSec,
 } from "../lib/exam-engine.js"
 import {
   listBooks,
@@ -415,6 +420,12 @@ examRouter.get("/exam/:session", async (req, res) => {
       isPractice: session.isPractice,
       startedAt: session.startedAt.toISOString(),
       finishedAt: session.finishedAt?.toISOString() ?? null,
+      pausedAt: session.pausedAt?.toISOString() ?? null,
+      remainingSec: remainingSec(
+        session.startedAt.getTime(),
+        session.durationSec,
+        session.pausedAt?.getTime() ?? null,
+      ),
       scorePercent: session.scorePercent,
     },
     questions,
@@ -484,6 +495,113 @@ examRouter.post("/exam/:session/finish", async (req, res) => {
     }
     res.status(500).json({ error: "خطا در پایان آزمون" })
   }
+})
+
+// ---- POST /exam/:session/pause + /resume (CSRF) --------------------------
+// Exit freezes the wall clock: pause stamps pausedAt, resume shifts
+// startedAt forward by the away time, so re-entry continues with the
+// exact frozen remainder (deadline math and ExamTimer both derive from
+// startedAt and need no other changes). Pausing an expired exam is
+// refused — freezing zero only masks a dead exam as pausable.
+
+function pauseQuota(userId: string, res: Response): boolean {
+  const rl = rateLimit(`exam-pause:${userId}`, 30, 600)
+
+  if (rl.ok) return true
+
+  res.status(429).json({ error: "تعداد درخواست بیش از حد مجاز است" })
+
+  return false
+}
+
+examRouter.post("/exam/:session/pause", async (req, res) => {
+  const user = await getSession(req)
+
+  if (!user) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
+    return
+  }
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  if (!pauseQuota(user.id, res)) return
+
+  const result = await pauseExam(req.params.session, user.id)
+
+  if (!result.ok) {
+    if (result.code === "NOT_FOUND") {
+      res.status(404).json({ error: "نشست آزمون یافت نشد" })
+
+      return
+    }
+
+    if (result.code === "EXPIRED") {
+      res.status(422).json({ error: "زمان آزمون تمام شده است" })
+
+      return
+    }
+
+    res.status(403).json({ error: "این آزمون دیگر فعال نیست" })
+
+    return
+  }
+
+  res.json({
+    pausedAt: result.result.pausedAt.toISOString(),
+    remainingSec: result.result.remainingSec,
+  })
+})
+
+examRouter.post("/exam/:session/resume", async (req, res) => {
+  const user = await getSession(req)
+
+  if (!user) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
+    return
+  }
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  if (!pauseQuota(user.id, res)) return
+
+  const result = await resumeExam(req.params.session, user.id)
+
+  if (!result.ok) {
+    if (result.code === "NOT_FOUND") {
+      res.status(404).json({ error: "نشست آزمون یافت نشد" })
+
+      return
+    }
+
+    if (result.code === "NOT_PAUSED") {
+      res.status(422).json({ error: "آزمون متوقف نشده است" })
+
+      return
+    }
+
+    res.status(403).json({ error: "این آزمون دیگر فعال نیست" })
+
+    return
+  }
+
+  res.json({
+    session: {
+      id: req.params.session,
+      startedAt: result.result.startedAt.toISOString(),
+      pausedAt: null,
+      remainingSec: result.result.remainingSec,
+    },
+  })
 })
 
 // ---- GET /exam/:session/review --------------------------------------

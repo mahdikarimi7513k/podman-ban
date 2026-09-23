@@ -28,7 +28,7 @@ vi.mock("@/lib/api-client", () => ({
   ApiError: class extends Error {},
 }))
 vi.mock("@/components/chat-panel", () => ({ ChatPanel: () => <div /> }))
-vi.mock("next-themes", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }))
+vi.mock("@/lib/theme-provider", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }))
 
 import { AdminView } from "./admin-view"
 

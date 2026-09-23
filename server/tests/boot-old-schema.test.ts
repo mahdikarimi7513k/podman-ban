@@ -25,6 +25,27 @@ const OLD_USER_DDL = `CREATE TABLE "User" (
   updatedAt integer NOT NULL
 )`
 
+// Pre-0005 shape: everything except pausedAt. A real old database has ALL
+// old tables — the guard only ever adds missing columns, never tables
+// (fresh databases come from drizzle-kit migrate instead).
+const OLD_EXAM_DDL = `CREATE TABLE "ExamSession" (
+  id text PRIMARY KEY NOT NULL,
+  userId text NOT NULL,
+  moduleId text NOT NULL,
+  status text NOT NULL DEFAULT 'IN_PROGRESS',
+  startedAt integer NOT NULL,
+  finishedAt integer,
+  durationSec integer NOT NULL,
+  totalQuestions integer NOT NULL,
+  correctCount integer NOT NULL DEFAULT 0,
+  wrongCount integer NOT NULL DEFAULT 0,
+  skippedCount integer NOT NULL DEFAULT 0,
+  scorePercent integer NOT NULL DEFAULT 0,
+  negativeMarking integer NOT NULL DEFAULT 1,
+  isPractice integer NOT NULL DEFAULT 0,
+  questionOrder text NOT NULL
+)`
+
 const dir = mkdtempSync(join(tmpdir(), "old-schema-"))
 
 const dbFile = join(dir, "old.db")
@@ -41,6 +62,7 @@ describe("boot against an old-schema database", () => {
   it("upgrades in place without touching existing rows", async () => {
     const seed = new Better(dbFile)
     seed.exec(OLD_USER_DDL)
+    seed.exec(OLD_EXAM_DDL)
     seed.exec(
       "INSERT INTO \"User\" (id, username, name, passwordHash, field, role, prefs, totalTests, createdAt, updatedAt) " +
       "VALUES ('u1', 'olduser', 'Old', 'hash', 'FANI_HERFEI', 'STUDENT', '{}', 3, 1, 1)",
