@@ -167,3 +167,17 @@ describe("SocialButtons native start", () => {
     }
   })
 })
+
+describe("Password warning", () => {
+  it("warns on the register tab that the password is unrecoverable, not on login", async () => {
+    const user = userEvent.setup()
+    render(<AuthView />)
+
+    await screen.findByPlaceholderText("username")
+    expect(screen.queryByText(/قابل بازیابی نیست/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("tab", { name: "ثبت‌نام" }))
+
+    expect(await screen.findByText(/قابل بازیابی نیست/)).toBeInTheDocument()
+  })
+})

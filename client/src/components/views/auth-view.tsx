@@ -2,7 +2,7 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { transitionBase } from "@/lib/motion"
-import { GraduationCap, Loader2, User, UserX } from "lucide-react"
+import { GraduationCap, Loader2, TriangleAlert, User, UserX } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { sanitizeUsername, sanitizeName, sanitizeEmail, clampPassword } from "@/lib/sanitize"
@@ -495,6 +495,12 @@ function AuthForm(props: AuthFormProps) {
       </Field>
 
       <Field label={FIELD_LABELS.password} htmlFor="auth-password" error={password.error}>
+        {mode === "register" && (
+          <p role="note" className="mb-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            <TriangleAlert className="size-4 shrink-0 text-warning" strokeWidth={2} aria-hidden="true" />
+            توجه: رمز عبور قابل بازیابی نیست — آن را دقیق وارد کنید و جایی امن نگه دارید.
+          </p>
+        )}
         <Input
           id="auth-password"
           name="password"
