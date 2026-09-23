@@ -131,14 +131,6 @@
   --success: oklch(0.515 0.158 145);       /* correct — green, 4.6:1 on accent */
   --warning: oklch(0.535 0.118 67);        /* amber — chroma-capped for sRGB */
 
-  /* Print-report palette: fixed output for paper, independent of the active
-     theme (defined on :root only so .dark never overrides them). Hues mirror
-     --success / --destructive so print matches on-screen semantics. */
-  --print-border: oklch(0.845 0 0);            /* ≈ #ccc hairlines */
-  --print-muted-foreground: oklch(0.56 0 0);   /* ≥4.5:1 on white paper */
-  --print-success: oklch(0.52 0.158 145);
-  --print-destructive: oklch(0.535 0.22 25.5);
-
   --border: oklch(0.9 0 0);
   /* Input outlines are a meaningful boundary → 3:1 vs card (#929292 = 3.1:1).
      Decorative separators stay on the softer --border. */
@@ -422,18 +414,4 @@
   box-shadow:
     0 0 0 2px var(--background),
     0 0 0 4px var(--ring);
-}
-
-/* Print styles — hide app chrome, show only the print report */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .print\:block,
-  .print\:block * {
-    visibility: visible;
-  }
-  .print\:block {
-    display: block !important;
-  }
 }
