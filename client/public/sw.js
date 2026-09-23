@@ -7,7 +7,7 @@
  *  - Navigations: network-first, fall back to the cached shell when offline.
  *  - Static assets (/assets, /fonts, icons): stale-while-revalidate.
  */
-const VERSION = "pb-v1";
+const VERSION = "pb-v2";
 const ASSET_CACHE = `${VERSION}-assets`;
 const PAGE_CACHE = `${VERSION}-pages`;
 

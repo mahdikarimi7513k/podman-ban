@@ -12,13 +12,13 @@
   "theme_color": "#FAFAFA",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/icon.svg?v=2",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable.svg",
+      "src": "/icon-maskable.svg?v=2",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
