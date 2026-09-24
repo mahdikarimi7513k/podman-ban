@@ -1020,6 +1020,7 @@ function QuestionEditor({
             <Label htmlFor="q-text">متن سوال</Label>
             <Textarea
               id="q-text"
+              dir="auto"
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
@@ -1099,6 +1100,7 @@ function QuestionEditor({
                 </button>
                 <Input
                   value={opt}
+                  dir="auto"
                   onChange={(e) =>
                     setOptions((o) => o.map((x, idx) => (idx === i ? e.target.value : x)))
                   }
@@ -1139,6 +1141,7 @@ function QuestionEditor({
             <Label htmlFor="q-expl">توضیح پاسخ (اختیاری)</Label>
             <Textarea
               id="q-expl"
+              dir="auto"
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
               rows={2}

@@ -101,15 +101,17 @@ describe("AnimatedTabs", () => {
   })
 })
 
-describe("BottomNav indicator", () => {
+describe("BottomNav active state", () => {
   beforeEach(() => {
     cleanup()
   })
 
-  it("shows the indicator on the active tab and hides it off-tabs", () => {
+  it("marks the active destination without any sliding indicator", () => {
     useApp.setState({ view: "home" })
     const first = render(<BottomNav />)
-    expect(first.container.querySelector(".tab-indicator")).not.toBeNull()
+
+    expect(first.container.querySelector(".tab-indicator")).toBeNull()
+    expect(first.container.querySelector('[aria-current="page"]')).toHaveTextContent("خانه")
     first.unmount()
 
     useApp.setState({ view: "admin" })

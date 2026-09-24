@@ -2,7 +2,6 @@
 import { Home, BarChart3, Settings, Calculator } from "lucide-react"
 import { useApp, type View } from "@/lib/store"
 import { cn, ICON_STROKE_ACTION, ICON_STROKE_LARGE } from "@/lib/utils"
-import { tabIndicatorStyle } from "@/components/animated-tabs"
 
 interface NavItem {
   view: View
@@ -20,24 +19,13 @@ const ITEMS: NavItem[] = [
 export function BottomNav() {
   const view = useApp((s) => s.view)
   const setView = useApp((s) => s.setView)
-  // Views reached from elsewhere (archive, admin, exam…) own no tab:
-  // the indicator hides instead of pointing at the wrong destination.
-  const activeIndex = ITEMS.findIndex((item) => item.view === view)
 
   return (
     <nav
       aria-label="ناوبری اصلی"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/90 backdrop-blur pb-safe"
     >
-      <div className="relative max-w-3xl mx-auto">
-        {activeIndex >= 0 && (
-          <span
-            aria-hidden="true"
-            className="tab-indicator pointer-events-none absolute inset-x-0 top-0 h-0.5 rounded-full bg-primary"
-            style={tabIndicatorStyle(ITEMS.length, activeIndex)}
-          />
-        )}
-        <ul className="grid grid-cols-4">
+      <ul className="max-w-3xl mx-auto grid grid-cols-4">
         {ITEMS.map((item) => {
           const active = view === item.view
           const Icon = item.icon
@@ -74,8 +62,7 @@ export function BottomNav() {
             </li>
           )
         })}
-        </ul>
-      </div>
+      </ul>
     </nav>
   )
 }

@@ -527,11 +527,11 @@ export function ExamView() {
       {data.session.isPractice && (
         <div className="sticky top-0 z-20 bg-background border-b border-border">
           <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium shrink-0">
               <BookOpen className="size-3.5" strokeWidth={ICON_STROKE} />
               حالت تمرین
             </span>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground min-w-0 hidden sm:inline">
               بدون محدودیت زمان — پاسخ صحیح بعد از انتخاب نمایش داده می‌شود
             </span>
           </div>
@@ -601,7 +601,7 @@ export function ExamView() {
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-sm font-semibold tabular-nums">
                   <FaNum>{index + 1}</FaNum>
                 </span>
-                <p className="text-[15px] leading-8 font-medium whitespace-pre-wrap">
+                <p dir="auto" className="text-[15px] leading-8 font-medium whitespace-pre-wrap min-w-0 break-words">
                   {question.text}
                 </p>
               </div>
@@ -634,7 +634,7 @@ export function ExamView() {
                         aria-checked={selected}
                         disabled={disabled}
                         onClick={() => !disabled && select(question.id, i)}
-                        className={`w-full min-h-[52px] flex items-center gap-3 rounded-lg border px-3.5 py-3 text-right transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
+                        className={`w-full min-h-[52px] flex items-center gap-3 rounded-lg border px-3.5 py-3 text-start transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
                           disabled ? "cursor-default" : "cursor-pointer"
                         } ${
                           isCorrect
@@ -665,7 +665,7 @@ export function ExamView() {
                             LETTERS[i]
                           )}
                         </span>
-                        <span className="text-sm leading-relaxed flex-1">{opt}</span>
+                        <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words">{opt}</span>
                         {isCorrect && (
                           <span className="text-[10px] font-medium text-success shrink-0">صحیح</span>
                         )}
@@ -688,7 +688,7 @@ export function ExamView() {
                 >
                   <div className="mt-4 rounded-lg bg-secondary/50 border border-border p-3">
                     <p className="text-[11px] font-medium text-muted-foreground mb-1">توضیح</p>
-                    <p className="text-xs leading-relaxed text-foreground/80">
+                    <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
                       {revealed[question.id].explanation}
                     </p>
                   </div>
@@ -1173,7 +1173,7 @@ function ExamReview({
                     <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-xs font-semibold tabular-nums mt-0.5">
                       <FaNum>{qi + 1}</FaNum>
                     </span>
-                    <p className="text-sm leading-7 font-medium whitespace-pre-wrap flex-1">
+                    <p dir="auto" className="text-sm leading-7 font-medium whitespace-pre-wrap flex-1 min-w-0 break-words">
                       {question.text}
                     </p>
                     {isFlagged && (
@@ -1225,7 +1225,7 @@ function ExamReview({
                                 LETTERS[i]
                               )}
                             </span>
-                            <span className="text-sm leading-relaxed flex-1">{opt}</span>
+                            <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words">{opt}</span>
                             {isCorrect && (
                               <span className="text-[10px] font-medium text-success shrink-0">صحیح</span>
                             )}
@@ -1242,7 +1242,7 @@ function ExamReview({
                   {question.explanation && (
                     <div className="mt-3 rounded-lg bg-secondary/50 border border-border p-2.5">
                       <p className="text-[11px] font-medium text-muted-foreground mb-0.5">توضیح</p>
-                      <p className="text-xs leading-relaxed text-foreground/80">
+                      <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
                         {question.explanation}
                       </p>
                     </div>

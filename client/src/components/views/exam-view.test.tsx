@@ -327,3 +327,66 @@ describe("ExamView without a session", () => {
     expect(useApp.getState().examSessionId).toBeNull()
   })
 })
+
+/**
+ * Seam: mixed-script question content (pure English, pure Persian, or a
+ * mix). Content elements carry dir="auto" so each script aligns itself
+ * instead of inheriting the page direction.
+ */
+describe("ExamView mixed-language content", () => {
+  const EN_QUESTIONS = [
+    { id: "e1", text: "What is CPU?", options: ["Central Processing Unit", "Memory"], imageBase64: null, order: 1 },
+    { id: "e2", text: "متن فارسی با English داخلش", options: ["الف", "Beta"], imageBase64: null, order: 2 },
+  ]
+
+  function mockMixedApi() {
+    apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/exam/s1" && !init?.method) {
+        const base = sessionResponse()
+
+        return {
+          ...base,
+          session: { ...base.session, isPractice: false, durationSec: 1200, pausedAt: null },
+          questions: EN_QUESTIONS,
+        }
+      }
+
+      if (url === "/api/exam/s1/answer") return { ok: true }
+
+      if (url === "/api/exam/s1/pause" && init?.method === "POST") {
+        return { pausedAt: new Date().toISOString(), remainingSec: 1199 }
+      }
+
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
+
+  it("marks content dir=auto in both exam and review", async () => {
+    mockMixedApi()
+    render(<ExamView />)
+
+    const heading = await screen.findByText("What is CPU?")
+    expect(heading.closest("p")).toHaveAttribute("dir", "auto")
+
+    const option = await screen.findByText("Central Processing Unit")
+    expect(option.closest("span")).toHaveAttribute("dir", "auto")
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /سوال بعدی/ }))
+    })
+
+    const mixed = await screen.findByText("متن فارسی با English داخلش")
+    expect(mixed.closest("p")).toHaveAttribute("dir", "auto")
+  })
+
+  it("keeps the practice banner slim on small screens", async () => {
+    render(<ExamView />)
+    await screen.findByText("متن سوال شماره یک")
+
+    expect(screen.getByText("حالت تمرین")).toBeInTheDocument()
+
+    const note = screen.getByText(/بدون محدودیت زمان/)
+    expect(note.className).toContain("hidden")
+    expect(note.className).toContain("sm:inline")
+  })
+})
