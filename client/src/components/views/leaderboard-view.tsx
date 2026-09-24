@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FaNum } from "@/components/fa-utils"
 import { useApp } from "@/lib/store"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_DISPLAY, ICON_STROKE_LARGE } from "@/lib/utils";
 
 interface LeaderRow {
   id: string
@@ -59,7 +59,7 @@ export function LeaderboardView() {
   if (!data) {
     return (
       <div className="rounded-xl border border-dashed border-border p-10 text-center">
-        <Trophy className="size-8 mx-auto text-muted-foreground/60" strokeWidth={1.5} />
+        <Trophy className="size-8 mx-auto text-muted-foreground/60" strokeWidth={ICON_STROKE_DISPLAY} />
         <p className="mt-3 text-sm font-medium">خطا در بارگذاری رتبه‌بندی</p>
       </div>
     )
@@ -132,7 +132,7 @@ export function LeaderboardView() {
       {top3.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <Crown className="size-4 text-muted-foreground" strokeWidth={2} />
+            <Crown className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             <h2 className="text-sm font-semibold">نفرات برتر</h2>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -153,7 +153,7 @@ export function LeaderboardView() {
                   )}
                   style={{ marginTop: actualRank === 1 ? 0 : 8 }}
                 >
-                  <Icon className={cn("size-6 mb-1", iconClass)} strokeWidth={1.75} fill={actualRank === 1 ? "currentColor" : "none"} />
+                  <Icon className={cn("size-6 mb-1", iconClass)} strokeWidth={ICON_STROKE_LARGE} fill={actualRank === 1 ? "currentColor" : "none"} />
                   <div className="size-9 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold mb-1.5">
                     {r.name.charAt(0)}
                   </div>
@@ -175,7 +175,7 @@ export function LeaderboardView() {
       {rest.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="size-4 text-muted-foreground" strokeWidth={2} />
+            <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             <h2 className="text-sm font-semibold">سایر هنرجویان</h2>
           </div>
           <ul className="space-y-1.5">
@@ -220,7 +220,7 @@ export function LeaderboardView() {
 
       {data.leaderboard.length === 0 && (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
-          <Trophy className="size-8 mx-auto text-muted-foreground/60" strokeWidth={1.5} />
+          <Trophy className="size-8 mx-auto text-muted-foreground/60" strokeWidth={ICON_STROKE_DISPLAY} />
           <p className="mt-3 text-sm font-medium">هنوز آزمونی انجام نشده است.</p>
           <p className="text-xs text-muted-foreground mt-1">رتبه‌بندی بعد از اولین آزمون‌ها فعال می‌شود.</p>
         </div>

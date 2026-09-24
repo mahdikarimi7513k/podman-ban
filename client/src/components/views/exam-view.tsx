@@ -37,6 +37,7 @@ import {
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { firedThresholds, vibrate } from "@/lib/exam-timer"
 import { useToast } from "@/hooks/use-toast"
+import { ICON_STROKE, ICON_STROKE_ACTION, ICON_STROKE_BADGE } from "@/lib/utils";
 
 interface ExamQuestion {
   id: string
@@ -527,7 +528,7 @@ export function ExamView() {
         <div className="sticky top-0 z-20 bg-background border-b border-border">
           <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium">
-              <BookOpen className="size-3.5" strokeWidth={2} />
+              <BookOpen className="size-3.5" strokeWidth={ICON_STROKE} />
               حالت تمرین
             </span>
             <span className="text-[11px] text-muted-foreground">
@@ -570,7 +571,7 @@ export function ExamView() {
             >
               <Flag
                 className="size-4"
-                strokeWidth={2}
+                strokeWidth={ICON_STROKE}
                 fill={flagged.has(question.id) ? "currentColor" : "none"}
               />
             </button>
@@ -657,9 +658,9 @@ export function ExamView() {
                           }`}
                         >
                           {isCorrect ? (
-                            <Check className="size-3.5" strokeWidth={3} />
+                            <Check className="size-3.5" strokeWidth={ICON_STROKE_BADGE} />
                           ) : isWrong ? (
-                            <X className="size-3.5" strokeWidth={3} />
+                            <X className="size-3.5" strokeWidth={ICON_STROKE_BADGE} />
                           ) : (
                             LETTERS[i]
                           )}
@@ -713,7 +714,7 @@ export function ExamView() {
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"
             }`}
           >
-            <Grid3x3 className="size-3.5" strokeWidth={2} />
+            <Grid3x3 className="size-3.5" strokeWidth={ICON_STROKE} />
           </button>
         </div>
 
@@ -789,7 +790,7 @@ export function ExamView() {
             title="خروج از آزمون"
             className="cursor-pointer text-muted-foreground shrink-0"
           >
-            <X className="size-4" strokeWidth={2.25} />
+            <X className="size-4" strokeWidth={ICON_STROKE_ACTION} />
           </Button>
           <Button
             variant="outline"
@@ -823,7 +824,7 @@ export function ExamView() {
               {finishing ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Flag className="size-4" strokeWidth={2.25} />
+                <Flag className="size-4" strokeWidth={ICON_STROKE_ACTION} />
               )}
               اتمام آزمون
             </Button>
@@ -965,7 +966,7 @@ function ExamTimer({
         <span className="sr-only" role="alert">{assertMsg}</span>
         <Clock
           className={`size-4 ${danger ? "text-destructive" : "text-muted-foreground"}`}
-          strokeWidth={2}
+          strokeWidth={ICON_STROKE}
         />
         <span
           className={`tabular-nums text-sm font-semibold ${danger ? "text-destructive" : ""}`}
@@ -1098,7 +1099,7 @@ function ExamResult({
           {loadingReview ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
-            <Eye className="size-4" strokeWidth={2.25} />
+            <Eye className="size-4" strokeWidth={ICON_STROKE_ACTION} />
           )}
           بازبینی پاسخ‌ها
         </Button>
@@ -1176,7 +1177,7 @@ function ExamReview({
                       {question.text}
                     </p>
                     {isFlagged && (
-                      <Flag className="size-4 shrink-0 text-warning mt-1" fill="currentColor" strokeWidth={2} />
+                      <Flag className="size-4 shrink-0 text-warning mt-1" fill="currentColor" strokeWidth={ICON_STROKE} />
                     )}
                   </div>
 
@@ -1217,9 +1218,9 @@ function ExamReview({
                               }`}
                             >
                               {isCorrect ? (
-                                <Check className="size-3" strokeWidth={3} />
+                                <Check className="size-3" strokeWidth={ICON_STROKE_BADGE} />
                               ) : isWrong ? (
-                                <X className="size-3" strokeWidth={3} />
+                                <X className="size-3" strokeWidth={ICON_STROKE_BADGE} />
                               ) : (
                                 LETTERS[i]
                               )}
@@ -1255,7 +1256,7 @@ function ExamReview({
         {/* exit button at bottom */}
         <div className="mt-6 sticky bottom-0 bg-background/85 backdrop-blur py-3 -mx-4 px-4 border-t border-border">
           <Button onClick={onExit} className="w-full h-11 cursor-pointer">
-            <Check className="size-4" strokeWidth={2.5} />
+            <Check className="size-4" strokeWidth={ICON_STROKE_ACTION} />
             بازگشت به خانه
           </Button>
         </div>

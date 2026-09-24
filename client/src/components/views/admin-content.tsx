@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/dialog"
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_ACTION, ICON_STROKE_LARGE } from "@/lib/utils";
 
 interface Book {
   id: string
@@ -276,7 +276,7 @@ export function AdminContent() {
             </SelectContent>
           </Select>
           <Button onClick={addBook} className="h-10 cursor-pointer shrink-0">
-            <Plus className="size-4" strokeWidth={2.25} />
+            <Plus className="size-4" strokeWidth={ICON_STROKE_ACTION} />
             افزودن
           </Button>
         </div>
@@ -298,7 +298,7 @@ export function AdminContent() {
               <div className="flex items-center gap-2 px-4 py-3 group">
                 <AccordionTrigger className="flex-1 flex items-center gap-3 text-right hover:no-underline cursor-pointer p-0 h-auto" hideChevron>
                   <div className="flex size-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground shrink-0">
-                    <BookOpen className="size-4" strokeWidth={2} />
+                    <BookOpen className="size-4" strokeWidth={ICON_STROKE} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{book.title}</p>
@@ -340,7 +340,7 @@ export function AdminContent() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{m.title}</p>
                           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                            <FileQuestion className="size-3" strokeWidth={2} />
+                            <FileQuestion className="size-3" strokeWidth={ICON_STROKE} />
                             <FaNum>{m.questionCount}</FaNum> سوال
                           </p>
                         </div>
@@ -354,7 +354,7 @@ export function AdminContent() {
                           onClick={() => openNewQuestion(m.id)}
                           className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer"
                         >
-                          <Plus className="size-3.5" strokeWidth={2.25} />
+                          <Plus className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
                             سوال
                         </button>
                         <button
@@ -362,7 +362,7 @@ export function AdminContent() {
                           onClick={() => setBulkImport({ moduleId: m.id, moduleTitle: m.title })}
                           className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-accent transition-colors cursor-pointer"
                         >
-                          <Upload className="size-3.5" strokeWidth={2.25} />
+                          <Upload className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
                           ورودی گروهی
                         </button>
                         <button
@@ -408,7 +408,7 @@ export function AdminContent() {
                       onClick={() => setNewModule({ bookId: book.id, title: "" })}
                       className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs text-muted-foreground hover:bg-accent/50 transition-colors cursor-pointer"
                     >
-                      <Plus className="size-3.5" strokeWidth={2.25} />
+                      <Plus className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
                       افزودن پودمان
                     </button>
                   </li>
@@ -868,7 +868,7 @@ function ModuleQuestions({
                 <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
                   <FaNum>{i + 1}</FaNum>
                 </span>
-                {q.hasImage && <ImageIcon className="size-3 text-muted-foreground shrink-0" strokeWidth={2} />}
+                {q.hasImage && <ImageIcon className="size-3 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />}
                 <p className="text-xs flex-1 min-w-0 truncate">{q.text}</p>
                 <button
                   type="button"
@@ -1057,7 +1057,7 @@ function QuestionEditor({
                 {uploading ? (
                   <Loader2 className="size-5 animate-spin" />
                 ) : (
-                  <ImageIcon className="size-6" strokeWidth={1.75} />
+                  <ImageIcon className="size-6" strokeWidth={ICON_STROKE_LARGE} />
                 )}
                 <span className="text-xs">
                   {uploading ? "در حال بارگذاری…" : "برای انتخاب تصویر کلیک کنید"}
@@ -1125,7 +1125,7 @@ function QuestionEditor({
                 onClick={addOption}
                 className="cursor-pointer w-full"
               >
-                <Plus className="size-3.5" strokeWidth={2.25} />
+                <Plus className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
                 افزودن گزینه
               </Button>
             )}

@@ -7,7 +7,7 @@ import { sanitizeMessageText } from "@/lib/sanitize"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FaNum } from "@/components/fa-utils"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE_ACTION } from "@/lib/utils";
 
 interface ChatPanelProps {
   userId: string
@@ -145,7 +145,7 @@ export function ChatPanel({
           {sending ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
-            <Send className="size-4 rtl:-scale-x-100" strokeWidth={2.25} />
+            <Send className="size-4 rtl:-scale-x-100" strokeWidth={ICON_STROKE_ACTION} />
           )}
         </Button>
       </form>

@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/select"
 import { FaNum } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE } from "@/lib/utils";
 import { AdminContent } from "@/components/views/admin-content"
 import { ChatPanel } from "@/components/chat-panel"
 
@@ -99,27 +99,27 @@ export function AdminView() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full grid grid-cols-6 h-auto">
           <TabsTrigger value="dashboard" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <LayoutDashboard className="size-4" strokeWidth={2} />
+            <LayoutDashboard className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">داشبورد</span>
           </TabsTrigger>
           <TabsTrigger value="content" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <BookOpen className="size-4" strokeWidth={2} />
+            <BookOpen className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">محتوا</span>
           </TabsTrigger>
           <TabsTrigger value="users" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <Users className="size-4" strokeWidth={2} />
+            <Users className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">کاربران</span>
           </TabsTrigger>
           <TabsTrigger value="archive" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <Archive className="size-4" strokeWidth={2} />
+            <Archive className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">آرشیو</span>
           </TabsTrigger>
           <TabsTrigger value="notify" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <Megaphone className="size-4" strokeWidth={2} />
+            <Megaphone className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">اعلان‌ها</span>
           </TabsTrigger>
           <TabsTrigger value="support" className="cursor-pointer flex-col gap-1 py-2 text-[11px]">
-            <MessageSquare className="size-4" strokeWidth={2} />
+            <MessageSquare className="size-4" strokeWidth={ICON_STROKE} />
             <span className="hidden xs:inline">پشتیبانی</span>
           </TabsTrigger>
         </TabsList>
@@ -316,7 +316,7 @@ function AdminDashboard() {
                 : "bg-success/10 text-success",
             )}
           >
-            <Power className="size-5" strokeWidth={2} />
+            <Power className="size-5" strokeWidth={ICON_STROKE} />
           </div>
           <div className="flex-1">
             <Label htmlFor="lock-switch" className="text-sm font-semibold cursor-pointer">
@@ -399,7 +399,7 @@ function AdminDashboard() {
                 : "bg-destructive/10 text-destructive",
             )}
           >
-            <UserPlus className="size-5" strokeWidth={2} />
+            <UserPlus className="size-5" strokeWidth={ICON_STROKE} />
           </div>
           <div className="flex-1">
             <Label htmlFor="reg-switch" className="text-sm font-semibold cursor-pointer">
@@ -476,7 +476,7 @@ function AdminDashboard() {
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-            <KeyRound className="size-5" strokeWidth={2} />
+            <KeyRound className="size-5" strokeWidth={ICON_STROKE} />
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold">تأیید لاگین سرویس خارجی</p>
@@ -532,7 +532,7 @@ function AdminDashboard() {
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-            <Megaphone className="size-5" strokeWidth={2} />
+            <Megaphone className="size-5" strokeWidth={ICON_STROKE} />
           </div>
           <div className="flex-1">
             <Label htmlFor="banner-switch" className="text-sm font-semibold cursor-pointer">
@@ -601,7 +601,7 @@ function AdminDashboard() {
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-            <Bell className="size-5" strokeWidth={2} />
+            <Bell className="size-5" strokeWidth={ICON_STROKE} />
           </div>
           <div className="flex-1">
             <Label htmlFor="goal-notify-switch" className="text-sm font-semibold cursor-pointer">
@@ -761,7 +761,7 @@ function AdminUsers() {
     <div className="space-y-3">
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <UserPlus className="size-4" strokeWidth={2} />
+          <UserPlus className="size-4" strokeWidth={ICON_STROKE} />
           <h3 className="text-sm font-semibold">ساخت کاربر جدید</h3>
         </div>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -1362,7 +1362,7 @@ function AdminNotify() {
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Megaphone className="size-5" strokeWidth={2} />
+          <Megaphone className="size-5" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">ارسال اعلان به کاربران</h2>
         </div>
         <p className="text-xs text-muted-foreground">

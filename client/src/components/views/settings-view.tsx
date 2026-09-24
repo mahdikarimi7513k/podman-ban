@@ -37,7 +37,7 @@ import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE } from "@/lib/utils";
 
 export function SettingsView() {
   const user = useApp((s) => s.user)
@@ -102,7 +102,6 @@ export function SettingsView() {
   }> = [
     { value: "dark", label: "تاریک", icon: Moon },
     { value: "light", label: "روشن", icon: Sun },
-    { value: "system", label: "خودکار", icon: Monitor },
   ]
 
   if (!user) return null
@@ -148,10 +147,10 @@ export function SettingsView() {
       {/* Theme */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Sun className="size-4 text-muted-foreground" strokeWidth={2} />
+          <Sun className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">نمایش</h2>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {themeOptions.map((opt) => {
             const active = mounted && theme === opt.value
             const Icon = opt.icon
@@ -175,20 +174,15 @@ export function SettingsView() {
                     active ? "border-foreground" : "border-transparent",
                   )}
                   style={{
-                    background:
-                      opt.value === "dark"
-                        ? "#0A0A0A"
-                        : opt.value === "light"
-                          ? "#FAFAFA"
-                          : "linear-gradient(135deg, #FAFAFA 50%, #0A0A0A 50%)",
+                    background: opt.value === "dark" ? "#0A0A0A" : "#FAFAFA",
                   }}
                 >
                   <Icon
                     className={cn(
                       "size-4",
-                      opt.value === "dark" ? "text-white" : opt.value === "light" ? "text-black" : "text-muted-foreground",
+                      opt.value === "dark" ? "text-white" : "text-black",
                     )}
-                    strokeWidth={2}
+                    strokeWidth={ICON_STROKE}
                   />
                 </div>
                 <span className={cn("text-xs", active && "font-semibold")}>{opt.label}</span>
@@ -196,15 +190,12 @@ export function SettingsView() {
             )
           })}
         </div>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          در حالت «خودکار»، تم بر اساس تنظیمات سیستم شما انتخاب می‌شود.
-        </p>
       </section>
 
       {/* Preferences */}
       <section className="rounded-xl border border-border bg-card divide-y divide-border">
         <div className="flex items-center gap-3 p-4">
-          <Repeat className="size-4 text-muted-foreground shrink-0" strokeWidth={2} />
+          <Repeat className="size-4 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />
           <div className="flex-1 min-w-0">
             <Label htmlFor="repeat-switch" className="text-sm font-medium cursor-pointer">
               حذف سوالات تکراری
@@ -228,7 +219,7 @@ export function SettingsView() {
           />
         </div>
         <div className="flex items-center gap-3 p-4">
-          <Timer className="size-4 text-muted-foreground shrink-0" strokeWidth={2} />
+          <Timer className="size-4 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />
           <div className="flex-1 min-w-0">
             <Label htmlFor="duration-select" className="text-sm font-medium cursor-pointer">
               زمان پیش‌فرض هر آزمون
@@ -258,7 +249,7 @@ export function SettingsView() {
           </Select>
         </div>
         <div className="flex items-center gap-3 p-4 border-t border-border">
-          <Target className="size-4 text-muted-foreground shrink-0" strokeWidth={2} />
+          <Target className="size-4 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />
           <div className="flex-1 min-w-0">
             <Label htmlFor="goal-select" className="text-sm font-medium cursor-pointer">
               هدف روزانه
@@ -295,7 +286,7 @@ export function SettingsView() {
       {/* Online support */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <MessageSquare className="size-4 text-muted-foreground" strokeWidth={2} />
+          <MessageSquare className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">پشتیبانی آنلاین</h2>
         </div>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -340,7 +331,7 @@ function ProfileRow({
 }) {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
-      <Icon className="size-4 text-muted-foreground shrink-0" strokeWidth={2} />
+      <Icon className="size-4 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />
       <span className="text-muted-foreground text-sm">{label}</span>
       <span className="ms-auto text-sm font-medium" dir={dir}>
         {children}
@@ -408,7 +399,7 @@ function PasswordChangeSection() {
   return (
     <section className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Lock className="size-4 text-muted-foreground" strokeWidth={2} />
+        <Lock className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <h2 className="text-sm font-semibold">تغییر رمز عبور</h2>
       </div>
       <form onSubmit={submit} className="space-y-3" noValidate>
@@ -419,7 +410,7 @@ function PasswordChangeSection() {
               id="cur-pw"
               type={showCurrent ? "text" : "password"}
               dir="ltr"
-              className="h-10 text-right pl-9"
+              className="h-10 text-left pl-9"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               autoComplete="current-password"
@@ -443,7 +434,7 @@ function PasswordChangeSection() {
                 id="new-pw"
                 type={showNew ? "text" : "password"}
                 dir="ltr"
-                className="h-10 text-right pl-9"
+                className="h-10 text-left pl-9"
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
                 autoComplete="new-password"
@@ -466,7 +457,7 @@ function PasswordChangeSection() {
               type={showNew ? "text" : "password"}
               dir="ltr"
               className={cn(
-                "h-10 text-right",
+                "h-10 text-left",
                 confirm.length > 0 && !passwordsMatch && "border-destructive",
               )}
               value={confirm}

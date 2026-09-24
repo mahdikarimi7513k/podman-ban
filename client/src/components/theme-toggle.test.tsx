@@ -48,15 +48,12 @@ describe("ThemeToggle", () => {
     expect(screen.getByRole("button", { name: "تم: تاریک" })).toBeInTheDocument()
   })
 
-  it("cycles dark → light → system → dark across clicks", () => {
+  it("cycles dark → light → dark across clicks", () => {
     render(<Harness />)
     const btn = screen.getByRole("button")
 
     fireEvent.click(btn)
     expect(screen.getByRole("button", { name: "تم: روشن" })).toBeInTheDocument()
-
-    fireEvent.click(btn)
-    expect(screen.getByRole("button", { name: "تم: خودکار" })).toBeInTheDocument()
 
     fireEvent.click(btn)
     expect(screen.getByRole("button", { name: "تم: تاریک" })).toBeInTheDocument()
@@ -73,6 +70,6 @@ describe("ThemeToggle", () => {
     expect(screen.getByRole("status")).toHaveTextContent("تم روشن شد")
 
     fireEvent.click(btn)
-    expect(screen.getByRole("status")).toHaveTextContent("تم خودکار شد")
+    expect(screen.getByRole("status")).toHaveTextContent("تم تاریک شد")
   })
 })

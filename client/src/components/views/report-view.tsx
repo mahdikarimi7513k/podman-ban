@@ -33,7 +33,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 import { useApp } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 
@@ -226,7 +226,7 @@ export function ReportView() {
       {heatmap && (
         <section className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <CalendarDays className="size-4 text-muted-foreground" strokeWidth={2} />
+            <CalendarDays className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             <h2 className="text-sm font-semibold">فعالیت مطالعاتی</h2>
             <span className="text-[11px] text-muted-foreground mr-auto">
               <FaNum>{heatmap.total}</FaNum> سوال در{" "}
@@ -317,7 +317,7 @@ export function ReportView() {
       {hasData && trendData.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="size-4 text-muted-foreground" strokeWidth={2} />
+            <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             <h2 className="text-sm font-semibold">روند پیشرفت</h2>
             <span className="text-[11px] text-muted-foreground mr-auto">
               ۱۰ آزمون اخیر
@@ -386,7 +386,7 @@ export function ReportView() {
       {hasData && stats && stats.totalQuestions > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <PieIcon className="size-4 text-muted-foreground" strokeWidth={2} />
+            <PieIcon className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             <h2 className="text-sm font-semibold">توزیع پاسخ‌ها</h2>
             <span className="text-[11px] text-muted-foreground mr-auto">
               مجموع <FaNum>{stats.totalQuestions}</FaNum> سوال
@@ -406,7 +406,7 @@ export function ReportView() {
                     outerRadius={60}
                     paddingAngle={2}
                     stroke="var(--card)"
-                    strokeWidth={2}
+                    strokeWidth={ICON_STROKE}
                   >
                     {donutData.map((d) => (
                       <Cell key={d.name} fill={d.color} />
@@ -455,7 +455,7 @@ export function ReportView() {
       {/* Module progress list */}
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="size-4 text-muted-foreground" strokeWidth={2} />
+          <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">وضعیت آزمون‌ها</h2>
         </div>
         <ul className="space-y-2">
@@ -468,7 +468,7 @@ export function ReportView() {
                 key={m.moduleId}
                 className="flex items-center gap-3 rounded-lg border border-border bg-card p-3.5 transition-colors hover:bg-accent/30"
               >
-                <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={2} />
+                <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{m.moduleTitle}</p>
                   <p className="text-[11px] text-muted-foreground truncate">
@@ -507,7 +507,7 @@ export function ReportView() {
       {/* Recent sessions, grouped under their book */}
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <History className="size-4 text-muted-foreground" strokeWidth={2} />
+          <History className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">آخرین آزمون‌ها</h2>
         </div>
         {sessions && sessions.length > 0 ? (
@@ -578,7 +578,7 @@ function SessionRowItem({ s, onReview }: { s: SessionRow; onReview: () => void }
         onClick={onReview}
         className="cursor-pointer shrink-0"
       >
-        <Eye className="size-3.5" strokeWidth={2.25} />
+        <Eye className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
         تشریحی
       </Button>
     </li>
@@ -636,7 +636,7 @@ function DistributionRow({
   const pct = total > 0 ? Math.round((value / total) * 100) : 0
   return (
     <div className="flex items-center gap-2.5">
-      <Icon className="size-4 shrink-0" style={{ color }} strokeWidth={2} />
+      <Icon className="size-4 shrink-0" style={{ color }} strokeWidth={ICON_STROKE} />
       <span className="text-xs font-medium w-10 shrink-0">{label}</span>
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         <div

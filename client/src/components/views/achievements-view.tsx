@@ -15,7 +15,7 @@ import {
 import { apiFetch } from "@/lib/api-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FaNum } from "@/components/fa-utils"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_DISPLAY, ICON_STROKE_LARGE } from "@/lib/utils";
 
 interface Achievement {
   id: string
@@ -136,7 +136,7 @@ export function AchievementsView() {
       {unlocked.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Trophy className="size-4 text-muted-foreground" strokeWidth={2} />
+            <Trophy className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             نشان‌های بازشده
             <span className="text-[11px] text-muted-foreground font-normal">
               (<FaNum>{unlocked.length}</FaNum> از <FaNum>{achievements.length}</FaNum>)
@@ -154,7 +154,7 @@ export function AchievementsView() {
       {locked.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Lock className="size-4 text-muted-foreground" strokeWidth={2} />
+            <Lock className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
             در راه
           </h2>
           <div className="grid grid-cols-2 gap-3">
@@ -202,11 +202,11 @@ function AchievementCard({
         )}
       >
         {unlocked ? (
-          <Icon className="size-7" strokeWidth={1.75} />
+          <Icon className="size-7" strokeWidth={ICON_STROKE_LARGE} />
         ) : (
           <>
-            <Icon className="size-6 opacity-30" strokeWidth={1.5} />
-            <Lock className="absolute size-4" strokeWidth={2} />
+            <Icon className="size-6 opacity-30" strokeWidth={ICON_STROKE_DISPLAY} />
+            <Lock className="absolute size-4" strokeWidth={ICON_STROKE} />
           </>
         )}
       </div>

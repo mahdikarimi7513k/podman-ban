@@ -24,7 +24,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_ACTION, ICON_STROKE_BADGE, ICON_STROKE_DISPLAY } from "@/lib/utils";
 
 interface StartResult {
   session: {
@@ -152,7 +152,7 @@ export function HomeView() {
           >
             <div className="rounded-xl border-2 border-foreground/10 bg-card p-4 flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground shrink-0">
-                <Clock className="size-5" strokeWidth={2} />
+                <Clock className="size-5" strokeWidth={ICON_STROKE} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
@@ -168,7 +168,7 @@ export function HomeView() {
                 onClick={() => enterExam(inProgress.id, inProgress.moduleId)}
                 className="shrink-0 cursor-pointer"
               >
-                <RotateCcw className="size-3.5" strokeWidth={2.25} />
+                <RotateCcw className="size-3.5" strokeWidth={ICON_STROKE_ACTION} />
                 ادامه
               </Button>
             </div>
@@ -220,7 +220,7 @@ export function HomeView() {
               <AccordionTrigger className="px-4 py-3.5 hover:no-underline cursor-pointer group" hideChevron>
                 <div className="flex items-center gap-3 flex-1 text-right">
                   <div className="flex size-9 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                    <BookOpen className="size-4" strokeWidth={2} />
+                    <BookOpen className="size-4" strokeWidth={ICON_STROKE} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{book.title}</p>
@@ -244,7 +244,7 @@ export function HomeView() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{m.title}</p>
                           <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
-                            <FileQuestion className="size-3" strokeWidth={2} />
+                            <FileQuestion className="size-3" strokeWidth={ICON_STROKE} />
                             <span>
                               <FaNum>{m.questionCount}</FaNum> سوال
                             </span>
@@ -261,7 +261,7 @@ export function HomeView() {
                           {startingId === m.id ? (
                             <Loader2 className="size-3.5 animate-spin" />
                           ) : (
-                            <Play className="size-3.5" strokeWidth={2.25} fill="currentColor" />
+                            <Play className="size-3.5" strokeWidth={ICON_STROKE_ACTION} fill="currentColor" />
                           )}
                           شروع
                         </Button>
@@ -349,7 +349,7 @@ function DurationPickerDialog({
               "flex size-9 items-center justify-center rounded-md shrink-0",
               practice ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
             )}>
-              <BookOpen className="size-4" strokeWidth={2} />
+              <BookOpen className="size-4" strokeWidth={ICON_STROKE} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">حالت تمرین</p>
@@ -361,7 +361,7 @@ function DurationPickerDialog({
               "flex size-5 items-center justify-center rounded-full border-2 shrink-0",
               practice ? "border-foreground bg-foreground" : "border-muted-foreground",
             )}>
-              {practice && <Check className="size-3 text-background" strokeWidth={3} />}
+              {practice && <Check className="size-3 text-background" strokeWidth={ICON_STROKE_BADGE} />}
             </div>
           </button>
 
@@ -420,7 +420,7 @@ function EmptyState() {
       <div className="relative flex size-16 items-center justify-center mb-4">
         <div className="absolute inset-0 rounded-full bg-secondary" />
         <div className="absolute inset-0 rounded-full ring-1 ring-border" />
-        <BookOpen className="relative size-7 text-muted-foreground" strokeWidth={1.5} />
+        <BookOpen className="relative size-7 text-muted-foreground" strokeWidth={ICON_STROKE_DISPLAY} />
       </div>
       <h3 className="text-sm font-semibold text-foreground">
         هنوز محتوایی برای رشته شما ثبت نشده است.
@@ -472,7 +472,7 @@ function DailyGoalCard({ answered, goal }: { answered: number; goal: number }) {
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           {achieved ? (
-            <Check className="size-5 text-success" strokeWidth={3} />
+            <Check className="size-5 text-success" strokeWidth={ICON_STROKE_BADGE} />
           ) : (
             <span className="text-[11px] font-bold tabular-nums">
               <FaNum>{pct}</FaNum>٪

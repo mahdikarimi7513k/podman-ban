@@ -2,7 +2,7 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { transitionBase } from "@/lib/motion"
-import { GraduationCap, Loader2, TriangleAlert, User, UserX } from "lucide-react"
+import { Eye, EyeOff, GraduationCap, Loader2, TriangleAlert, User, UserX } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { sanitizeUsername, sanitizeName, sanitizeEmail, clampPassword } from "@/lib/sanitize"
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 
 type Mode = "login" | "register"
 
@@ -145,7 +145,7 @@ export function AuthView() {
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center text-center mb-8">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground mb-4">
-              <GraduationCap className="size-7" strokeWidth={2.25} />
+              <GraduationCap className="size-7" strokeWidth={ICON_STROKE_ACTION} />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">پودمان‌بان</h1>
             <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
@@ -277,7 +277,7 @@ function RegistrationClosed({
   return (
     <div className="space-y-4 py-2 text-center">
       <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-        <UserX className="size-6" strokeWidth={2} />
+        <UserX className="size-6" strokeWidth={ICON_STROKE} />
       </div>
       <div className="space-y-1">
         <p className="text-base font-semibold">ثبت‌نام بسته است</p>
@@ -425,6 +425,7 @@ function AuthForm(props: AuthFormProps) {
   } = props
 
   const firstInvalidRef = React.useRef<HTMLInputElement | null>(null)
+  const [showPassword, setShowPassword] = React.useState(false)
   React.useEffect(() => {
     if (username.error && firstInvalidRef.current) {
       firstInvalidRef.current.focus()
@@ -465,7 +466,7 @@ function AuthForm(props: AuthFormProps) {
             aria-describedby={email.error ? "auth-email-error" : undefined}
             placeholder="name@mail.com"
             maxLength={254}
-            className="h-11 text-right"
+            className="h-11 text-left tracking-wide"
             spellCheck={false}
             autoCapitalize="off"
           />
@@ -474,13 +475,13 @@ function AuthForm(props: AuthFormProps) {
 
       <Field label={FIELD_LABELS.username} htmlFor="auth-username" error={username.error}>
         <div className="relative">
-          <User className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" strokeWidth={2} />
+          <User className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" strokeWidth={ICON_STROKE} />
           <Input
             id="auth-username"
             name="username"
             autoComplete="username"
             dir="ltr"
-            className="h-11 text-right pr-9"
+            className="h-11 text-left tracking-wide pr-9"
             value={username.value}
             onChange={(e) => onUsernameChange(e.target.value.toLowerCase())}
             aria-invalid={!!username.error}
@@ -497,24 +498,35 @@ function AuthForm(props: AuthFormProps) {
       <Field label={FIELD_LABELS.password} htmlFor="auth-password" error={password.error}>
         {mode === "register" && (
           <p role="note" className="mb-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            <TriangleAlert className="size-4 shrink-0 text-warning" strokeWidth={2} aria-hidden="true" />
+            <TriangleAlert className="size-4 shrink-0 text-warning" strokeWidth={ICON_STROKE} aria-hidden="true" />
             توجه: رمز عبور قابل بازیابی نیست — آن را دقیق وارد کنید و جایی امن نگه دارید.
           </p>
         )}
-        <Input
-          id="auth-password"
-          name="password"
-          type="password"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          dir="ltr"
-          className="h-11 text-right"
-          value={password.value}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          aria-invalid={!!password.error}
-          aria-describedby={password.error ? "auth-password-error" : undefined}
-          placeholder="••••••••"
-          maxLength={72}
-        />
+        <div className="relative">
+          <Input
+            id="auth-password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            dir="ltr"
+            className="h-11 text-left tracking-wide pl-9"
+            value={password.value}
+            onChange={(e) => onPasswordChange(e.target.value)}
+            aria-invalid={!!password.error}
+            aria-describedby={password.error ? "auth-password-error" : undefined}
+            placeholder="••••••••"
+            maxLength={72}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer p-1"
+            aria-label={showPassword ? "پنهان کردن رمز" : "نمایش رمز"}
+            aria-pressed={showPassword}
+          >
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
       </Field>
 
       {mode === "register" && (

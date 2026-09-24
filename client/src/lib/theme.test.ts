@@ -5,20 +5,21 @@ import { nextTheme, themeLabel } from "@/lib/theme"
  * Seam: nextTheme() — pure theme-cycling policy used by ThemeToggle.
  *
  * Contract (matches app default of light — App.tsx + theme-init.js):
- *   light -> system -> dark -> light
+ *   light -> dark -> light (no system stop; stored legacy "system"
+ *   values land on light, the provider still resolves them live).
  *   anything else/missing falls back to the app default: "light".
  */
 describe("nextTheme", () => {
-  it("cycles light to system", () => {
-    expect(nextTheme("light")).toBe("system")
-  })
-
-  it("cycles system to dark", () => {
-    expect(nextTheme("system")).toBe("dark")
+  it("cycles light to dark", () => {
+    expect(nextTheme("light")).toBe("dark")
   })
 
   it("cycles dark back to light", () => {
     expect(nextTheme("dark")).toBe("light")
+  })
+
+  it("moves legacy system values to light", () => {
+    expect(nextTheme("system")).toBe("light")
   })
 
   it("falls back to light for undefined (first interaction)", () => {

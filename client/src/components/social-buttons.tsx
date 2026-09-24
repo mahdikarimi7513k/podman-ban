@@ -4,7 +4,7 @@ import { apiFetch, ApiError, API_BASE } from "@/lib/api-client"
 import { isNativeApp } from "@/lib/native-notify"
 import type { AppUser } from "@/lib/store"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE_ACTION } from "@/lib/utils";
 
 export interface PendingOAuth {
   provider: "google" | "github"
@@ -157,7 +157,7 @@ export function SocialButtons({ enabled, disabled, onDone, onPending, onError }:
             {busy === "google" ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Chrome className="size-4 text-[#4285F4]" strokeWidth={2.25} />
+              <Chrome className="size-4 text-[#4285F4]" strokeWidth={ICON_STROKE_ACTION} />
             )}
             ادامه با گوگل
           </Button>
@@ -175,7 +175,7 @@ export function SocialButtons({ enabled, disabled, onDone, onPending, onError }:
             {busy === "github" ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Github className="size-4" strokeWidth={2.25} />
+              <Github className="size-4" strokeWidth={ICON_STROKE_ACTION} />
             )}
             ادامه با گیت‌هاب
           </Button>

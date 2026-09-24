@@ -1,6 +1,7 @@
 
 import * as React from "react"
 import { Megaphone, X } from "lucide-react"
+import { ICON_STROKE } from "@/lib/utils";
 
 export function Banner({ text, link }: { text: string; link?: string }) {
   const [dismissed, setDismissed] = React.useState(false)
@@ -14,7 +15,7 @@ export function Banner({ text, link }: { text: string; link?: string }) {
   return (
     <div className="border-b border-border bg-secondary">
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
-        <Megaphone className="size-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+        <Megaphone className="size-4 shrink-0 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <p className="flex-1 text-sm text-secondary-foreground leading-relaxed whitespace-pre-wrap">
           {safeLink ? (
             <a href={safeLink} className="underline underline-offset-4">

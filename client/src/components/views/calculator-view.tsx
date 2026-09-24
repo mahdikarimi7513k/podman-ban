@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { FaNum, ToPersianDigits, ToLatinDigits } from "@/components/fa-utils"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE } from "@/lib/utils";
 
 export function CalculatorView() {
   const [total, setTotal] = React.useState("20")
@@ -76,7 +76,7 @@ export function CalculatorView() {
         </div>
 
         <div className="flex items-center gap-3 rounded-lg bg-secondary/60 px-3 py-2">
-          <Calculator className="size-4 text-muted-foreground" strokeWidth={2} />
+          <Calculator className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <span className="text-sm text-muted-foreground flex-1">
             نزده: <FaNum>{skipped}</FaNum>
           </span>
@@ -123,7 +123,7 @@ export function CalculatorView() {
       </div>
 
       <div className="flex items-start gap-2 rounded-lg bg-secondary/50 p-3 text-[11px] text-muted-foreground leading-relaxed">
-        <Info className="size-4 shrink-0 mt-0.5" strokeWidth={2} />
+        <Info className="size-4 shrink-0 mt-0.5" strokeWidth={ICON_STROKE} />
         <p>
           فرمول با نمره‌ی منفی: (صحیح × ۳ − غلط) ÷ (کل × ۳) × ۱۰۰.
           بدون نمره‌ی منفی: صحیح ÷ کل × ۱۰۰.

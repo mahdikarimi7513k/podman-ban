@@ -1,14 +1,15 @@
 export type Theme = "dark" | "light" | "system"
 
 /**
- * Theme-cycling policy for the single toggle button.
- * The app default is light (App.tsx defaultTheme + theme-init.js fallback),
- * so any unknown/missing value cycles to "light".
+ * Theme-cycling policy for the single toggle button: light <-> dark only.
+ * The "system" option was removed from the UI (settings + toggle) as
+ * visual clutter; the provider still resolves a stored "system" value
+ * correctly for accounts that picked it before, and it cycles to light.
+ * The app default is light (App.tsx defaultTheme + theme-init.js
+ * fallback), so any unknown/missing value cycles to "light".
  */
 export function nextTheme(theme: string | undefined): Theme {
-  if (theme === "light") return "system"
-
-  if (theme === "system") return "dark"
+  if (theme === "light") return "dark"
 
   return "light"
 }

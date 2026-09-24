@@ -181,3 +181,34 @@ describe("Password warning", () => {
     expect(await screen.findByText(/قابل بازیابی نیست/)).toBeInTheDocument()
   })
 })
+
+describe("Password visibility toggle", () => {
+  it("reveals and hides the password with an accessible toggle", async () => {
+    const user = userEvent.setup()
+    render(<AuthView />)
+
+    const input = await screen.findByPlaceholderText("••••••••")
+    expect(input).toHaveAttribute("type", "password")
+
+    await user.click(screen.getByRole("button", { name: "نمایش رمز" }))
+
+    expect(input).toHaveAttribute("type", "text")
+    expect(screen.getByRole("button", { name: "پنهان کردن رمز" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+
+    await user.click(screen.getByRole("button", { name: "پنهان کردن رمز" }))
+
+    expect(input).toHaveAttribute("type", "password")
+  })
+
+  it("keeps credential inputs left-aligned LTR", async () => {
+    render(<AuthView />)
+
+    const username = await screen.findByPlaceholderText("username")
+
+    expect(username).toHaveAttribute("dir", "ltr")
+    expect(username.className).toContain("text-left")
+  })
+})

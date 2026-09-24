@@ -3,7 +3,7 @@ import { Archive, GraduationCap, ShieldCheck, Trophy, Award } from "lucide-react
 import { useApp } from "@/lib/store"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { FaNum } from "@/components/fa-utils"
-import { cn } from "@/lib/utils"
+import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 
 export function TopBar() {
   const user = useApp((s) => s.user)
@@ -22,7 +22,7 @@ export function TopBar() {
           aria-label="خانه"
         >
           <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <GraduationCap className="size-4" strokeWidth={2.25} />
+            <GraduationCap className="size-4" strokeWidth={ICON_STROKE_ACTION} />
           </div>
           <div className="min-w-0 text-right">
             <p className="font-semibold text-sm leading-tight truncate">پودمان‌بان</p>
@@ -52,7 +52,7 @@ export function TopBar() {
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
-            <Archive className="size-4" strokeWidth={2} />
+            <Archive className="size-4" strokeWidth={ICON_STROKE} />
           </button>
           <button
             type="button"
@@ -66,7 +66,7 @@ export function TopBar() {
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
-            <Trophy className="size-4" strokeWidth={2} />
+            <Trophy className="size-4" strokeWidth={ICON_STROKE} />
           </button>
           <button
             type="button"
@@ -80,7 +80,7 @@ export function TopBar() {
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
-            <Award className="size-4" strokeWidth={2} />
+            <Award className="size-4" strokeWidth={ICON_STROKE} />
           </button>
           {(user?.role === "ADMIN" || user?.role === "CONTENT_ADMIN") && (
             <button
@@ -95,7 +95,7 @@ export function TopBar() {
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
-              <ShieldCheck className="size-4" strokeWidth={2} />
+              <ShieldCheck className="size-4" strokeWidth={ICON_STROKE} />
             </button>
           )}
           <ThemeToggle />
