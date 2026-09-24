@@ -212,3 +212,36 @@ describe("Password visibility toggle", () => {
     expect(username.className).toContain("text-left")
   })
 })
+
+describe("Signup form validation", () => {
+  it("validates a field on blur without submitting", async () => {
+    const user = userEvent.setup()
+    render(<AuthView />)
+
+    await user.click(screen.getByRole("tab", { name: "ثبت‌نام" }))
+
+    const username = await screen.findByPlaceholderText("username")
+    await user.click(username)
+    await user.tab()
+
+    expect(await screen.findByText("۳ تا ۳۲ نویسه (انگلیسی، عدد، _ یا نقطه)")).toBeInTheDocument()
+  })
+
+  it("summarizes submit errors with links and focuses the first one", async () => {
+    const user = userEvent.setup()
+    render(<AuthView />)
+
+    await user.click(screen.getByRole("tab", { name: "ثبت‌نام" }))
+    // Register-only field: proves the tab swap (exit animation) finished.
+    await screen.findByPlaceholderText("name@mail.com")
+
+    await user.click(screen.getByRole("button", { name: "ثبت‌نام" }))
+
+    expect(await screen.findByText("لطفاً این موارد را اصلاح کنید:")).toBeInTheDocument()
+
+    const firstLink = await screen.findByRole("link", { name: /نام و نام خانوادگی/ })
+    await user.click(firstLink)
+
+    expect(document.activeElement?.getAttribute("id")).toBe("auth-name")
+  })
+})

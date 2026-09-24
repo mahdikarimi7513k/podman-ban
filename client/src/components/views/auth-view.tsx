@@ -8,18 +8,19 @@ import { apiFetch, ApiError } from "@/lib/api-client"
 import { sanitizeUsername, sanitizeName, sanitizeEmail, clampPassword } from "@/lib/sanitize"
 import type { AppUser } from "@/lib/store"
 import { SocialButtons, type PendingOAuth } from "@/components/social-buttons"
+import { useForm, FormErrors, type FormApi, type FieldRule } from "@/lib/use-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { AnimatedTabs } from "@/components/animated-tabs"
 import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 
 type Mode = "login" | "register"
 
-interface FieldState {
-  value: string
-  error?: string
-}
+const AUTH_TABS: ReadonlyArray<{ value: Mode; label: string }> = [
+  { value: "login", label: "ورود" },
+  { value: "register", label: "ثبت‌نام" },
+]
 
 const FIELD_LABELS = {
   username: "نام کاربری",
@@ -27,6 +28,56 @@ const FIELD_LABELS = {
   name: "نام و نام خانوادگی",
   email: "ایمیل",
 } as const
+
+const AUTH_FIELDS = ["name", "username", "password", "email"] as const
+
+/** Single source for auth validation: same rules on blur and on submit. */
+const AUTH_RULES: Record<"name" | "username" | "password" | "email", FieldRule> = {
+  name: {
+    label: "نام و نام خانوادگی",
+    modes: ["register"],
+    sanitize: sanitizeName,
+    validate: (v) => (v.trim().length < 2 ? "نام حداقل ۲ نویسه باشد" : undefined),
+  },
+  username: {
+    label: "نام کاربری",
+    modes: ["login", "register"],
+    sanitize: sanitizeUsername,
+    validate: (v) =>
+      /^[a-z0-9_.]{3,32}$/.test(v.trim()) ? undefined : "۳ تا ۳۲ نویسه (انگلیسی، عدد، _ یا نقطه)",
+  },
+  password: {
+    label: "رمز عبور",
+    modes: ["login", "register"],
+    sanitize: clampPassword,
+    validate: (v, mode) => {
+      if (v.length < 1) return "رمز عبور را وارد کنید"
+
+      if (
+        mode === "register" &&
+        (v.length < 8 || !(/[a-zA-Z]/.test(v) && /\d/.test(v)))
+      ) {
+        return "حداقل ۸ نویسه شامل حرف و عدد"
+      }
+
+      return undefined
+    },
+  },
+  email: {
+    label: "ایمیل",
+    modes: ["register"],
+    sanitize: sanitizeEmail,
+    validate: (v) => {
+      const e = v.trim().toLowerCase().replace(/\s+/g, "")
+
+      if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+        return "ایمیل معتبر وارد کنید"
+      }
+
+      return undefined
+    },
+  },
+}
 
 export function AuthView() {
   const setUser = useApp((s) => s.setUser)
@@ -36,15 +87,13 @@ export function AuthView() {
   const registrationMessage = config?.registrationMessage?.trim() || null
   const [mode, setMode] = React.useState<Mode>("login")
 
-  const [name, setName] = React.useState<FieldState>({ value: "" })
-  const [username, setUsername] = React.useState<FieldState>({ value: "" })
-  const [password, setPassword] = React.useState<FieldState>({ value: "" })
-  const [email, setEmail] = React.useState<FieldState>({ value: "" })
+  const form = useForm("auth", AUTH_FIELDS, AUTH_RULES, mode)
   const [field, setField] = React.useState<"FANI_HERFEI" | "KARDANESH">(
     "FANI_HERFEI",
   )
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
+  const [showSummary, setShowSummary] = React.useState(false)
   // Social signup waiting for a study-field pick (verified profile is
   // parked server-side; nothing here is trusted input).
   const [pending, setPending] = React.useState<PendingOAuth | null>(null)
@@ -69,60 +118,43 @@ export function AuthView() {
     }
   }, [])
 
-  const validate = (): boolean => {
-    let ok = true
-    const u = username.value.trim()
-    if (!/^[a-z0-9_.]{3,32}$/.test(u)) {
-      setUsername((s) => ({
-        ...s,
-        error: "۳ تا ۳۲ نویسه (انگلیسی، عدد، _ یا نقطه)",
-      }))
-      ok = false
-    } else setUsername((s) => ({ ...s, error: undefined }))
+  const changeMode = (v: Mode): void => {
+    setMode(v)
+    setShowSummary(false)
+  }
 
-    if (password.value.length < 1) {
-      setPassword((s) => ({ ...s, error: "رمز عبور را وارد کنید" }))
-      ok = false
-    } else if (
-      mode === "register" &&
-      (password.value.length < 8 ||
-        !(/[a-zA-Z]/.test(password.value) && /\d/.test(password.value)))
-    ) {
-      setPassword((s) => ({ ...s, error: "حداقل ۸ نویسه شامل حرف و عدد" }))
-      ok = false
-    } else setPassword((s) => ({ ...s, error: undefined }))
-
-    if (mode === "register") {
-      if (name.value.trim().length < 2) {
-        setName((s) => ({ ...s, error: "نام حداقل ۲ نویسه باشد" }))
-        ok = false
-      } else setName((s) => ({ ...s, error: undefined }))
-
-      const e = email.value.trim().toLowerCase().replace(/\s+/g, "")
-
-      if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-        setEmail((s) => ({ ...s, error: "ایمیل معتبر وارد کنید" }))
-        ok = false
-      } else setEmail((s) => ({ ...s, error: undefined }))
-    }
-    return ok
+  /** Move keyboard focus to a field by id (submit errors, summary links). */
+  const focusField = (id: string): void => {
+    document.getElementById(id)?.focus()
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
-    if (!validate()) return
+
+    const checked = form.validateAll(mode)
+
+    if (!checked.ok) {
+      setShowSummary(true)
+
+      if (checked.firstInvalidId) focusField(checked.firstInvalidId)
+
+      return
+    }
+
+    setShowSummary(false)
     setSubmitting(true)
+
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register"
       const body =
         mode === "login"
-          ? { username: username.value, password: password.value }
+          ? { username: form.field("username").value, password: form.field("password").value }
           : {
-              name: name.value.trim(),
-              username: username.value,
-              password: password.value,
-              email: email.value.trim().toLowerCase().replace(/\s+/g, ""),
+              name: form.field("name").value.trim(),
+              username: form.field("username").value,
+              password: form.field("password").value,
+              email: form.field("email").value.trim().toLowerCase().replace(/\s+/g, ""),
               field,
             }
       const res = await apiFetch<{ user: AppUser }>(endpoint, {
@@ -164,34 +196,31 @@ export function AuthView() {
                 onCancel={() => setPending(null)}
               />
             ) : (
-            <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-              <TabsList className="grid grid-cols-2 w-full">
-                <TabsTrigger value="login" className="cursor-pointer">ورود</TabsTrigger>
-                <TabsTrigger value="register" className="cursor-pointer">ثبت‌نام</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="login" className="mt-5 focus-visible:outline-none">
+            <AnimatedTabs
+              tabs={AUTH_TABS}
+              value={mode}
+              // SAFETY: values come only from AUTH_TABS above, whose values are Modes.
+              onValueChange={(v) => changeMode(v as Mode)}
+            >
+              {(active) => (
                 <AnimatePresence mode="wait" initial={false}>
                 <motion.div
-                  key="login"
+                  key={active}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={transitionBase}
                 >
+                {active === "login" ? (
+                <>
                 <AuthForm
                   mode="login"
-                  name={name}
-                  username={username}
-                  password={password}
-                  email={email}
+                  form={form}
                   field={field}
                   submitting={submitting}
                   formError={formError}
-                  onNameChange={(v) => setName({ value: sanitizeName(v) })}
-                  onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
-                  onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
-                  onEmailChange={(v) => setEmail({ value: sanitizeEmail(v) })}
+                  showSummary={showSummary}
+                  onErrorNavigate={focusField}
                   onFieldChange={setField}
                   onSubmit={submit}
                 />
@@ -202,23 +231,12 @@ export function AuthView() {
                   onPending={setPending}
                   onError={setFormError}
                 />
-                </motion.div>
-                </AnimatePresence>
-              </TabsContent>
-              <TabsContent value="register" className="mt-5 focus-visible:outline-none">
-                <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key="register"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={transitionBase}
-                >
-                {!registrationOpen ? (
+                </>
+                ) : !registrationOpen ? (
                   <>
                     <RegistrationClosed
                       message={registrationMessage}
-                      onBackToLogin={() => setMode("login")}
+                      onBackToLogin={() => changeMode("login")}
                     />
                     <SocialButtons
                       enabled={config?.oauth ?? { google: false, github: false }}
@@ -232,17 +250,12 @@ export function AuthView() {
                   <>
                     <AuthForm
                       mode="register"
-                      name={name}
-                      username={username}
-                      password={password}
-                      email={email}
+                      form={form}
                       field={field}
                       submitting={submitting}
                       formError={formError}
-                    onNameChange={(v) => setName({ value: sanitizeName(v) })}
-                    onUsernameChange={(v) => setUsername({ value: sanitizeUsername(v) })}
-                    onPasswordChange={(v) => setPassword({ value: clampPassword(v) })}
-                    onEmailChange={(v) => setEmail({ value: sanitizeEmail(v) })}
+                      showSummary={showSummary}
+                      onErrorNavigate={focusField}
                       onFieldChange={setField}
                       onSubmit={submit}
                     />
@@ -257,8 +270,8 @@ export function AuthView() {
                 )}
                 </motion.div>
                 </AnimatePresence>
-              </TabsContent>
-            </Tabs>
+              )}
+            </AnimatedTabs>
             )}
           </div>
         </div>
@@ -391,17 +404,12 @@ function OAuthPending({
 
 interface AuthFormProps {
   mode: Mode
-  name: FieldState
-  username: FieldState
-  password: FieldState
-  email: FieldState
+  form: FormApi
   field: "FANI_HERFEI" | "KARDANESH"
   submitting: boolean
   formError: string | null
-  onNameChange: (v: string) => void
-  onUsernameChange: (v: string) => void
-  onPasswordChange: (v: string) => void
-  onEmailChange: (v: string) => void
+  showSummary: boolean
+  onErrorNavigate: (id: string) => void
   onFieldChange: (f: "FANI_HERFEI" | "KARDANESH") => void
   onSubmit: (e: React.FormEvent) => void
 }
@@ -409,41 +417,34 @@ interface AuthFormProps {
 function AuthForm(props: AuthFormProps) {
   const {
     mode,
-    name,
-    username,
-    password,
-    email,
+    form,
     field,
     submitting,
     formError,
-    onNameChange,
-    onUsernameChange,
-    onPasswordChange,
-    onEmailChange,
+    showSummary,
+    onErrorNavigate,
     onFieldChange,
     onSubmit,
   } = props
 
-  const firstInvalidRef = React.useRef<HTMLInputElement | null>(null)
   const [showPassword, setShowPassword] = React.useState(false)
-  React.useEffect(() => {
-    if (username.error && firstInvalidRef.current) {
-      firstInvalidRef.current.focus()
-    }
-  }, [username.error])
+  const { error: nameError, ...nameProps } = form.field("name")
+  const { error: usernameError, ...usernameProps } = form.field("username")
+  const { error: passwordError, ...passwordProps } = form.field("password")
+  const { error: emailError, ...emailProps } = form.field("email")
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {showSummary && (
+        <FormErrors errors={form.summary(mode)} onNavigate={onErrorNavigate} />
+      )}
       {mode === "register" && (
-        <Field label={FIELD_LABELS.name} htmlFor="auth-name" error={name.error}>
+        <Field label={FIELD_LABELS.name} htmlFor="auth-name" error={nameError}>
           <Input
-            id="auth-name"
-            name="name"
+            {...nameProps}
             autoComplete="name"
-            value={name.value}
-            onChange={(e) => onNameChange(e.target.value)}
-            aria-invalid={!!name.error}
-            aria-describedby={name.error ? "auth-name-error" : undefined}
+            aria-invalid={!!nameError}
+            aria-describedby={nameError ? "auth-name-error" : undefined}
             placeholder="مثلاً: علی رضایی"
             maxLength={40}
             className="h-11"
@@ -452,18 +453,15 @@ function AuthForm(props: AuthFormProps) {
       )}
 
       {mode === "register" && (
-        <Field label={FIELD_LABELS.email} htmlFor="auth-email" error={email.error}>
+        <Field label={FIELD_LABELS.email} htmlFor="auth-email" error={emailError}>
           <Input
-            id="auth-email"
-            name="email"
+            {...emailProps}
             type="email"
             autoComplete="email"
             inputMode="email"
             dir="ltr"
-            value={email.value}
-            onChange={(e) => onEmailChange(e.target.value)}
-            aria-invalid={!!email.error}
-            aria-describedby={email.error ? "auth-email-error" : undefined}
+            aria-invalid={!!emailError}
+            aria-describedby={emailError ? "auth-email-error" : undefined}
             placeholder="name@mail.com"
             maxLength={254}
             className="h-11 text-left tracking-wide"
@@ -473,29 +471,25 @@ function AuthForm(props: AuthFormProps) {
         </Field>
       )}
 
-      <Field label={FIELD_LABELS.username} htmlFor="auth-username" error={username.error}>
+      <Field label={FIELD_LABELS.username} htmlFor="auth-username" error={usernameError}>
         <div className="relative">
           <User className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" strokeWidth={ICON_STROKE} />
           <Input
-            id="auth-username"
-            name="username"
+            {...usernameProps}
             autoComplete="username"
             dir="ltr"
             className="h-11 text-left tracking-wide pr-9"
-            value={username.value}
-            onChange={(e) => onUsernameChange(e.target.value.toLowerCase())}
-            aria-invalid={!!username.error}
-            aria-describedby={username.error ? "auth-username-error" : undefined}
+            aria-invalid={!!usernameError}
+            aria-describedby={usernameError ? "auth-username-error" : undefined}
             placeholder="username"
             maxLength={32}
-            ref={firstInvalidRef}
             spellCheck={false}
             autoCapitalize="off"
           />
         </div>
       </Field>
 
-      <Field label={FIELD_LABELS.password} htmlFor="auth-password" error={password.error}>
+      <Field label={FIELD_LABELS.password} htmlFor="auth-password" error={passwordError}>
         {mode === "register" && (
           <p role="note" className="mb-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             <TriangleAlert className="size-4 shrink-0 text-warning" strokeWidth={ICON_STROKE} aria-hidden="true" />
@@ -504,16 +498,13 @@ function AuthForm(props: AuthFormProps) {
         )}
         <div className="relative">
           <Input
-            id="auth-password"
-            name="password"
+            {...passwordProps}
             type={showPassword ? "text" : "password"}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             dir="ltr"
             className="h-11 text-left tracking-wide pl-9"
-            value={password.value}
-            onChange={(e) => onPasswordChange(e.target.value)}
-            aria-invalid={!!password.error}
-            aria-describedby={password.error ? "auth-password-error" : undefined}
+            aria-invalid={!!passwordError}
+            aria-describedby={passwordError ? "auth-password-error" : undefined}
             placeholder="••••••••"
             maxLength={72}
           />

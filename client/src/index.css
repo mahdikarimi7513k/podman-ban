@@ -415,3 +415,15 @@
     0 0 0 2px var(--background),
     0 0 0 4px var(--ring);
 }
+
+/* Sliding tab indicator (see tabIndicatorStyle): same ease as lib/motion,
+   short enough to feel instant. Respects reduced motion. */
+.tab-indicator {
+  transition: inset-inline-start 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-indicator {
+    transition: none;
+  }
+}
