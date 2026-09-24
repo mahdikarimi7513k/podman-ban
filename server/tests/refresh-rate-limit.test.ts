@@ -29,15 +29,15 @@ describe("refresh rate limit", () => {
     expect(res.body.error).toBe("نشست نامعتبر است — دوباره وارد شوید")
   })
 
-  it("trips to 429 with retryAfterSec after 60 tries from one IP", async () => {
+  it("trips to 429 with retryAfterSec after 300 tries from one IP", async () => {
     let last = 0
 
-    for (let i = 0; i < 61; i++) {
+    for (let i = 0; i < 301; i++) {
       const res = await refreshWithGarbage(HAMMER_XFF)
 
       last = res.status
 
-      if (i < 60) {
+      if (i < 300) {
         expect(res.status).toBe(401)
       }
     }

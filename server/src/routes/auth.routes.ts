@@ -209,10 +209,13 @@ authRouter.post("/auth/refresh", async (req, res) => {
   const sip = socketIp(req)
 
   // Token endpoint without a limit is a JWT-guessing oracle: each try costs
-  // one verify + one indexed lookup. 60/5min per IP never trips a real
-  // client (1 refresh per 15min access lifetime + 1 retry per 401) but
-  // stops bulk guessing; the socket floor survives XFF rotation.
-  const rlIp = rateLimit(`refresh-ip:${ip}`, 60, 300)
+  // one verify + one indexed lookup. The per-IP quota is deliberately
+  // roomy (300/5min): a school NAT shares one public IP across hundreds
+  // of students, and the 15-minute access lifetime means whole cohorts
+  // refresh inside one window at class start — throttling that looks
+  // exactly like random logouts. Guessing is still bounded (3600/hr/IP)
+  // and the rotation family-nuke remains the real theft shield.
+  const rlIp = rateLimit(`refresh-ip:${ip}`, 300, 300)
   const rlSock = rateLimit(`refresh-ip-sock:${sip}`, 300, 300)
 
   if (!rlIp.ok || !rlSock.ok) {

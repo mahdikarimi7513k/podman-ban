@@ -361,17 +361,24 @@ userRouter.get("/daily-progress", async (req, res) => {
     .where(eq(examSessions.userId, me.id))
     .all()
 
+  // No sessions → zero answers, full stop. (drizzle's and() silently
+  // drops undefined conditions, so the ternary below used to vanish for
+  // sessionless users and count the WHOLE SITE's answers into their
+  // daily goal — everyone else's activity completed it.)
+  if (sessionIds.length === 0) {
+    res.json({ todayAnswered: 0, date: tehranDayKey(new Date(nowMs)) })
+    return
+  }
+
   const answerRows = await db
     .select({ id: answers.id })
     .from(answers)
     .where(
       and(
-        sessionIds.length > 0
-          ? inArray(
-              answers.sessionId,
-              sessionIds.map((s) => s.id),
-            )
-          : undefined,
+        inArray(
+          answers.sessionId,
+          sessionIds.map((s) => s.id),
+        ),
         gte(answers.answeredAt, todayStart),
       ),
     )
