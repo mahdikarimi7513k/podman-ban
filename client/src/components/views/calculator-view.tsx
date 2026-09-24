@@ -45,7 +45,7 @@ export function CalculatorView() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">ابزار درصدگیری</h1>
+        <h1 className="text-xl font-bold">ابزار درصدگیری</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           درصد آزمون را با یا بدون نمره‌ی منفی محاسبه کنید.
         </p>

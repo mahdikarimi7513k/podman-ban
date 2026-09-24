@@ -133,7 +133,7 @@ export function HomeView() {
     <div className="space-y-4">
       <section className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-balance">کتاب‌های {fieldLabel}</h1>
+          <h1 className="text-xl font-bold text-balance">کتاب‌های {fieldLabel}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 text-pretty">
             یک پودمان را باز کنید و آزمون را آغاز کنید.
           </p>

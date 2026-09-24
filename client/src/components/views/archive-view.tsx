@@ -105,7 +105,7 @@ export function ArchiveView() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-balance">آرشیو آزمون‌ها</h1>
+        <h1 className="text-xl font-bold text-balance">آرشیو آزمون‌ها</h1>
         <p className="text-sm text-muted-foreground mt-0.5 text-pretty">
           آزمون‌های نهایی موسسات مختلف به همراه پاسخنامه.
         </p>

@@ -208,7 +208,7 @@ export function ReportView() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-balance">کارنامه</h1>
+        <h1 className="text-xl font-bold text-balance">کارنامه</h1>
         <p className="text-sm text-muted-foreground mt-0.5 text-pretty">
           وضعیت آزمون‌های شما به تفکیک پودمان.
         </p>

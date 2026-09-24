@@ -71,7 +71,7 @@ export function LeaderboardView() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">رتبه‌بندی هنرجویان</h1>
+        <h1 className="text-xl font-bold">رتبه‌بندی هنرجویان</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           برترین دانش‌آموزان بر اساس میانگین درصد آزمون‌ها.
         </p>

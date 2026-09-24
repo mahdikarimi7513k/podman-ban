@@ -179,7 +179,7 @@ export function AuthView() {
             <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground mb-4">
               <GraduationCap className="size-7" strokeWidth={ICON_STROKE_ACTION} />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">پودمان‌بان</h1>
+            <h1 className="text-2xl font-bold">پودمان‌بان</h1>
             <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
               آزمون پودمانی هنرستان — تمرین، کارنامه و درصدگیری
             </p>

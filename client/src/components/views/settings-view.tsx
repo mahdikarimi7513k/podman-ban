@@ -109,7 +109,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-balance">تنظیمات</h1>
+        <h1 className="text-xl font-bold text-balance">تنظیمات</h1>
         <p className="text-sm text-muted-foreground mt-0.5 text-pretty">
           پروفایل، ترجیحات و تم نمایش.
         </p>

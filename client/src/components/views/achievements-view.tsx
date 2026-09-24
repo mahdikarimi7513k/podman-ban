@@ -91,7 +91,7 @@ export function AchievementsView() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">دستاوردها</h1>
+        <h1 className="text-xl font-bold">دستاوردها</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           با تلاش مداوم نشان‌ها را باز کنید.
         </p>
