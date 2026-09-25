@@ -780,15 +780,26 @@ jobs:
         run: |
           set -e
           BT="$ANDROID_HOME/build-tools/34.0.0"
+
           echo "--- package / sdk ---"
           "$BT/aapt" dump badging signed.apk | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" || true
+
           echo "--- native libs per ABI ---"
-          unzip -l signed.apk | grep -E 'lib/(armeabi-v7a|arm64-v8a|x86|x86_64)/' | awk '{print $4}' | cut -d/ -f1-2 | sort -u
-          if ! unzip -l signed.apk | grep -q 'lib/arm64-v8a/'; then
-            echo "❌ lib/arm64-v8a missing — this APK can NOT install on S25. Check splits/abiFilters."
-            exit 1
+          LIBS="$(unzip -l signed.apk | grep -E 'lib/(armeabi-v7a|arm64-v8a|x86|x86_64)/' | awk '{print $4}' | cut -d/ -f1-2 | sort -u || true)"
+
+          if [ -z "$LIBS" ]; then
+            echo "ℹ️ هیچ lib/*.so داخل APK نیست (WebView خالص — بدون کد نیتیو)."
+            echo "   چنین APK ای مستقل از ABI است و روی همه دستگاه‌ها نصب می‌شود."
+            echo "✅ Universal (pure-JVM) — S25 OK"
+          else
+            echo "$LIBS"
+            if ! printf '%s\n' "$LIBS" | grep -q 'lib/arm64-v8a/'; then
+              echo "❌ lib/arm64-v8a missing — this APK can NOT install on S25. Check splits/abiFilters."
+              exit 1
+            fi
+            echo "✅ arm64-v8a present (S25 OK)"
           fi
-          echo "✅ arm64-v8a present (S25 OK)"
+
           "$BT/apksigner" verify --verbose --print-certs signed.apk
 
       - name: Upload APK (release)
