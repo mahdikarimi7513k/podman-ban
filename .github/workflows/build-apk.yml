@@ -714,24 +714,82 @@ jobs:
           print('version:', os.environ['VERSION_NAME'], '| code:', os.environ['VERSION_CODE'])
           "
 
+      # S25 و همه گوشی‌های ۶۴بیتی فقط با arm64-v8a نصب می‌شوند: خروجی باید
+      # یک APK یونیورسال (همه ABIها داخل یک فایل) باشد، نه split-per-ABI.
+      - name: Force universal APK (no ABI splits)
+        working-directory: client/android
+        run: |
+          python3 - <<'PYEOF'
+          import re
+          p = 'app/build.gradle'
+          s = open(p, encoding='utf-8').read()
+          # هر splits { abi { ... } } را خنثی کن — خروجی split روی S25 نصب نمی‌شود
+          s2, n = re.subn(r'splits\s*\{(?:[^{}]|\{[^{}]*\})*\}', '', s)
+          if n:
+              print(f'warning: removed {n} splits block(s) - universal enforced')
+          # abiFilters محدودکننده را هم بردار تا همه ABIها بسته شوند
+          # (فقط آرگومان‌ها، نه آکولاد پایانی خط — تعادل براکت‌ها حفظ شود)
+          s2, m = re.subn(r'abiFilters\s+[^}\n]*', '', s2)
+          if m:
+              print(f'warning: removed {m} abiFilters line(s) - all ABIs packaged')
+          if s2 != s:
+              open(p, 'w', encoding='utf-8').write(s2)
+          else:
+              print('no splits/abiFilters - already universal')
+          PYEOF
+
       - name: Build release APK
         working-directory: client/android
         run: ./gradlew clean assembleRelease
 
-      - name: Sign APK
+      - name: Sign APK (v1+v2, universal)
         working-directory: client/android
         run: |
           set -e
-          APK=$(find app/build/outputs/apk/release -name "*unsigned*.apk" | head -1)
+          # A true release build is UNSIGNED (Capacitor ships no release
+          # keystore). If none exists, something already signed it (e.g. a
+          # stale debug config) — signing over that yields dual-signature
+          # APKs that fail on real devices. Fail loudly instead of guessing.
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -name "*unsigned*.apk" | head -1)
           if [ -z "$APK" ]; then
-            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+            echo "❌ No unsigned release APK. Outputs:"
+            ls -la app/build/outputs/apk/release/ || true
+            exit 1
+          fi
+          if [ "$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | wc -l)" -ne 1 ]; then
+            echo "❌ Expected exactly one release APK (no ABI splits). Outputs:"
+            ls app/build/outputs/apk/release/
+            exit 1
           fi
           echo "Signing: $APK"
           BT="$ANDROID_HOME/build-tools/34.0.0"
           "$BT/zipalign" -f 4 "$APK" aligned.apk
-          "$BT/apksigner" sign --ks "$KEYSTORE_PATH" --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEY_PASS" --out signed.apk aligned.apk
+          # v1 (JAR) for old installers, v2 for Android 7+, v3 for 9+ —
+          # all three on for max compatibility (S25 = Android 15).
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --ks "$KEYSTORE_PATH" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEY_PASS" \
+            --out signed.apk aligned.apk
           "$BT/apksigner" verify signed.apk
           echo "✅ Signed: $(du -h signed.apk | cut -f1)"
+
+      # Proof of universality: S25 needs lib/arm64-v8a inside the APK —
+      # fail here with a clear message instead of on the user's phone.
+      - name: Verify universal APK (S25-ready)
+        working-directory: client/android
+        run: |
+          set -e
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          echo "--- package / sdk ---"
+          "$BT/aapt" dump badging signed.apk | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)" || true
+          echo "--- native libs per ABI ---"
+          unzip -l signed.apk | grep -E 'lib/(armeabi-v7a|arm64-v8a|x86|x86_64)/' | awk '{print $4}' | cut -d/ -f1-2 | sort -u
+          if ! unzip -l signed.apk | grep -q 'lib/arm64-v8a/'; then
+            echo "❌ lib/arm64-v8a missing — this APK can NOT install on S25. Check splits/abiFilters."
+            exit 1
+          fi
+          echo "✅ arm64-v8a present (S25 OK)"
+          "$BT/apksigner" verify --verbose --print-certs signed.apk
 
       - name: Upload APK (release)
         if: ${{ !inputs.adhoc_sign }}
