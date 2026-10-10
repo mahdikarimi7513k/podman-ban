@@ -1,0 +1,1 @@
+ALTER TABLE `Question` ADD `explanationImageBase64` text;

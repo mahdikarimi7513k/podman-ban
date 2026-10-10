@@ -43,12 +43,13 @@ describe("notification DDL parity", () => {
 })
 
 describe("oauth DDL parity", () => {
-  it("RUNTIME_DDL_OAUTH + RUNTIME_ALTERS + RUNTIME_DDL_STUDY mirror 0003..0006", () => {
+  it("RUNTIME_DDL_OAUTH + RUNTIME_ALTERS + RUNTIME_DDL_STUDY mirror 0003..0007", () => {
     const migrated = [
       "0003_add-user-email-oauth.sql",
       "0004_add-user-email-oauth.sql",
       "0005_add-exam-pausedat.sql",
       "0006_add-study-rooms-avatar.sql",
+      "0007_add-explanation-image.sql",
     ].flatMap((f) =>
       readFileSync(resolve(here, "..", "drizzle", f), "utf8")
         .split("--> statement-breakpoint")

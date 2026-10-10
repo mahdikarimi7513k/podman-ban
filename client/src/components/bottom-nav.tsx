@@ -1,5 +1,5 @@
 
-import { Home, BarChart3, Settings, Calculator, Users } from "lucide-react"
+import { Home, BarChart3, Settings, Users } from "lucide-react"
 import { useApp, type View } from "@/lib/store"
 import { cn, ICON_STROKE_ACTION, ICON_STROKE_LARGE } from "@/lib/utils"
 
@@ -7,15 +7,13 @@ interface NavItem {
   view: View
   label: string
   icon: typeof Home
-  center?: boolean
 }
 
 const ITEMS: NavItem[] = [
   { view: "settings", label: "تنظیمات", icon: Settings },
   { view: "report", label: "کارنامه", icon: BarChart3 },
-  { view: "study", label: "اتاق", icon: Users, center: true },
   { view: "home", label: "خانه", icon: Home },
-  { view: "calculator", label: "درصدگیری", icon: Calculator },
+  { view: "study", label: "اتاق", icon: Users },
 ]
 
 export function BottomNav() {
@@ -27,7 +25,7 @@ export function BottomNav() {
       aria-label="ناوبری اصلی"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/90 backdrop-blur pb-safe"
     >
-      <ul className="max-w-3xl mx-auto grid grid-cols-5">
+      <ul className="max-w-3xl mx-auto grid grid-cols-4">
         {ITEMS.map((item) => {
           const active = view === item.view
           const Icon = item.icon
@@ -47,13 +45,7 @@ export function BottomNav() {
                 <span
                   className={cn(
                     "flex size-9 items-center justify-center rounded-full transition-colors",
-                    item.center && active
-                      ? "bg-foreground text-background"
-                      : item.center
-                        ? "bg-foreground/10 text-foreground group-hover:bg-accent"
-                        : active
-                          ? "bg-foreground text-background"
-                          : "group-hover:bg-accent",
+                    active ? "bg-foreground text-background" : "group-hover:bg-accent",
                   )}
                 >
                   {/* outline default, fill on active via fill-current */}

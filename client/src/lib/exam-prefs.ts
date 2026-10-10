@@ -1,19 +1,22 @@
 /**
- * User-preference resolution (exam duration default + daily goal).
+ * User-preference resolution (exam duration default + daily goals).
  *
- * Saved via PUT /api/user/prefs as JSON (examDurationMin, dailyGoal) and
- * echoed back on the user object. The admin's defaultTimerMin applies when
- * the user never picked their own duration. Hard fallbacks keep the exam
- * startable even with corrupt or missing prefs.
+ * Saved via PUT /api/user/prefs as JSON (examDurationMin, dailyGoal,
+ * studyGoalMin) and echoed back on the user object. The admin's
+ * defaultTimerMin applies when the user never picked their own duration.
+ * Hard fallbacks keep the exam startable even with corrupt prefs.
  */
 
 export const FALLBACK_DURATION_MIN = 20
 
 export const FALLBACK_DAILY_GOAL = 20
 
+export const FALLBACK_STUDY_GOAL_MIN = 180
+
 export interface ExamPrefs {
   examDurationMin?: number
   dailyGoal?: number
+  studyGoalMin?: number
   repeatQuestions?: boolean
 }
 
@@ -21,6 +24,7 @@ export interface ExamPrefs {
 interface PrefsJson {
   examDurationMin?: unknown
   dailyGoal?: unknown
+  studyGoalMin?: unknown
   repeatQuestions?: unknown
 }
 
@@ -52,6 +56,11 @@ export function parseExamPrefs(prefsJson: string | undefined | null): ExamPrefs 
     out.dailyGoal = rec.dailyGoal as number
   }
 
+  if (Number.isFinite(rec.studyGoalMin)) {
+    // SAFETY: finiteness just passed, so this is a finite number.
+    out.studyGoalMin = rec.studyGoalMin as number
+  }
+
   if (rec.repeatQuestions === true || rec.repeatQuestions === false) {
     out.repeatQuestions = rec.repeatQuestions
   }
@@ -80,6 +89,15 @@ export function resolveDailyGoal(prefs: ExamPrefs): number {
   if (inRange(prefs.dailyGoal, 5, 200)) return prefs.dailyGoal
 
   return FALLBACK_DAILY_GOAL
+}
+
+/** Daily study-minutes goal: user pref → admin default → 180. */
+export function resolveStudyGoalMin(prefs: ExamPrefs, adminDefault?: number): number {
+  if (inRange(prefs.studyGoalMin, 30, 960)) return prefs.studyGoalMin
+
+  if (inRange(adminDefault, 30, 960)) return adminDefault
+
+  return FALLBACK_STUDY_GOAL_MIN
 }
 
 /**

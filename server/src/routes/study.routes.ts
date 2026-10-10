@@ -100,6 +100,40 @@ function newInviteCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
+/**
+ * Decode the user's own daily study-minutes goal from the prefs blob.
+ * Never throws, never trusts the shape: only a finite integer in range
+ * wins, otherwise the caller keeps its fallback (admin default).
+ */
+function resolveStudyGoalFromPrefs(prefs: string | null | undefined, fallback: number): number {
+  if (!prefs) return fallback
+
+  let raw: unknown
+
+  try {
+    raw = JSON.parse(prefs)
+  } catch {
+    return fallback
+  }
+
+  // Property reads on primitives box safely (yield undefined); only
+  // null/array need exclusion before the assertion below.
+  if (raw === null || Array.isArray(raw)) return fallback
+
+  // SAFETY: null/array excluded above; primitives yield undefined fields,
+  // which the finiteness check below rejects — mirroring parseExamPrefs.
+  const rec = raw as { studyGoalMin?: unknown }
+
+  if (!Number.isFinite(rec.studyGoalMin)) return fallback
+
+  // SAFETY: finiteness just passed, so this is a finite number.
+  const v = rec.studyGoalMin as number
+
+  if (!Number.isInteger(v) || v < 30 || v > 960) return fallback
+
+  return v
+}
+
 async function uniqueInviteCode(): Promise<string> {
   for (let i = 0; i < 10; i++) {
     const code = newInviteCode()
@@ -127,6 +161,22 @@ studyRouter.get("/study/overview", async (req, res) => {
   const rangeStartMs = range === "today" ? dayStart : range === "week" ? dayStart - 6 * 86400000 : dayStart - 29 * 86400000
   const rangeStart = new Date(rangeStartMs)
   const state = await getAppState()
+
+  // The daily study goal belongs to the user (set in settings); the admin
+  // value is only the default for users who never picked one.
+  let goalMinutes = state.studyDailyGoalMin
+
+  try {
+    const dbUser = await db
+      .select({ prefs: users.prefs })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .get()
+
+    goalMinutes = resolveStudyGoalFromPrefs(dbUser?.prefs ?? null, goalMinutes)
+  } catch {
+    /* unreadable prefs → admin default */
+  }
 
   const sessions = await db
     .select({
@@ -177,7 +227,7 @@ studyRouter.get("/study/overview", async (req, res) => {
   res.json({
     range,
     totalMinutes: Math.round(totalMs / 60000),
-    goalMinutes: state.studyDailyGoalMin,
+    goalMinutes,
     subjects,
     konkur,
     serverNow: new Date(nowMs).toISOString(),
@@ -226,6 +276,7 @@ studyRouter.get("/study/rooms", async (req, res) => {
   }
 
   const memberIds = [...new Set(members.map((m) => m.userId))].slice(0, 200)
+
   const memberUsers = memberIds.length > 0
     ? await db
       .select({ id: users.id, name: users.name, avatarBase64: users.avatarBase64 })
@@ -568,7 +619,20 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
     : 0
 
   const state = await getAppState()
-  const weekGoalMin = state.studyDailyGoalMin * 7
+  let weekGoalMin = state.studyDailyGoalMin * 7
+
+  try {
+    const dbUser = await db
+      .select({ prefs: users.prefs })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .get()
+
+    weekGoalMin = resolveStudyGoalFromPrefs(dbUser?.prefs ?? null, state.studyDailyGoalMin) * 7
+  } catch {
+    /* unreadable prefs → admin default */
+  }
+
   const roomWeekMin = leaderboard.reduce((a, m) => a + m.weekMin, 0)
 
   res.json({

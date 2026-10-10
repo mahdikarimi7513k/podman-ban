@@ -22,7 +22,7 @@ import { Router, type Response } from "express"
 import { z } from "zod"
 import { and, avg, count, desc, eq, inArray, max } from "drizzle-orm"
 import { db } from "../lib/db.js"
-import { answers, books, examSessions, modules, questions, users } from "../lib/db/schema.js"
+import { answers, books, examSessions, modules, questions, studySessions, users } from "../lib/db/schema.js"
 import {
   getSession,
   requireCsrf,
@@ -47,6 +47,7 @@ import {
   answerSchema,
   parseBody,
 } from "../lib/validations.js"
+import { logWarn } from "../lib/logger.js"
 
 export const examRouter = Router()
 
@@ -54,10 +55,13 @@ export const examRouter = Router()
 
 examRouter.get("/books", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const books = await listBooks(user.field, user.id)
   res.json({ books })
 })
@@ -66,24 +70,31 @@ examRouter.get("/books", async (req, res) => {
 
 examRouter.post("/exam/start", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
   // claude-red business-logic/DoS: each start inserts a session row.
   // 30 starts / 10min per user is far above human pace, blocks spam farms.
   const rl = rateLimit(`exam-start:${user.id}`, 30, 600)
+
   if (!rl.ok) {
     res.status(429).json({ error: "تعداد شروع آزمون بیش از حد مجاز است" })
+
     return
   }
 
   const data = parseBody(startExamSchema, req.body, res)
+
   if (!data) return
   const { moduleId, durationMin } = data
   const practice = data.practice ?? false
@@ -93,8 +104,10 @@ examRouter.post("/exam/start", async (req, res) => {
     where: eq(modules.id, moduleId),
     with: { book: { columns: { field: true } } },
   })
+
   if (!mod || (mod.book.field !== null && mod.book.field !== user.field)) {
     res.status(403).json({ error: "این پودمان برای رشته شما در دسترس نیست" })
+
     return
   }
 
@@ -124,6 +137,7 @@ examRouter.post("/exam/start", async (req, res) => {
     repeatQuestions,
     practice,
   })
+
   // Session metadata only. The full question set (with images) is fetched once
   // by GET /api/exam/:session when ExamView mounts — shipping it here too made
   // "start exam" transfer the whole bank twice.
@@ -134,10 +148,13 @@ examRouter.post("/exam/start", async (req, res) => {
 
 examRouter.get("/exam/sessions", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const rows = await db
     .select({
       id: examSessions.id,
@@ -166,6 +183,7 @@ examRouter.get("/exam/sessions", async (req, res) => {
     .orderBy(desc(examSessions.finishedAt))
     .limit(50)
     .all()
+
   res.json({
     sessions: rows.map((s) => ({
       id: s.id,
@@ -186,18 +204,23 @@ examRouter.get("/exam/sessions", async (req, res) => {
 
 examRouter.get("/exam/progress", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const progress = await getUserProgress(user.id, user.field)
   res.json({ progress })
 })
 
 examRouter.get("/exam/stats", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 
@@ -261,10 +284,13 @@ examRouter.get("/exam/stats", async (req, res) => {
 
 examRouter.get("/exam/in-progress", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const session = await db
     .select({
       id: examSessions.id,
@@ -282,10 +308,13 @@ examRouter.get("/exam/in-progress", async (req, res) => {
     .orderBy(desc(examSessions.startedAt))
     .limit(1)
     .get()
+
   if (!session) {
     res.json({ session: null })
+
     return
   }
+
   res.json({
     session: {
       id: session.id,
@@ -301,8 +330,10 @@ examRouter.get("/exam/in-progress", async (req, res) => {
 
 examRouter.get("/exam/leaderboard", async (req, res) => {
   const me = await getSession(req)
+
   if (!me) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 
@@ -319,38 +350,72 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
     .groupBy(examSessions.userId)
     .all()
 
+  // Study minutes per user (all-time focus sessions, live ones counted too).
+  const nowMs = Date.now()
+
+  const studyRows = await db
+    .select({
+      userId: studySessions.userId,
+      status: studySessions.status,
+      startedAt: studySessions.startedAt,
+      accumulatedMs: studySessions.accumulatedMs,
+    })
+    .from(studySessions)
+    .all()
+
+  const studyMinByUser = new Map<string, number>()
+
+  for (const s of studyRows) {
+    const live = s.status === "ACTIVE" ? Math.max(0, nowMs - s.startedAt.getTime()) : 0
+    const ms = s.accumulatedMs + live
+    studyMinByUser.set(s.userId, (studyMinByUser.get(s.userId) ?? 0) + ms)
+  }
+
+  for (const [id, ms] of studyMinByUser) studyMinByUser.set(id, Math.round(ms / 60000))
+
+  const rankedIds = [...new Set([...grouped.map((g) => g.userId), ...studyMinByUser.keys()])]
+
   const userRows =
-    grouped.length > 0
+    rankedIds.length > 0
       ? await db
-          .select({ id: users.id, name: users.name, field: users.field, role: users.role })
-          .from(users)
-          .where(
-            inArray(
-              users.id,
-              grouped.map((g) => g.userId),
-            ),
-          )
-          .all()
+        .select({ id: users.id, name: users.name, field: users.field, role: users.role })
+        .from(users)
+        .where(inArray(users.id, rankedIds))
+        .all()
       : []
+
   const userById = new Map(userRows.map((u) => [u.id, u]))
+  const examByUser = new Map(grouped.map((g) => [g.userId, g]))
 
   // Students only — staff (ADMIN/CONTENT_ADMIN) test accounts must never
   // outrank real students on a public board.
-  const ranked = grouped
-    .map((g) => {
-      const u = userById.get(g.userId)
+  // Composite score (documented in the UI): study hours × 10
+  //   + finished tests × 5 + average percent.
+  const ranked = rankedIds
+    .map((id) => {
+      const u = userById.get(id)
+
       if (!u || u.role !== "STUDENT") return null
+      const g = examByUser.get(id)
+      const avg = Math.round(Number(g?.avgScore ?? 0))
+      const best = g?.bestScore ?? 0
+      const testCount = g?.n ?? 0
+      const studyMin = studyMinByUser.get(id) ?? 0
+      const score = Math.round((studyMin / 60) * 10 + testCount * 5 + avg)
+
       return {
         id: u.id,
         name: u.name,
         field: u.field as "FANI_HERFEI" | "KARDANESH",
-        avg: Math.round(Number(g.avgScore ?? 0)),
-        best: g.bestScore ?? 0,
-        count: g.n,
+        avg,
+        best,
+        count: testCount,
+        studyMin,
+        score,
       }
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
-    .sort((a, b) => b.avg - a.avg || b.best - a.best)
+    .sort((a, b) => b.score - a.score || b.avg - a.avg)
 
   const top = ranked.slice(0, 50)
   const myRank = ranked.findIndex((r) => r.id === me.id) + 1
@@ -361,10 +426,12 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
     myRank: myRank || null,
     myStats: myEntry
       ? {
-          avg: myEntry.avg,
-          best: myEntry.best,
-          count: myEntry.count,
-        }
+        avg: myEntry.avg,
+        best: myEntry.best,
+        count: myEntry.count,
+        studyMin: myEntry.studyMin,
+        score: myEntry.score,
+      }
       : null,
     totalStudents: ranked.length,
   })
@@ -374,27 +441,44 @@ examRouter.get("/exam/leaderboard", async (req, res) => {
 
 examRouter.get("/exam/:session", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const sessionId = req.params.session
 
   const session = await db.query.examSessions.findFirst({
     where: eq(examSessions.id, sessionId),
     with: { module: { with: { book: { columns: { title: true } } } } },
   })
+
   if (!session) {
     res.status(404).json({ error: "نشست آزمون یافت نشد" })
+
     return
   }
+
   if (session.userId !== user.id) {
     res.status(403).json({ error: "دسترسی غیرمجاز" })
+
     return
   }
 
   const questionIds = JSON.parse(session.questionOrder) as string[]
   const questions = await getQuestionsForExam(session.moduleId, questionIds)
+
+  // Short payloads (admin deleted questions mid-exam) would otherwise look
+  // like a half-loaded exam on the phone — visible in the host log.
+  if (questions.length !== session.totalQuestions) {
+    logWarn("[exam] short question payload", {
+      sessionId,
+      got: questions.length,
+      expected: session.totalQuestions,
+    })
+  }
 
   // load existing answers so a reconnect resumes state
   const answerRows = await db
@@ -437,17 +521,22 @@ examRouter.get("/exam/:session", async (req, res) => {
 
 examRouter.post("/exam/:session/answer", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
   const sessionId = req.params.session
   const data = parseBody(answerSchema, req.body, res)
+
   if (!data) return
   const { questionId, selectedOption, timeSpentMs } = data
 
@@ -458,6 +547,7 @@ examRouter.post("/exam/:session/answer", async (req, res) => {
     selectedOption,
     timeSpentMs,
   )
+
   if (!result.ok) {
     if (result.code === "NOT_FOUND" || result.code === "QUESTION_NOT_FOUND") {
       res.status(404).json({ error: "یافت نشد" })
@@ -466,8 +556,10 @@ examRouter.post("/exam/:session/answer", async (req, res) => {
     } else {
       res.status(403).json({ error: "این آزمون دیگر فعال نیست" })
     }
+
     return
   }
+
   res.json({ ok: true })
 })
 
@@ -475,24 +567,31 @@ examRouter.post("/exam/:session/answer", async (req, res) => {
 
 examRouter.post("/exam/:session/finish", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
   const sessionId = req.params.session
+
   try {
     const result = await finishExam(sessionId, user.id)
     res.json({ result })
   } catch (e) {
     if (e instanceof Error && e.message === "NOT_FOUND") {
       res.status(404).json({ error: "یافت نشد" })
+
       return
     }
+
     res.status(500).json({ error: "خطا در پایان آزمون" })
   }
 })
@@ -608,26 +707,35 @@ examRouter.post("/exam/:session/resume", async (req, res) => {
 
 examRouter.get("/exam/:session/review", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const sessionId = req.params.session
 
   const session = await db.query.examSessions.findFirst({
     where: eq(examSessions.id, sessionId),
     with: { module: { with: { book: { columns: { title: true } } } } },
   })
+
   if (!session) {
     res.status(404).json({ error: "نشست آزمون یافت نشد" })
+
     return
   }
+
   if (session.userId !== user.id) {
     res.status(403).json({ error: "دسترسی غیرمجاز" })
+
     return
   }
+
   if (session.status !== "FINISHED") {
     res.status(403).json({ error: "بازبینی فقط برای آزمون‌های تمام‌شده امکان‌پذیر است" })
+
     return
   }
 
@@ -643,6 +751,7 @@ examRouter.get("/exam/:session/review", async (req, res) => {
     .from(answers)
     .where(eq(answers.sessionId, sessionId))
     .all()
+
   const answerMap = new Map(answerRows.map((a) => [a.questionId, a]))
 
   res.json({
@@ -674,12 +783,16 @@ const checkSchema = z.object({
 
 examRouter.post("/exam/:session/check", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
@@ -696,24 +809,33 @@ examRouter.post("/exam/:session/check", async (req, res) => {
     .from(examSessions)
     .where(eq(examSessions.id, sessionId))
     .get()
+
   if (!session) {
     res.status(404).json({ error: "نشست یافت نشد" })
+
     return
   }
+
   if (session.userId !== user.id) {
     res.status(403).json({ error: "دسترسی غیرمجاز" })
+
     return
   }
+
   if (!session.isPractice) {
     res.status(403).json({ error: "فقط در حالت تمرین قابل استفاده است" })
+
     return
   }
+
   if (session.status !== "IN_PROGRESS") {
     res.status(403).json({ error: "این آزمون فعال نیست" })
+
     return
   }
 
   const data = parseBody(checkSchema, req.body, res)
+
   if (!data) return
   const { questionId } = data
 
@@ -721,18 +843,22 @@ examRouter.post("/exam/:session/check", async (req, res) => {
     .select({
       correctOption: questions.correctOption,
       explanation: questions.explanation,
+      explanationImageBase64: questions.explanationImageBase64,
       moduleId: questions.moduleId,
     })
     .from(questions)
     .where(eq(questions.id, questionId))
     .get()
+
   if (!q || q.moduleId !== session.moduleId) {
     res.status(404).json({ error: "سوال یافت نشد" })
+
     return
   }
 
   res.json({
     correctOption: q.correctOption,
     explanation: q.explanation,
+    explanationImageBase64: q.explanationImageBase64,
   })
 })

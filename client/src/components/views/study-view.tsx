@@ -141,6 +141,70 @@ export function StudyView() {
   )
 }
 
+// Academic-year window for the progress wave: the circle travels from
+// شروع to کنکور as the remaining days shrink inside this window.
+const KONKUR_WINDOW_DAYS = 365
+
+function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
+  const W = 400
+  const H = 64
+  const waveY = (x: number) => 34 - Math.sin((x / W) * Math.PI * 2.2) * 13
+
+  const pathD = Array.from({ length: 41 }, (_, i) => {
+    const x = (i / 40) * W
+
+    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${waveY(x).toFixed(1)}`
+  }).join(" ")
+
+  const progress = konkur
+    ? Math.min(1, Math.max(0.03, 1 - konkur.totalDays / KONKUR_WINDOW_DAYS))
+    : 0.03
+
+  const cx = 16 + progress * (W - 32)
+  const cy = waveY(cx)
+  const ex = W - 10
+  const ey = waveY(ex)
+
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1B6FF2] via-[#0B93C7] to-[#0FA968] text-white p-5 pb-3">
+      <div className="flex justify-end">
+        <span className="text-xs bg-white/20 rounded-full px-4 py-1.5">تا کنکور فنی</span>
+      </div>
+      <p className="mt-5 text-right text-[28px] min-[380px]:text-[32px] leading-tight font-extrabold tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
+        {konkur ? (
+          <>
+            <FaNum>{konkur.months}</FaNum> ماه و <FaNum>{konkur.days}</FaNum> روز
+          </>
+        ) : (
+          "به‌زودی"
+        )}
+      </p>
+      <p className="mt-1 text-right text-sm text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
+        {konkur ? (
+          <>
+            <FaNum>{konkur.totalDays}</FaNum> روز فرصت داری
+          </>
+        ) : (
+          "تاریخ کنکور را مدیر تنظیم می‌کند"
+        )}
+      </p>
+      <svg className="mt-2 w-full" viewBox={`0 0 ${W} ${H}`} aria-hidden>
+        <path d={pathD} fill="none" stroke="white" strokeOpacity="0.75" strokeWidth="3" strokeLinecap="round" />
+        <circle cx={ex} cy={ey} r="6" fill="white" fillOpacity="0.9" />
+        <circle cx={cx} cy={cy} r="11" fill="white" />
+        <circle cx={cx} cy={cy} r="4.5" fill="#0B93C7" />
+        <text x={cx} y={cy - 18} textAnchor="middle" fill="white" fontSize="13">
+          الان
+        </text>
+      </svg>
+      <div className="flex justify-between text-[11px] text-white/85 px-1 pb-1">
+        <span>کنکور</span>
+        <span>شروع</span>
+      </div>
+    </section>
+  )
+}
+
 // ---------------- Overview ----------------
 
 function OverviewScreen({ go }: { go: (s: SubView) => void }) {
@@ -175,39 +239,8 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
         <p className="text-sm text-muted-foreground mt-0.5">تا کنکور چقدر مانده و امروز چقدر خوندی</p>
       </div>
 
-      {/* Countdown card */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-bl from-[#18A8FF] via-[#0878F9] to-[#003CCB] text-white p-5">
-        <svg className="absolute inset-x-0 bottom-0 w-full opacity-30" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden>
-          <path d="M0 45 C 60 10, 120 10, 170 30 S 300 55, 400 25" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-          <circle cx="28" cy="38" r="5" fill="white" />
-        </svg>
-        <div className="flex items-center justify-between">
-          <span className="text-xs bg-white/20 rounded-full px-3 py-1">تا کنکور فنی</span>
-        </div>
-        <p className="mt-4 text-3xl font-extrabold tabular-nums">
-          {data?.konkur ? (
-            <>
-              <FaNum>{data.konkur.months}</FaNum> ماه و <FaNum>{data.konkur.days}</FaNum> روز
-            </>
-          ) : (
-            "به‌زودی"
-          )}
-        </p>
-        <p className="mt-1 text-xs text-white/85">
-          {data?.konkur ? (
-            <>
-              <FaNum>{data.konkur.totalDays}</FaNum> روز فرصت داری
-            </>
-          ) : (
-            "تاریخ کنکور را مدیر تنظیم می‌کند"
-          )}
-        </p>
-        <div className="mt-2 flex justify-between text-[10px] text-white/70">
-          <span>الان</span>
-          <span>شروع</span>
-          <span>کنکور</span>
-        </div>
-      </section>
+      {/* Countdown card — matches the reference design exactly. */}
+      <KonkurCountdown konkur={data?.konkur ?? null} />
 
       {/* Range tabs */}
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary p-1" role="tablist" aria-label="بازه">
@@ -346,7 +379,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
           inputMode="numeric"
           dir="ltr"
           maxLength={6}
-          className="h-11 text-center tracking-[0.3em]"
+          className="h-11 flex-1 min-w-0 text-center tracking-[0.3em]"
         />
         <Button
           disabled={code.length !== 6 || joining}
@@ -403,10 +436,9 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() => void join({ roomId: r.id })}
                   disabled={joining}
-                  className="ms-auto cursor-pointer border-[#0878F9] text-[#0878F9] hover:bg-[#0878F9]/10 hover:text-[#0878F9]"
+                  className="ms-auto h-11 cursor-pointer border-[#0878F9] text-[#0878F9] hover:bg-[#0878F9]/10 hover:text-[#0878F9]"
                 >
                   ورود
                 </Button>
@@ -603,7 +635,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       <button
         type="button"
         onClick={() => go({ name: "rooms" })}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1 min-h-[44px] text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
         <ChevronRight className="size-4 rtl:rotate-180" />
         بازگشت به لیست
@@ -635,7 +667,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
                 window.setTimeout(() => setCopied(false), 1500)
               }).catch(() => toast({ title: `کد دعوت: ${code}` }))
             }}
-            className="inline-flex items-center gap-1.5 text-[11px] rounded-full px-3 py-1 border border-dashed border-[#0878F9] text-[#0878F9] cursor-pointer"
+            className="inline-flex items-center gap-1.5 min-h-[44px] text-[11px] rounded-full px-3 py-1 border border-dashed border-[#0878F9] text-[#0878F9] cursor-pointer"
             dir="ltr"
           >
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
@@ -648,7 +680,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       {/* Timer card */}
       <section className="rounded-2xl border border-border bg-card p-6 text-center space-y-3">
         <p className="text-xs text-muted-foreground">زمان مطالعه‌ی تو در این نشست</p>
-        <p className="text-5xl font-extrabold tabular-nums tracking-wider" dir="ltr">
+        <p className="text-4xl min-[380px]:text-5xl font-extrabold tabular-nums tracking-wider" dir="ltr">
           <FaNum>{formatClock(elapsed)}</FaNum>
         </p>
         {detail.room.type === "COMPETITIVE" && myRank > 0 && (
@@ -707,7 +739,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
           <Trophy className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">جدول امتیاز امروز</h2>
           <span className="ms-auto inline-flex items-center gap-1 text-[10px] text-success">
-            <span className="size-1.5 rounded-full bg-success animate-pulse" />
+            <span className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" />
             زنده
           </span>
         </div>
@@ -733,7 +765,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
               <span className="text-xs text-muted-foreground tabular-nums">
                 <FaNum>{formatDur(r.todayMin)}</FaNum>
               </span>
-              {r.status === "studying" && <span className="size-2 rounded-full bg-success animate-pulse" />}
+              {r.status === "studying" && <span className="size-2 rounded-full bg-success motion-safe:animate-pulse" />}
             </li>
           ))}
         </ul>
@@ -827,7 +859,7 @@ function CreateScreen({ go }: { go: (s: SubView) => void }) {
       <button
         type="button"
         onClick={() => go({ name: "rooms" })}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1 min-h-[44px] text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
         <ChevronRight className="size-4 rtl:rotate-180" />
         بازگشت
@@ -886,7 +918,7 @@ function CreateScreen({ go }: { go: (s: SubView) => void }) {
             onClick={() => setCapacity((c) => Math.min(20, c + 1))}
             disabled={capacity >= 20}
             aria-label="افزایش ظرفیت"
-            className="rounded-full cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9]"
+            className="rounded-full cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9] size-11"
           >
             <Plus className="size-4" />
           </Button>
@@ -900,7 +932,7 @@ function CreateScreen({ go }: { go: (s: SubView) => void }) {
             onClick={() => setCapacity((c) => Math.max(2, c - 1))}
             disabled={capacity <= 2}
             aria-label="کاهش ظرفیت"
-            className="rounded-full cursor-pointer"
+            className="rounded-full cursor-pointer size-11"
           >
             <Minus className="size-4" />
           </Button>

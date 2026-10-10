@@ -63,10 +63,15 @@ describe("support ordering", () => {
     const second = await login("conv_second", PASSWORD)
 
     await first.post("/api/support/messages", { text: "سلام اول" })
+    await new Promise((r) => setTimeout(r, 25))
     await second.post("/api/support/messages", { text: "سلام دوم" })
 
     const list = await admin.get("/api/support/conversations")
+
     expect(list.status).toBe(200)
+
+    // SAFETY: endpoint contract returns { conversations: [...] }; a shape
+    // change fails the assertions below instead of passing silently.
     const convs = list.body.conversations as Array<{ id: string; lastMessage: { text: string } | null }>
     const idxFirst = convs.findIndex((c) => c.lastMessage?.text === "سلام اول")
     const idxSecond = convs.findIndex((c) => c.lastMessage?.text === "سلام دوم")
@@ -76,9 +81,14 @@ describe("support ordering", () => {
     expect(idxSecond).toBeLessThan(idxFirst)
 
     // Admin replies to the older thread → it jumps back to the top.
+    // Distinct timestamps: SQLite stores ms precision, so space the writes
+    // to keep the ordering assertion deterministic.
+    await new Promise((r) => setTimeout(r, 25))
     const firstConv = convs.find((c) => c.lastMessage?.text === "سلام اول")
     await admin.post("/api/support/messages", { text: "پاسخ مدیر", userId: firstConv?.id })
     const relist = await admin.get("/api/support/conversations")
+
+    // SAFETY: same endpoint contract as above.
     const top = (relist.body.conversations as Array<{ lastMessage: { text: string } | null }>)[0]
     expect(top.lastMessage?.text).toBe("پاسخ مدیر")
   })

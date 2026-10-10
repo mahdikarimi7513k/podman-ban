@@ -16,6 +16,8 @@ import { isNativeApp } from "@/lib/native-notify"
 import { TopBar } from "@/components/top-bar"
 import { BottomNav } from "@/components/bottom-nav"
 import { Banner } from "@/components/banner"
+import { BackgroundPermissionPrompt } from "@/components/background-permission"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { AuthView } from "@/components/views/auth-view"
 import { HomeView } from "@/components/views/home-view"
 
@@ -24,6 +26,7 @@ import { HomeView } from "@/components/views/home-view"
 function lazyNamed(loader: () => Promise<Record<string, unknown>>, name: string) {
   return React.lazy(async () => {
     const mod = await loader()
+
     return { default: mod[name] as React.ComponentType }
   })
 }
@@ -35,14 +38,23 @@ const ExamView = lazyNamed(() => import("@/components/views/exam-view"), "ExamVi
 export function preloadExamView(): void {
   void import("@/components/views/exam-view")
 }
+
 const ReportView = lazyNamed(() => import("@/components/views/report-view"), "ReportView")
+
 const SettingsView = lazyNamed(() => import("@/components/views/settings-view"), "SettingsView")
+
 const CalculatorView = lazyNamed(() => import("@/components/views/calculator-view"), "CalculatorView")
+
 const ArchiveView = lazyNamed(() => import("@/components/views/archive-view"), "ArchiveView")
+
 const AdminView = lazyNamed(() => import("@/components/views/admin-view"), "AdminView")
+
 const LeaderboardView = lazyNamed(() => import("@/components/views/leaderboard-view"), "LeaderboardView")
+
 const AchievementsView = lazyNamed(() => import("@/components/views/achievements-view"), "AchievementsView")
+
 const StudyView = lazyNamed(() => import("@/components/views/study-view"), "StudyView")
+
 // Takes a `message` prop — direct lazy() keeps its real prop types.
 const MaintenanceView = React.lazy(() =>
   import("@/components/views/maintenance-view").then((m) => ({ default: m.MaintenanceView })),
@@ -230,7 +242,8 @@ function AppContent() {
         <Banner text={config.bannerText} link={config.bannerLink} />
       ) : null}
       <main className="flex-1 w-full max-w-3xl mx-auto px-4 pb-28 pt-4">
-        <AnimatePresence mode="wait" initial={false}>
+        <ErrorBoundary>
+          <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={view}
             variants={viewVariants}
@@ -252,8 +265,10 @@ function AppContent() {
             </React.Suspense>
           </motion.div>
         </AnimatePresence>
+        </ErrorBoundary>
       </main>
       <BottomNav />
+      <BackgroundPermissionPrompt />
       <Footer />
     </div>
   )

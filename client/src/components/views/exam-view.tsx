@@ -83,6 +83,7 @@ interface FinishedResult {
 interface ReviewQuestion extends ExamQuestion {
   correctOption: number
   explanation: string | null
+  explanationImageBase64?: string | null
 }
 
 interface ReviewData {
@@ -111,7 +112,11 @@ function fetchSessionOnce(sessionId: string): Promise<SessionResponse> {
   let p = sessionInflight.get(sessionId)
 
   if (!p) {
-    p = apiFetch<SessionResponse>(`/api/exam/${sessionId}`).finally(() => {
+    // Exam banks inline images as base64 (megabytes): the default 20s
+    // timeout aborts slow phones mid-download. 90s + one integrity retry.
+    p = apiFetch<SessionResponse>(`/api/exam/${sessionId}`, {
+      signal: AbortSignal.timeout(90000),
+    }).finally(() => {
       sessionInflight.delete(sessionId)
     })
     sessionInflight.set(sessionId, p)
@@ -151,7 +156,7 @@ export function ExamView() {
 
   // practice mode: revealed answers per question
   const [revealed, setRevealed] = React.useState<
-    Record<string, { correctOption: number; explanation: string | null }>
+    Record<string, { correctOption: number; explanation: string | null; explanationImageBase64?: string | null }>
   >({})
 
   const [showNavGrid, setShowNavGrid] = React.useState(false)
@@ -159,90 +164,98 @@ export function ExamView() {
   // ---- load session ----
   // StrictMode mounts effects twice in dev — share one in-flight request so
   // the session (the payload that gates first paint) is fetched exactly once.
-  React.useEffect(() => {
+  // Integrity: the server may legitimately return fewer questions than
+  // totalQuestions (admin deleted some mid-exam); a SHORT payload from a
+  // truncated download is different — refetch once before giving up, so a
+  // flaky phone never starts a half-loaded exam.
+  const loadSession = React.useCallback(async () => {
     if (!examSessionId) return
 
-    let cancelled = false
+    setLoading(true)
+    setError(null)
 
-    ;(async () => {
-      try {
-        const res = await fetchSessionOnce(examSessionId)
+    try {
+      let res = await fetchSessionOnce(examSessionId)
 
-        if (cancelled) return
-
-        // Re-entering a paused exam restarts its clock first: resume
-        // shifts startedAt forward by the away time, so the timer below
-        // continues with the frozen remainder. A failed resume falls back
-        // to the loaded payload (same as before this feature).
-        if (res.session.pausedAt) {
-          try {
-            const resumed = await apiFetch<{ session: { startedAt: string; pausedAt: null } }>(
-              `/api/exam/${examSessionId}/resume`,
-              { method: "POST", body: JSON.stringify({}) },
-            )
-
-            if (cancelled) return
-
-            res.session = { ...res.session, startedAt: resumed.session.startedAt, pausedAt: null }
-          } catch {
-            /* frozen payload it is */
-          }
-        }
-
-        setData(res)
-        const initial: Record<string, number | null> = {}
-
-        for (const q of res.questions) {
-          const a = res.answers[q.id]
-          initial[q.id] = a ? a.selectedOption : null
-        }
-
-        setAnswers(initial)
-
-        if (res.session.status === "FINISHED") {
-          // GET /exam/:session carries no per-question verdicts, so a
-          // reopened report would show 0/0 and every question "unanswered".
-          // The /review endpoint has the real counts — load it up front so
-          // the result screen is correct and review opens instantly.
-          try {
-            const review = await apiFetch<ReviewData>(`/api/exam/${examSessionId}/review`)
-
-            if (cancelled) return
-            setReviewData(review)
-            setResult({
-              sessionId: review.session.id,
-              totalQuestions: review.session.totalQuestions,
-              correctCount: review.session.correctCount,
-              wrongCount: review.session.wrongCount,
-              skippedCount: review.session.skippedCount,
-              scorePercent: review.session.scorePercent,
-              negativeMarking: review.session.negativeMarking,
-            })
-          } catch {
-            if (cancelled) return
-            setResult({
-              sessionId: res.session.id,
-              totalQuestions: res.session.totalQuestions,
-              correctCount: 0,
-              wrongCount: 0,
-              skippedCount: res.session.totalQuestions,
-              scorePercent: res.session.scorePercent,
-              negativeMarking: res.session.negativeMarking,
-            })
-          }
-        }
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof ApiError ? err.message : "بارگذاری آزمون ناموفق بود")
-      } finally {
-        if (!cancelled) setLoading(false)
+      if (res.questions.length !== res.session.totalQuestions) {
+        res = await fetchSessionOnce(examSessionId)
       }
-    })()
 
-    return () => {
-      cancelled = true
+      if (res.questions.length !== res.session.totalQuestions) {
+        throw new Error(
+          `تعداد سوالات دریافتی (${res.questions.length}) با آزمون (${res.session.totalQuestions}) نمی‌خوانَد — دوباره تلاش کنید.`,
+        )
+      }
+
+      // Re-entering a paused exam restarts its clock first: resume
+      // shifts startedAt forward by the away time, so the timer below
+      // continues with the frozen remainder. A failed resume falls back
+      // to the loaded payload (same as before this feature).
+      if (res.session.pausedAt) {
+        try {
+          const resumed = await apiFetch<{ session: { startedAt: string; pausedAt: null } }>(
+            `/api/exam/${examSessionId}/resume`,
+            { method: "POST", body: JSON.stringify({}) },
+          )
+
+          res.session = { ...res.session, startedAt: resumed.session.startedAt, pausedAt: null }
+        } catch {
+          /* frozen payload it is */
+        }
+      }
+
+      setData(res)
+      const initial: Record<string, number | null> = {}
+
+      for (const q of res.questions) {
+        const a = res.answers[q.id]
+        initial[q.id] = a ? a.selectedOption : null
+      }
+
+      setAnswers(initial)
+
+      if (res.session.status === "FINISHED") {
+        // GET /exam/:session carries no per-question verdicts, so a
+        // reopened report would show 0/0 and every question "unanswered".
+        // The /review endpoint has the real counts — load it up front so
+        // the result screen is correct and review opens instantly.
+        try {
+          const review = await apiFetch<ReviewData>(`/api/exam/${examSessionId}/review`)
+
+          setReviewData(review)
+          setResult({
+            sessionId: review.session.id,
+            totalQuestions: review.session.totalQuestions,
+            correctCount: review.session.correctCount,
+            wrongCount: review.session.wrongCount,
+            skippedCount: review.session.skippedCount,
+            scorePercent: review.session.scorePercent,
+            negativeMarking: review.session.negativeMarking,
+          })
+        } catch {
+          setResult({
+            sessionId: res.session.id,
+            totalQuestions: res.session.totalQuestions,
+            correctCount: 0,
+            wrongCount: 0,
+            skippedCount: res.session.totalQuestions,
+            scorePercent: res.session.scorePercent,
+            negativeMarking: res.session.negativeMarking,
+          })
+        }
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "بارگذاری آزمون ناموفق بود",
+      )
+    } finally {
+      setLoading(false)
     }
   }, [examSessionId])
+
+  React.useEffect(() => {
+    void loadSession()
+  }, [loadSession])
 
   // ---- answer persistence with retry + ordering ----
   // A dropped request (tunnel, offline blip) must not silently lose an
@@ -289,7 +302,7 @@ export function ExamView() {
     // In practice mode, fetch the correct answer immediately for feedback
     if (data?.session.isPractice && !revealed[questionId] && examSessionId) {
       try {
-        const res = await apiFetch<{ correctOption: number; explanation: string | null }>(
+        const res = await apiFetch<{ correctOption: number; explanation: string | null; explanationImageBase64?: string | null }>(
           `/api/exam/${examSessionId}/check`,
           { method: "POST", body: JSON.stringify({ questionId }) },
         )
@@ -452,9 +465,17 @@ export function ExamView() {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-background px-6 text-center gap-4">
         <p className="text-sm text-destructive">{error ?? "خطای ناشناخته"}</p>
-        <Button variant="outline" onClick={exitExam} className="cursor-pointer">
-          بازگشت به خانه
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => void loadSession()} className="cursor-pointer">
+            تلاش مجدد
+          </Button>
+          <Button variant="outline" onClick={exitExam} className="cursor-pointer">
+            بازگشت به خانه
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          تلاش مجدد همین آزمون را بارگذاری می‌کند — نیازی به شروع آزمون جدید نیست.
+        </p>
       </div>
     )
   }
@@ -697,7 +718,7 @@ export function ExamView() {
               </ul>
 
               {/* Practice mode: show explanation after reveal */}
-              {revealed[question.id]?.explanation && (
+              {(revealed[question.id]?.explanation || revealed[question.id]?.explanationImageBase64) && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
@@ -706,9 +727,21 @@ export function ExamView() {
                 >
                   <div className="mt-4 rounded-lg bg-secondary/50 border border-border p-3">
                     <p className="text-[11px] font-medium text-muted-foreground mb-1">توضیح</p>
-                    <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
-                      {revealed[question.id].explanation}
-                    </p>
+                    {revealed[question.id].explanation && (
+                      <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
+                        {revealed[question.id].explanation}
+                      </p>
+                    )}
+                    {revealed[question.id].explanationImageBase64 && (
+                      <div className="mt-2 flex justify-center">
+                        <img
+                          src={revealed[question.id].explanationImageBase64 ?? ""}
+                          alt="تصویر پاسخنامه"
+                          loading="lazy"
+                          className="max-w-full max-h-[40vh] w-auto h-auto rounded-lg border border-border object-contain"
+                        />
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -1264,12 +1297,24 @@ function ExamReview({
                   </ul>
 
                   {/* explanation */}
-                  {question.explanation && (
+                  {(question.explanation || question.explanationImageBase64) && (
                     <div className="mt-3 rounded-lg bg-secondary/50 border border-border p-2.5">
                       <p className="text-[11px] font-medium text-muted-foreground mb-0.5">توضیح</p>
-                      <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
-                        {question.explanation}
-                      </p>
+                      {question.explanation && (
+                        <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
+                          {question.explanation}
+                        </p>
+                      )}
+                      {question.explanationImageBase64 && (
+                        <div className="mt-2 flex justify-center">
+                          <img
+                            src={question.explanationImageBase64}
+                            alt="تصویر پاسخنامه"
+                            loading="lazy"
+                            className="max-w-full max-h-[40vh] w-auto h-auto rounded-lg border border-border object-contain"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

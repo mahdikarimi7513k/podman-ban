@@ -98,6 +98,7 @@ export const prefsSchema = z.object({
   examDurationMin: z.number().int().min(5).max(180).optional(),
   theme: z.enum(["dark", "light", "system"]).optional(),
   dailyGoal: z.number().int().min(5).max(200).optional(),
+  studyGoalMin: z.number().int().min(30).max(960).optional(),
 })
 
 // Self-service profile: display name + small avatar data URL.
@@ -138,21 +139,24 @@ export const moduleUpdateSchema = moduleCreateSchema.partial().omit({ bookId: tr
 // claude-red xss: SVG data URLs can carry <script> — block svg+xml even
 // though <img> usually neuters it (copy-paste / download / old browsers).
 // Only raster images reach the client.
+const rasterImage = z
+  .string()
+  .max(2_500_000, "تصویر خیلی بزرگ است (حداکثر ۲ مگابایت)")
+  .refine(
+    (v) => !v || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v),
+    "تصویر باید یک data URL معتبر (png، jpg، webp یا gif) باشد",
+  )
+  .optional()
+  .nullable()
+
 export const questionCreateSchema = z.object({
   moduleId: z.string().min(1),
   text: z.string().trim().min(1).max(2000),
   options: z.array(z.string().trim().min(1).max(500)).min(2).max(6),
   correctOption: z.number().int().min(0).max(5),
   explanation: z.string().trim().max(1000).optional(),
-  imageBase64: z
-    .string()
-    .max(2_500_000, "تصویر خیلی بزرگ است (حداکثر ۲ مگابایت)")
-    .refine(
-      (v) => !v || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v),
-      "تصویر باید یک data URL معتبر (png، jpg، webp یا gif) باشد",
-    )
-    .optional()
-    .nullable(),
+  imageBase64: rasterImage,
+  explanationImageBase64: rasterImage,
 })
 
 export const questionUpdateSchema = questionCreateSchema.partial().omit({ moduleId: true })

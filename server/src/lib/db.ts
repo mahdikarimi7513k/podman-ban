@@ -113,6 +113,7 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `ExamSession` ADD `pausedAt` integer",
   "ALTER TABLE `RemoteConfig` ADD `konkurDate` text",
   "ALTER TABLE `RemoteConfig` ADD `studyDailyGoalMin` integer DEFAULT 180 NOT NULL",
+  "ALTER TABLE `Question` ADD `explanationImageBase64` text",
 ]
 
 // Study rooms (host-safe: shared hosts can't run drizzle-kit migrate).

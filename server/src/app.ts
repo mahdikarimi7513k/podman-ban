@@ -18,6 +18,7 @@ import { studyRouter } from "./routes/study.routes.js"
 import { getSession } from "./lib/auth/index.js"
 import { getAppState } from "./lib/remote-config.js"
 import { getReqId, logError, requestLogger } from "./lib/logger.js"
+import { gzipJson } from "./lib/compress.js"
 
 /**
  * Origins allowed to call the API with credentials (comma-separated env).
@@ -68,6 +69,10 @@ export function buildApp(): express.Express {
     }),
   )
   app.use(express.json({ limit: "3mb" }))
+
+  // Gzip JSON payloads (exam banks inline images as base64) so slow
+  // phones download them before the client timeout fires.
+  app.use(gzipJson)
 
   // --- security headers ---
   app.use((req, res, next) => {
@@ -202,6 +207,7 @@ export function buildApp(): express.Express {
 
   // --- generic error handler (no stack leak to clients) ---
   // Express default sends HTML + stack in dev; production must get JSON only.
+  // The reqId lets the user report a code the host can grep in logs/.
   // ponytail: one handler, no per-route try/catch sprawl.
   app.use(
     (
@@ -210,10 +216,12 @@ export function buildApp(): express.Express {
       res: express.Response,
       _next: express.NextFunction,
     ) => {
+      const reqId = getReqId(req)
+
       // Full detail goes to the host log file (timestamp, reqId, stack);
       // clients only ever see the generic message.
       logError("[api-error]", {
-        reqId: getReqId(req),
+        reqId,
         method: req.method,
         path: req.path,
         message: err instanceof Error ? err.message : String(err),
@@ -221,7 +229,7 @@ export function buildApp(): express.Express {
       })
 
       if (res.headersSent) return
-      res.status(500).json({ error: "خطای داخلی سرور" })
+      res.status(500).json({ error: "خطای داخلی سرور", reqId })
     },
   )
 

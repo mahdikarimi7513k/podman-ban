@@ -430,7 +430,7 @@ adminRouter.post("/questions", async (req, res) => {
 
   if (!data) return
 
-  const { moduleId, text, imageBase64, options, correctOption, explanation } =
+  const { moduleId, text, imageBase64, options, correctOption, explanation, explanationImageBase64 } =
     data
 
   const mod = await db.select({ id: modules.id }).from(modules).where(eq(modules.id, moduleId)).get()
@@ -456,6 +456,7 @@ adminRouter.post("/questions", async (req, res) => {
       options: JSON.stringify(options),
       correctOption,
       explanation,
+      explanationImageBase64: explanationImageBase64 ?? null,
     })
     .returning()
     .get()
@@ -583,6 +584,9 @@ adminRouter.put("/questions/:id", async (req, res) => {
   if (data.correctOption !== undefined) updateData.correctOption = data.correctOption
 
   if (data.explanation !== undefined) updateData.explanation = data.explanation
+
+  if (data.explanationImageBase64 !== undefined) updateData.explanationImageBase64 = data.explanationImageBase64 ?? null
+
   const q = await db.update(questions).set(updateData).where(eq(questions.id, id)).returning().get()
   res.json({ question: q })
 })

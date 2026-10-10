@@ -15,7 +15,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  ImagePlus,
+  Pencil,
+  Check,
   Trash2,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
@@ -49,6 +50,7 @@ export function SettingsView() {
   const [repeatQuestions, setRepeatQuestions] = React.useState(false)
   const [duration, setDuration] = React.useState(20)
   const [dailyGoal, setDailyGoal] = React.useState(20)
+  const [studyGoal, setStudyGoal] = React.useState(180)
   const [saving, setSaving] = React.useState(false)
   const [mounted, setMounted] = React.useState(false)
 
@@ -64,6 +66,8 @@ export function SettingsView() {
     if (exam.examDurationMin !== undefined) setDuration(exam.examDurationMin)
 
     if (exam.dailyGoal !== undefined) setDailyGoal(exam.dailyGoal)
+
+    if (exam.studyGoalMin !== undefined) setStudyGoal(exam.studyGoalMin)
   }, [user])
 
   const savePrefs = React.useCallback(
@@ -117,40 +121,7 @@ export function SettingsView() {
       </div>
 
       {/* Profile */}
-      <section className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="flex items-center gap-3 p-4 border-b border-border">
-          <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-base font-semibold overflow-hidden">
-            {user.avatarBase64 ? (
-              <img src={user.avatarBase64} alt="پروفایل" className="size-full object-cover" />
-            ) : (
-              user.name.charAt(0)
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {user.field === "FANI_HERFEI" ? "شبکه" : "حسابداری"}
-              {user.role === "ADMIN" && " — مدیر"}
-            </p>
-          </div>
-        </div>
-        <ul className="divide-y divide-border text-sm">
-          <ProfileRow icon={User} label="نام کاربری" dir="ltr">
-            {user.username}
-          </ProfileRow>
-          <ProfileRow icon={Hash} label="کل آزمون‌های زده‌شده">
-            <FaNum>{user.totalTests}</FaNum>
-          </ProfileRow>
-          {user.createdAt && (
-            <ProfileRow icon={CalendarDays} label="تاریخ عضویت">
-              {formatDate(user.createdAt)}
-            </ProfileRow>
-          )}
-        </ul>
-      </section>
-
-      {/* Edit profile */}
-      <ProfileEditSection />
+      <ProfileCard />
 
       {/* Theme */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -287,6 +258,36 @@ export function SettingsView() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-3 p-4 border-t border-border">
+          <Timer className="size-4 text-muted-foreground shrink-0" strokeWidth={ICON_STROKE} />
+          <div className="flex-1 min-w-0">
+            <Label htmlFor="study-goal-select" className="text-sm font-medium cursor-pointer">
+              هدف روزانه مطالعه
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              دقیقه در روز — در اتاق مطالعه نمایش داده می‌شود.
+            </p>
+          </div>
+          <Select
+            value={String(studyGoal)}
+            onValueChange={(v) => {
+              const n = Number(v)
+              setStudyGoal(n)
+              void savePrefs({ studyGoalMin: n })
+            }}
+          >
+            <SelectTrigger id="study-goal-select" className="w-24 cursor-pointer" dir="ltr">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[60, 120, 180, 240, 300, 360, 480].map((m) => (
+                <SelectItem key={m} value={String(m)} className="cursor-pointer">
+                  <FaNum>{m}</FaNum> دقیقه
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </section>
 
       {/* Password change */}
@@ -351,25 +352,69 @@ function ProfileRow({
 
 const AVATAR_MAX_BYTES = 500 * 1024
 
-function ProfileEditSection() {
+interface ProfileSaveBody {
+  name?: string
+  avatarBase64?: string | null
+}
+
+/**
+ * Social-style profile card: tap the avatar to set/change the photo
+ * (pencil badge), pencil button next to the name for inline rename.
+ */
+function ProfileCard() {
   const user = useApp((s) => s.user)
   const { toast } = useToast()
+  const [editingName, setEditingName] = React.useState(false)
   const [name, setName] = React.useState(user?.name ?? "")
-  const [avatar, setAvatar] = React.useState<string | null>(user?.avatarBase64 ?? null)
-  const [avatarTouched, setAvatarTouched] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [uploading, setUploading] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     setName(user?.name ?? "")
-    setAvatar(user?.avatarBase64 ?? null)
-    setAvatarTouched(false)
+    setEditingName(false)
   }, [user?.id])
 
   if (!user) return null
-  const nameDirty = name.trim() !== user.name && name.trim().length >= 2
-  const avatarDirty = avatarTouched && (avatar ?? null) !== (user.avatarBase64 ?? null)
-  const canSave = (nameDirty || avatarDirty) && !saving
+
+  const saveBody = async (body: ProfileSaveBody) => {
+    setSaving(true)
+
+    try {
+      const res = await apiFetch<{ user: { name: string; avatarBase64: string | null } }>(
+        "/api/user/profile",
+        { method: "PUT", body: JSON.stringify(body) },
+      )
+
+      useApp.getState().patchUser({ name: res.user.name, avatarBase64: res.user.avatarBase64 })
+      toast({ title: "پروفایل به‌روزرسانی شد" })
+
+      return true
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "ذخیره پروفایل ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveName = async () => {
+    const trimmed = name.trim()
+
+    if (trimmed.length < 2 || trimmed === user.name) {
+      setEditingName(false)
+      setName(user.name)
+
+      return
+    }
+
+    if (await saveBody({ name: trimmed })) setEditingName(false)
+  }
 
   const pickFile = (file: File | undefined) => {
     if (!file) return
@@ -386,97 +431,58 @@ function ProfileEditSection() {
       return
     }
 
+    setUploading(true)
+
     const reader = new FileReader()
+
     reader.onload = () => {
       const url = String(reader.result ?? "")
 
-      if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url)) {
-        setAvatar(url)
-        setAvatarTouched(true)
-      } else {
+      if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url)) {
+        setUploading(false)
         toast({ variant: "destructive", title: "فرمت تصویر پشتیبانی نمی‌شود" })
+
+        return
       }
+
+      void saveBody({ avatarBase64: url }).finally(() => setUploading(false))
+    }
+
+    reader.onerror = () => {
+      setUploading(false)
+      toast({ variant: "destructive", title: "خواندن فایل ناموفق بود" })
     }
 
     reader.readAsDataURL(file)
   }
 
-  const save = async () => {
-    if (!canSave) return
-    setSaving(true)
-
-    try {
-      interface ProfileSaveBody {
-        name?: string
-        avatarBase64?: string | null
-      }
-
-      const body: ProfileSaveBody = {}
-
-      if (nameDirty) body.name = name.trim()
-
-      if (avatarDirty) body.avatarBase64 = avatar
-
-      const res = await apiFetch<{ user: { name: string; avatarBase64: string | null } }>(
-        "/api/user/profile",
-        { method: "PUT", body: JSON.stringify(body) },
-      )
-
-      useApp.getState().patchUser({ name: res.user.name, avatarBase64: res.user.avatarBase64 })
-      setAvatarTouched(false)
-      toast({ title: "پروفایل به‌روزرسانی شد" })
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "ذخیره پروفایل ناموفق بود",
-        description: err instanceof ApiError ? err.message : undefined,
-      })
-    } finally {
-      setSaving(false)
-    }
+  const removeAvatar = () => {
+    void saveBody({ avatarBase64: null })
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <User className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
-        <h2 className="text-sm font-semibold">ویرایش پروفایل</h2>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex size-14 items-center justify-center rounded-full bg-secondary text-lg font-semibold overflow-hidden shrink-0">
-          {avatar ? (
-            <img src={avatar} alt="پیش‌نمایش پروفایل" className="size-full object-cover" />
-          ) : (
-            (name.trim() || user.name).charAt(0)
-          )}
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer"
-            onClick={() => fileRef.current?.click()}
-          >
-            <ImagePlus className="size-4" />
-            انتخاب عکس
-          </Button>
-          {avatar && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="cursor-pointer text-destructive hover:text-destructive"
-              onClick={() => {
-                setAvatar(null)
-                setAvatarTouched(true)
-              }}
-            >
-              <Trash2 className="size-4" />
-              حذف عکس
-            </Button>
-          )}
-        </div>
+    <section className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-3 p-4 border-b border-border">
+        {/* Tappable avatar with pencil badge */}
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          aria-label="تغییر عکس پروفایل"
+          className="relative flex size-12 items-center justify-center rounded-full bg-secondary text-base font-semibold overflow-visible shrink-0 cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-shadow"
+        >
+          <span className="flex size-full items-center justify-center rounded-full overflow-hidden">
+            {uploading || saving ? (
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            ) : user.avatarBase64 ? (
+              <img src={user.avatarBase64} alt="پروفایل" className="size-full object-cover" />
+            ) : (
+              user.name.charAt(0)
+            )}
+          </span>
+          <span className="absolute -bottom-0.5 -left-0.5 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow">
+            <Pencil className="size-3" />
+          </span>
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -487,28 +493,76 @@ function ProfileEditSection() {
             e.target.value = ""
           }}
         />
+        <div className="min-w-0 flex-1">
+          {editingName ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={40}
+                className="h-9"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveName()
+
+                  if (e.key === "Escape") {
+                    setEditingName(false)
+                    setName(user.name)
+                  }
+                }}
+                aria-label="نام نمایشی"
+              />
+              <Button size="icon" onClick={() => void saveName()} disabled={saving} className="size-9 shrink-0 cursor-pointer" aria-label="ذخیره نام">
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <p className="font-semibold truncate">{user.name}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setName(user.name)
+                  setEditingName(true)
+                }}
+                aria-label="ویرایش نام"
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer shrink-0"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-muted-foreground">
+              {user.field === "FANI_HERFEI" ? "شبکه" : "حسابداری"}
+              {user.role === "ADMIN" && " — مدیر"}
+            </p>
+            {user.avatarBase64 && (
+              <button
+                type="button"
+                onClick={removeAvatar}
+                className="inline-flex items-center gap-1 min-h-[44px] text-[10px] text-destructive/80 hover:text-destructive cursor-pointer"
+              >
+                <Trash2 className="size-3" />
+                حذف عکس
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="profile-name" className="text-xs">نام نمایشی</Label>
-        <Input
-          id="profile-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="نام و نام خانوادگی"
-          maxLength={40}
-          className="h-10"
-        />
-        {name.trim().length > 0 && name.trim().length < 2 && (
-          <p className="text-xs text-destructive">نام حداقل ۲ نویسه باشد.</p>
+      <ul className="divide-y divide-border text-sm">
+        <ProfileRow icon={User} label="نام کاربری" dir="ltr">
+          {user.username}
+        </ProfileRow>
+        <ProfileRow icon={Hash} label="کل آزمون‌های زده‌شده">
+          <FaNum>{user.totalTests}</FaNum>
+        </ProfileRow>
+        {user.createdAt && (
+          <ProfileRow icon={CalendarDays} label="تاریخ عضویت">
+            {formatDate(user.createdAt)}
+          </ProfileRow>
         )}
-      </div>
-      <Button type="button" size="sm" disabled={!canSave} onClick={save} className="cursor-pointer">
-        {saving && <Loader2 className="size-4 animate-spin" />}
-        ذخیره پروفایل
-      </Button>
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
-        نام و عکس شما در اتاق‌های مطالعه برای بقیه کاربران نمایش داده می‌شود.
-      </p>
+      </ul>
     </section>
   )
 }

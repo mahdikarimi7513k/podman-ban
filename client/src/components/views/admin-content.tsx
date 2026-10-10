@@ -64,6 +64,7 @@ interface QuestionDetail {
   options: string[]
   correctOption: number
   explanation: string | null
+  explanationImageBase64?: string | null
 }
 
 const LETTERS = ["الف", "ب", "ج", "د", "هـ", "و"]
@@ -72,6 +73,7 @@ export function AdminContent() {
   const { toast } = useToast()
   const [books, setBooks] = React.useState<Book[] | null>(null)
   const [loading, setLoading] = React.useState(true)
+
   const [editingQuestion, setEditingQuestion] = React.useState<{
     moduleId: string
     question: QuestionDetail | null
@@ -79,6 +81,7 @@ export function AdminContent() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     try {
       const res = await apiFetch<{ books: Book[] }>("/api/admin/books")
       setBooks(res.books)
@@ -102,8 +105,10 @@ export function AdminContent() {
     title: "",
     field: "FANI_HERFEI" as "FANI_HERFEI" | "KARDANESH" | null,
   })
+
   const addBook = async () => {
     if (!newBook.title.trim()) return
+
     try {
       await apiFetch("/api/admin/books", {
         method: "POST",
@@ -115,9 +120,11 @@ export function AdminContent() {
       toast({ variant: "destructive", title: "افزودن کتاب ناموفق بود", description: err instanceof ApiError ? err.message : undefined })
     }
   }
+
   const deleteBook = async (id: string, title: string) => {
     if (!confirm(`حذف کتاب «${title}»؟ همه‌ی پودمان‌ها، سوالات و سوابق آزمون‌هایش هم حذف می‌شوند.`))
       return
+
     try {
       await apiFetch(`/api/admin/books/${id}`, { method: "DELETE" })
       await load()
@@ -128,6 +135,7 @@ export function AdminContent() {
 
   // ---- book edit ----
   const [editingBook, setEditingBook] = React.useState<Book | null>(null)
+
   const saveBookEdit = async (id: string, data: { title: string; field: "FANI_HERFEI" | "KARDANESH" | null; order: number }) => {
     try {
       await apiFetch(`/api/admin/books/${id}`, {
@@ -147,8 +155,10 @@ export function AdminContent() {
     bookId: string
     title: string
   } | null>(null)
+
   const addModule = async () => {
     if (!newModule || !newModule.title.trim()) return
+
     try {
       await apiFetch("/api/admin/modules", {
         method: "POST",
@@ -164,8 +174,10 @@ export function AdminContent() {
       toast({ variant: "destructive", title: "افزودن پودمان ناموفق بود" })
     }
   }
+
   const deleteModule = async (id: string, title: string) => {
     if (!confirm(`حذف پودمان «${title}»؟ همه‌ی سوالات و سوابق آزمون‌هایش هم حذف می‌شوند.`)) return
+
     try {
       await apiFetch(`/api/admin/modules/${id}`, { method: "DELETE" })
       await load()
@@ -181,6 +193,7 @@ export function AdminContent() {
     description: string
     order: number
   } | null>(null)
+
   const saveModuleEdit = async (id: string, data: { title: string; description: string; order: number }) => {
     try {
       await apiFetch(`/api/admin/modules/${id}`, {
@@ -216,18 +229,22 @@ export function AdminContent() {
       },
     })
   }
+
   const openEditQuestion = async (moduleId: string, qid: string) => {
     try {
       const res = await apiFetch<{ question: QuestionDetail }>(
         `/api/admin/questions/${qid}`,
       )
+
       setEditingQuestion({ moduleId, question: res.question })
     } catch {
       toast({ variant: "destructive", title: "بارگذاری سوال ناموفق بود" })
     }
   }
+
   const deleteQuestion = async (qid: string) => {
     if (!confirm("حذف این سوال؟")) return
+
     try {
       await apiFetch(`/api/admin/questions/${qid}`, { method: "DELETE" })
       await load()
@@ -511,9 +528,11 @@ function BulkImportDialog({
   const { toast } = useToast()
   const [jsonText, setJsonText] = React.useState("")
   const [importing, setImporting] = React.useState(false)
+
   const [parsed, setParsed] = React.useState<
     Array<{ text: string; options: string[]; correctOption: number; explanation?: string }> | null
   >(null)
+
   const [error, setError] = React.useState<string | null>(null)
 
   const sample = `[
@@ -533,27 +552,38 @@ function BulkImportDialog({
   const parse = () => {
     setError(null)
     setParsed(null)
+
     try {
       const data = JSON.parse(jsonText)
+
       if (!Array.isArray(data)) {
         setError("ورودی باید یک آرایه باشد")
+
         return
       }
+
       for (let i = 0; i < data.length; i++) {
         const q = data[i]
+
         if (!q.text || typeof q.text !== "string") {
           setError(`سوال ${i + 1}: متن الزامی است`)
+
           return
         }
+
         if (!Array.isArray(q.options) || q.options.length < 2) {
           setError(`سوال ${i + 1}: حداقل ۲ گزینه لازم است`)
+
           return
         }
+
         if (typeof q.correctOption !== "number" || q.correctOption >= q.options.length) {
           setError(`سوال ${i + 1}: correctOption نامعتبر`)
+
           return
         }
       }
+
       setParsed(data)
     } catch {
       setError("JSON نامعتبر است")
@@ -563,6 +593,7 @@ function BulkImportDialog({
   const importNow = async () => {
     if (!parsed) return
     setImporting(true)
+
     try {
       const res = await apiFetch<{ count: number }>("/api/admin/questions/bulk", {
         method: "POST",
@@ -673,6 +704,7 @@ function BookEditDialog({
   const [title, setTitle] = React.useState(book.title)
   const [field, setField] = React.useState<"FANI_HERFEI" | "KARDANESH" | null>(book.field)
   const [order, setOrder] = React.useState(book.order)
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -752,6 +784,7 @@ function ModuleEditDialog({
   const [title, setTitle] = React.useState(module.title)
   const [description, setDescription] = React.useState(module.description)
   const [order, setOrder] = React.useState(module.order)
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -819,15 +852,18 @@ function ModuleQuestions({
   const [questions, setQuestions] = React.useState<
     Array<{ id: string; text: string; hasImage: boolean; correctOption: number; options: string[] }>
   | null>(null)
+
   const [loading, setLoading] = React.useState(false)
   const [open, setOpen] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     try {
       const res = await apiFetch<{
         questions: Array<{ id: string; text: string; hasImage: boolean; correctOption: number; options: string[] }>
       }>(`/api/admin/questions?moduleId=${encodeURIComponent(moduleId)}`)
+
       setQuestions(res.questions)
     } catch {
       setQuestions([])
@@ -910,53 +946,85 @@ function QuestionEditor({
   const { toast } = useToast()
   const isEdit = !!question?.id
   const [text, setText] = React.useState(question?.text ?? "")
+
   const [options, setOptions] = React.useState<string[]>(
     question?.options ?? ["", "", "", ""],
   )
+
   const [correctOption, setCorrectOption] = React.useState(
     question?.correctOption ?? 0,
   )
+
   const [explanation, setExplanation] = React.useState(question?.explanation ?? "")
+
   const [imageBase64, setImageBase64] = React.useState<string | null>(
     question?.imageBase64 ?? null,
   )
+
+  const [explanationImageBase64, setExplanationImageBase64] = React.useState<string | null>(
+    question?.explanationImageBase64 ?? null,
+  )
+
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
+  const [uploadingExpl, setUploadingExpl] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
+  const explFileRef = React.useRef<HTMLInputElement>(null)
 
-  const onFile = async (file: File) => {
+  const readImageFile = async (
+    file: File,
+    set: (v: string | null) => void,
+    setBusy: (v: boolean) => void,
+  ) => {
     if (!file.type.startsWith("image/")) {
       toast({ variant: "destructive", title: "فقط تصویر قابل آپلود است" })
+
       return
     }
+
     if (file.size > 2_000_000) {
       toast({ variant: "destructive", title: "حداکثر ۲ مگابایت" })
+
       return
     }
-    setUploading(true)
+
+    setBusy(true)
+
     try {
       const reader = new FileReader()
       reader.onload = () => {
-        setImageBase64(reader.result as string)
-        setUploading(false)
+        set(reader.result as string)
+        setBusy(false)
       }
+
       reader.onerror = () => {
-        setUploading(false)
+        setBusy(false)
         toast({ variant: "destructive", title: "خواندن فایل ناموفق بود" })
       }
+
       reader.readAsDataURL(file)
     } catch {
-      setUploading(false)
+      setBusy(false)
     }
+  }
+
+  const onFile = async (file: File) => {
+    await readImageFile(file, setImageBase64, setUploading)
+  }
+
+  const onExplFile = async (file: File) => {
+    await readImageFile(file, setExplanationImageBase64, setUploadingExpl)
   }
 
   const addOption = () => {
     if (options.length >= 6) return
     setOptions((o) => [...o, ""])
   }
+
   const removeOption = (i: number) => {
     if (options.length <= 2) return
     setOptions((o) => o.filter((_, idx) => idx !== i))
+
     if (correctOption >= options.length - 1) {
       setCorrectOption(options.length - 2)
     }
@@ -965,14 +1033,20 @@ function QuestionEditor({
   const save = async () => {
     if (!text.trim()) {
       toast({ variant: "destructive", title: "متن سوال الزامی است" })
+
       return
     }
+
     const cleanOptions = options.map((o) => o.trim()).filter(Boolean)
+
     if (cleanOptions.length < 2) {
       toast({ variant: "destructive", title: "حداقل ۲ گزینه لازم است" })
+
       return
     }
+
     setSaving(true)
+
     try {
       const body = {
         moduleId,
@@ -982,7 +1056,9 @@ function QuestionEditor({
         correctOption:
           correctOption >= cleanOptions.length ? 0 : correctOption,
         explanation: explanation.trim() || undefined,
+        explanationImageBase64: explanationImageBase64 || null,
       }
+
       if (isEdit && question) {
         await apiFetch(`/api/admin/questions/${question.id}`, {
           method: "PUT",
@@ -994,6 +1070,7 @@ function QuestionEditor({
           body: JSON.stringify(body),
         })
       }
+
       toast({ title: isEdit ? "سوال به‌روزرسانی شد" : "سوال افزوده شد" })
       onSaved()
     } catch (err) {
@@ -1073,6 +1150,7 @@ function QuestionEditor({
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0]
+
                 if (f) void onFile(f)
                 e.target.value = ""
               }}
@@ -1147,6 +1225,57 @@ function QuestionEditor({
               rows={2}
               placeholder="توضیحی که پس از آزمون نمایش داده می‌شود"
               className="resize-y min-h-[56px]"
+            />
+          </div>
+
+          {/* explanation image — rendered in the answer sheet like the question image */}
+          <div className="space-y-1.5">
+            <Label>تصویر پاسخنامه (اختیاری — به‌جای متن)</Label>
+            {explanationImageBase64 ? (
+              <div className="relative inline-block">
+                <img
+                  src={explanationImageBase64}
+                  alt="پیش‌نمایش پاسخنامه"
+                  className="max-w-full max-h-48 rounded-lg border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() => setExplanationImageBase64(null)}
+                  aria-label="حذف تصویر پاسخنامه"
+                  className="absolute -top-2 -right-2 size-7 inline-flex items-center justify-center rounded-full bg-destructive text-white shadow cursor-pointer"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => explFileRef.current?.click()}
+                disabled={uploadingExpl}
+                className="w-full flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border py-6 text-muted-foreground hover:bg-accent/40 transition-colors cursor-pointer"
+              >
+                {uploadingExpl ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <ImageIcon className="size-6" strokeWidth={ICON_STROKE_LARGE} />
+                )}
+                <span className="text-xs">
+                  {uploadingExpl ? "در حال بارگذاری…" : "برای انتخاب تصویر پاسخنامه کلیک کنید"}
+                </span>
+                <span className="text-[10px]">حداکثر ۲ مگابایت — JPG/PNG/WebP</span>
+              </button>
+            )}
+            <input
+              ref={explFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+
+                if (f) void onExplFile(f)
+                e.target.value = ""
+              }}
             />
           </div>
         </div>

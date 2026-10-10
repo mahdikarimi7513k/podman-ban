@@ -667,8 +667,8 @@ function Stat({ label, value }: { label: string; value: number }) {
   )
 }
 
-// Study-room settings (super-admin): konkur countdown date + daily study goal.
-// The countdown card in the app reads these — no app update needed.
+// Study-room settings (super-admin): konkur countdown as a plain number of
+// remaining days — converted to a target date on save.
 function AdminStudySettings({
   config,
   setConfig,
@@ -677,20 +677,37 @@ function AdminStudySettings({
   setConfig: React.Dispatch<React.SetStateAction<AdminConfig | null>>
 }) {
   const { toast } = useToast()
-  const [konkur, setKonkur] = React.useState(config.konkurDate ?? "")
-  const [goal, setGoal] = React.useState(config.studyDailyGoalMin ?? 180)
+
+  const currentDays = React.useMemo(() => {
+    if (!config.konkurDate) return ""
+
+    const diff = Date.parse(config.konkurDate) - Date.now()
+
+    if (Number.isNaN(diff)) return ""
+
+    return String(Math.max(0, Math.ceil(diff / 86400000)))
+  }, [config.konkurDate])
+
+  const [days, setDays] = React.useState(currentDays)
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
-    setKonkur(config.konkurDate ?? "")
-    setGoal(config.studyDailyGoalMin ?? 180)
-  }, [config.konkurDate, config.studyDailyGoalMin])
+    setDays(currentDays)
+  }, [currentDays])
 
   const save = async () => {
-    const trimmed = konkur.trim()
+    const trimmed = days.trim()
 
-    if (trimmed && Number.isNaN(Date.parse(trimmed))) {
-      toast({ variant: "destructive", title: "تاریخ کنکور معتبر نیست", description: "قالب میلادی مثل 2026-07-06" })
+    if (trimmed === "") {
+      toast({ variant: "destructive", title: "چند روز تا کنکور مانده؟" })
+
+      return
+    }
+
+    const n = Number(trimmed)
+
+    if (!Number.isInteger(n) || n < 0 || n > 1825) {
+      toast({ variant: "destructive", title: "عدد معتبر نیست", description: "یک عدد صحیح بین ۰ تا ۱۸۲۵ وارد کنید." })
 
       return
     }
@@ -698,14 +715,16 @@ function AdminStudySettings({
     setSaving(true)
 
     try {
+      const target = new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+
       const res = await apiFetch<{ state: AdminConfig }>("/api/admin/config", {
         method: "PUT",
-        body: JSON.stringify({ konkurDate: trimmed === "" ? null : trimmed, studyDailyGoalMin: goal }),
+        body: JSON.stringify({ konkurDate: target }),
       })
 
       setConfig(res.state)
       useApp.getState().refreshConfig()
-      toast({ title: "تنظیمات مطالعه ذخیره شد" })
+      toast({ title: "روز شمار ذخیره شد", description: `${n} روز تا کنکور` })
     } catch (err) {
       toast({
         variant: "destructive",
@@ -724,43 +743,27 @@ function AdminStudySettings({
           <Users className="size-5" strokeWidth={ICON_STROKE} />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold">اتاق مطالعه و تایمر کنکور</p>
+          <p className="text-sm font-semibold">روز شمار کنکور</p>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            تاریخ کنکور روی کارت شمارش معکوس نمایش داده می‌شود. خالی = مخفی.
+            فقط بنویس چند روز مانده — روی کارت اتاق مطالعه نمایش داده می‌شود.
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="konkur-date" className="text-xs">تاریخ کنکور (میلادی)</Label>
-          <Input
-            id="konkur-date"
-            value={konkur}
-            onChange={(e) => setKonkur(e.target.value)}
-            placeholder="2026-07-06"
-            dir="ltr"
-            className="h-10 text-left"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="study-goal" className="text-xs">هدف روزانه مطالعه (دقیقه)</Label>
-          <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
-            <SelectTrigger id="study-goal" className="h-10 cursor-pointer" dir="ltr">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[60, 120, 180, 240, 300, 360, 480].map((m) => (
-                <SelectItem key={m} value={String(m)} className="cursor-pointer">
-                  <FaNum>{m}</FaNum> دقیقه
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="konkur-days" className="text-xs">روزهای باقی‌مانده تا کنکور</Label>
+        <Input
+          id="konkur-days"
+          value={days}
+          onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+          placeholder="مثلاً ۳۱۹"
+          inputMode="numeric"
+          dir="ltr"
+          className="h-10 text-left"
+        />
       </div>
       <Button size="sm" variant="outline" onClick={save} disabled={saving} className="cursor-pointer">
         {saving && <Loader2 className="size-4 animate-spin" />}
-        ذخیره تنظیمات مطالعه
+        ذخیره روز شمار
       </Button>
     </section>
   )

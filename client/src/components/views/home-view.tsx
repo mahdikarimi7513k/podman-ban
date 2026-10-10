@@ -1,7 +1,7 @@
 
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { BookOpen, ChevronLeft, Play, FileQuestion, Loader2, RotateCcw, Clock, Check } from "lucide-react"
+import { BookOpen, ChevronLeft, Play, FileQuestion, Loader2, RotateCcw, Clock, Check, Archive, Calculator } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -58,10 +58,12 @@ export function HomeView() {
   const [loading, setLoading] = React.useState(true)
   const [startingId, setStartingId] = React.useState<string | null>(null)
   const [inProgress, setInProgress] = React.useState<InProgressSession | null>(null)
+
   const [durationPicker, setDurationPicker] = React.useState<{
     moduleId: string
     moduleTitle: string
   } | null>(null)
+
   const [dailyAnswered, setDailyAnswered] = React.useState<number | null>(null)
 
   // Applied settings (were hardcoded): user prefs → admin default → fallback.
@@ -88,17 +90,21 @@ export function HomeView() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     // Independent outcomes: a failure of a side widget (daily goal, resume
     // banner) must never blank the whole book catalog.
     const booksP = apiFetch<{ books: BookWithModules[] }>("/api/books")
       .then((r) => setBooks(r.books))
       .catch(() => setBooks([]))
+
     const ipP = apiFetch<{ session: InProgressSession | null }>("/api/exam/in-progress")
       .then((r) => setInProgress(r.session))
       .catch(() => setInProgress(null))
+
     const dpP = apiFetch<{ todayAnswered: number; date: string }>("/api/user/daily-progress")
       .then((r) => setDailyAnswered(r.todayAnswered))
       .catch(() => setDailyAnswered(null))
+
     await Promise.allSettled([booksP, ipP, dpP])
     setLoading(false)
   }, [])
@@ -109,11 +115,13 @@ export function HomeView() {
 
   const startExam = async (moduleId: string, durationMin?: number, practice?: boolean) => {
     setStartingId(moduleId)
+
     try {
       const res = await apiFetch<StartResult>("/api/exam/start", {
         method: "POST",
         body: JSON.stringify({ moduleId, durationMin, practice }),
       })
+
       enterExam(res.session.sessionId, moduleId)
     } catch (err) {
       toast({
@@ -139,6 +147,26 @@ export function HomeView() {
           </p>
         </div>
       </section>
+
+      {/* Quick actions: archive + calculator */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setView("archive")}
+          className="h-11 cursor-pointer"
+        >
+          <Archive className="size-4" strokeWidth={ICON_STROKE} />
+          آرشیو آزمون‌ها
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setView("calculator")}
+          className="h-11 cursor-pointer"
+        >
+          <Calculator className="size-4" strokeWidth={ICON_STROKE} />
+          درصدگیری
+        </Button>
+      </div>
 
       {/* Resume in-progress exam banner */}
       <AnimatePresence>
@@ -205,7 +233,8 @@ export function HomeView() {
           </Button>
         </div>
       ) : (
-        <Accordion type="multiple" defaultValue={[(visibleBooks ?? books)[0]?.id]} className="space-y-3">
+        // Collapsed by default: no list-box stays open on entry.
+        <Accordion type="multiple" defaultValue={[]} className="space-y-3">
           {(visibleBooks ?? books).map((book, idx) => (
             <motion.div
               key={book.id}

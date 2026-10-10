@@ -182,7 +182,7 @@ export async function getQuestionsForExam(
 export async function getQuestionsForReview(
   moduleId: string,
   questionIds: string[],
-): Promise<Array<ExamQuestion & { correctOption: number; explanation: string | null }>> {
+): Promise<Array<ExamQuestion & { correctOption: number; explanation: string | null; explanationImageBase64?: string | null }>> {
   const rRows = await db
     .select({
       id: questions.id,
@@ -191,6 +191,7 @@ export async function getQuestionsForReview(
       options: questions.options,
       correctOption: questions.correctOption,
       explanation: questions.explanation,
+      explanationImageBase64: questions.explanationImageBase64,
     })
     .from(questions)
     .where(inArray(questions.id, questionIds))
@@ -206,6 +207,7 @@ export async function getQuestionsForReview(
       options: JSON.parse(q.options) as string[],
       correctOption: q.correctOption,
       explanation: q.explanation,
+      explanationImageBase64: q.explanationImageBase64,
       order: i + 1,
     }))
 }

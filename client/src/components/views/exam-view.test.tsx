@@ -137,6 +137,51 @@ describe("ExamView question navigation stability", () => {
     expect(await screen.findByText("متن سوال شماره یک")).toBeInTheDocument()
   })
 
+  it("refetches once when the payload arrives short, then renders", async () => {
+    let calls = 0
+
+    apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/exam/s1" && !init?.method) {
+        calls++
+
+        const base = sessionResponse()
+
+        // First attempt truncated (slow-phone download): only 1 of 3.
+        if (calls === 1) return { ...base, questions: QUESTIONS.slice(0, 1) }
+
+        return base
+      }
+
+      if (url === "/api/exam/s1/answer") return { ok: true }
+
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    render(<ExamView />)
+    expect(await screen.findByText("متن سوال شماره یک")).toBeInTheDocument()
+    expect(calls).toBe(2)
+  })
+
+  it("offers same-session retry instead of a dead end on load failure", async () => {
+    apiFetchMock.mockRejectedValueOnce(new Error("boom"))
+    apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/exam/s1" && !init?.method) return sessionResponse()
+
+      if (url === "/api/exam/s1/answer") return { ok: true }
+
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    render(<ExamView />)
+    // Integrity retry also fails → error screen with retry (same session).
+    const retry = await screen.findByRole("button", { name: /تلاش مجدد/ })
+
+    expect(retry).toBeInTheDocument()
+
+    act(() => {
+      fireEvent.click(retry)
+    })
+    expect(await screen.findByText("متن سوال شماره یک")).toBeInTheDocument()
+  })
+
   it("shows the next question synchronously when رد شدن is clicked (no empty gap)", async () => {
     render(<ExamView />)
     await screen.findByText("متن سوال شماره یک")
@@ -346,7 +391,7 @@ describe("ExamView mixed-language content", () => {
 
         return {
           ...base,
-          session: { ...base.session, isPractice: false, durationSec: 1200, pausedAt: null },
+          session: { ...base.session, isPractice: false, durationSec: 1200, pausedAt: null, totalQuestions: 2 },
           questions: EN_QUESTIONS,
         }
       }

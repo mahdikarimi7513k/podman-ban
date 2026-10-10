@@ -15,13 +15,15 @@ interface LeaderRow {
   avg: number
   best: number
   count: number
+  studyMin: number
+  score: number
   rank: number
 }
 
 interface LeaderboardData {
   leaderboard: LeaderRow[]
   myRank: number | null
-  myStats: { avg: number; best: number; count: number } | null
+  myStats: { avg: number; best: number; count: number; studyMin: number; score: number } | null
   totalStudents: number
 }
 
@@ -32,9 +34,11 @@ export function LeaderboardView() {
 
   React.useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await apiFetch<LeaderboardData>("/api/exam/leaderboard")
+
         if (!cancelled) setData(res)
       } catch {
         if (!cancelled) setData(null)
@@ -42,6 +46,7 @@ export function LeaderboardView() {
         if (!cancelled) setLoading(false)
       }
     })()
+
     return () => {
       cancelled = true
     }
@@ -73,7 +78,7 @@ export function LeaderboardView() {
       <div>
         <h1 className="text-xl font-bold">رتبه‌بندی هنرجویان</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          برترین دانش‌آموزان بر اساس میانگین درصد آزمون‌ها.
+          امتیاز ترکیبی: ساعت مطالعه + تعداد آزمون + میانگین درصد.
         </p>
       </div>
 
@@ -97,15 +102,14 @@ export function LeaderboardView() {
             </div>
             <div className="text-left shrink-0">
               <p className="text-2xl font-bold tabular-nums">
-                <FaNum>{data.myStats.avg}</FaNum>
-                <span className="text-sm">٪</span>
+                <FaNum>{data.myStats.score}</FaNum>
               </p>
               <p className="text-[10px] text-muted-foreground">
-                میانگین شما
+                امتیاز شما
               </p>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div className="mt-3 grid grid-cols-4 gap-2 text-center">
             <div className="rounded-lg bg-secondary/50 p-2">
               <p className="text-sm font-bold tabular-nums">
                 <FaNum>{data.myStats.count}</FaNum>
@@ -120,9 +124,15 @@ export function LeaderboardView() {
             </div>
             <div className="rounded-lg bg-secondary/50 p-2">
               <p className="text-sm font-bold tabular-nums">
-                <FaNum>{data.totalStudents}</FaNum>
+                <FaNum>{Math.round(data.myStats.studyMin / 60)}</FaNum>
               </p>
-              <p className="text-[10px] text-muted-foreground">کل هنرجویان</p>
+              <p className="text-[10px] text-muted-foreground">ساعت مطالعه</p>
+            </div>
+            <div className="rounded-lg bg-secondary/50 p-2">
+              <p className="text-sm font-bold tabular-nums">
+                <FaNum>{data.myStats.avg}</FaNum>٪
+              </p>
+              <p className="text-[10px] text-muted-foreground">میانگین</p>
             </div>
           </div>
         </motion.div>
@@ -140,6 +150,7 @@ export function LeaderboardView() {
               const actualRank = i + 1
               const Icon = actualRank === 1 ? Crown : actualRank === 2 ? Medal : Award
               const iconClass = actualRank === 1 ? "text-warning" : actualRank === 2 ? "text-muted-foreground" : "text-muted-foreground"
+
               return (
                 <motion.div
                   key={r.id}
@@ -159,10 +170,10 @@ export function LeaderboardView() {
                   </div>
                   <p className="text-xs font-medium truncate w-full">{r.name}</p>
                   <p className="text-lg font-bold tabular-nums mt-0.5">
-                    <FaNum>{r.avg}</FaNum>٪
+                    <FaNum>{r.score}</FaNum>
                   </p>
                   <p className="text-[9px] text-muted-foreground">
-                    رتبه‌ی <FaNum>{actualRank}</FaNum>
+                    <FaNum>{Math.round(r.studyMin / 60)}</FaNum> ساعت · <FaNum>{r.count}</FaNum> آزمون · <FaNum>{r.avg}</FaNum>٪
                   </p>
                 </motion.div>
               )
@@ -181,6 +192,7 @@ export function LeaderboardView() {
           <ul className="space-y-1.5">
             {rest.map((r, idx) => {
               const isMe = r.id === me?.id
+
               return (
                 <motion.li
                   key={r.id}
@@ -204,12 +216,12 @@ export function LeaderboardView() {
                       {isMe && <span className="text-[10px] text-muted-foreground mr-1">(شما)</span>}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      <FaNum>{r.count}</FaNum> آزمون
+                      <FaNum>{r.count}</FaNum> آزمون · <FaNum>{Math.round(r.studyMin / 60)}</FaNum> ساعت مطالعه
                       {r.field === "FANI_HERFEI" ? " — شبکه" : " — حسابداری"}
                     </p>
                   </div>
                   <span className="text-sm font-bold tabular-nums shrink-0">
-                    <FaNum>{r.avg}</FaNum>٪
+                    <FaNum>{r.score}</FaNum>
                   </span>
                 </motion.li>
               )
