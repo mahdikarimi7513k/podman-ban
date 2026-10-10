@@ -37,6 +37,7 @@ import {
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
 import { firedThresholds, vibrate } from "@/lib/exam-timer"
 import { useToast } from "@/hooks/use-toast"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { ICON_STROKE, ICON_STROKE_ACTION, ICON_STROKE_BADGE } from "@/lib/utils";
 
 interface ExamQuestion {
@@ -105,14 +106,17 @@ const LETTERS = ["الف", "ب", "ج", "د"]
 // One in-flight GET /api/exam/:id per session, shared across StrictMode's
 // double effect invocation (dev) and any remount races.
 const sessionInflight = new Map<string, Promise<SessionResponse>>()
+
 function fetchSessionOnce(sessionId: string): Promise<SessionResponse> {
   let p = sessionInflight.get(sessionId)
+
   if (!p) {
     p = apiFetch<SessionResponse>(`/api/exam/${sessionId}`).finally(() => {
       sessionInflight.delete(sessionId)
     })
     sessionInflight.set(sessionId, p)
   }
+
   return p
 }
 
@@ -129,9 +133,11 @@ export function ExamView() {
   const [error, setError] = React.useState<string | null>(null)
   const [index, setIndex] = React.useState(0)
   const [direction, setDirection] = React.useState(1)
+
   const [answers, setAnswers] = React.useState<
     Record<string, number | null>
   >({})
+
   const [result, setResult] = React.useState<FinishedResult | null>(null)
   const [finishing, setFinishing] = React.useState(false)
   // Finish/exit confirm dialog (finish button, exit button, or back button).
@@ -142,10 +148,12 @@ export function ExamView() {
   const [reviewData, setReviewData] = React.useState<ReviewData | null>(null)
   const [loadingReview, setLoadingReview] = React.useState(false)
   const [flagged, setFlagged] = React.useState<Set<string>>(new Set())
+
   // practice mode: revealed answers per question
   const [revealed, setRevealed] = React.useState<
     Record<string, { correctOption: number; explanation: string | null }>
   >({})
+
   const [showNavGrid, setShowNavGrid] = React.useState(false)
 
   // ---- load session ----
@@ -153,7 +161,9 @@ export function ExamView() {
   // the session (the payload that gates first paint) is fetched exactly once.
   React.useEffect(() => {
     if (!examSessionId) return
+
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetchSessionOnce(examSessionId)
@@ -181,11 +191,14 @@ export function ExamView() {
 
         setData(res)
         const initial: Record<string, number | null> = {}
+
         for (const q of res.questions) {
           const a = res.answers[q.id]
           initial[q.id] = a ? a.selectedOption : null
         }
+
         setAnswers(initial)
+
         if (res.session.status === "FINISHED") {
           // GET /exam/:session carries no per-question verdicts, so a
           // reopened report would show 0/0 and every question "unanswered".
@@ -225,6 +238,7 @@ export function ExamView() {
         if (!cancelled) setLoading(false)
       }
     })()
+
     return () => {
       cancelled = true
     }
@@ -271,6 +285,7 @@ export function ExamView() {
   const select = async (questionId: string, option: number) => {
     setAnswers((a) => ({ ...a, [questionId]: option }))
     void recordAnswer(questionId, option)
+
     // In practice mode, fetch the correct answer immediately for feedback
     if (data?.session.isPractice && !revealed[questionId] && examSessionId) {
       try {
@@ -278,6 +293,7 @@ export function ExamView() {
           `/api/exam/${examSessionId}/check`,
           { method: "POST", body: JSON.stringify({ questionId }) },
         )
+
         setRevealed((r) => ({ ...r, [questionId]: res }))
       } catch {
         /* silent */
@@ -295,6 +311,7 @@ export function ExamView() {
     setDirection(1)
     setIndex((i) => Math.min(i + 1, (data?.questions.length ?? 1) - 1))
   }
+
   const goPrev = () => {
     setDirection(-1)
     setIndex((i) => Math.max(i - 1, 0))
@@ -309,33 +326,26 @@ export function ExamView() {
   const toggleFlag = (questionId: string) => {
     setFlagged((prev) => {
       const next = new Set(prev)
+
       if (next.has(questionId)) next.delete(questionId)
       else next.add(questionId)
+
       return next
     })
   }
 
   // Connectivity: mid-exam offline keeps answering alive (local state +
-  // queued POSTs); only the final submit requires internet.
-  const [online, setOnline] = React.useState(true)
-
-  React.useEffect(() => {
-    setOnline(navigator.onLine)
-    const up = () => setOnline(true)
-    const down = () => setOnline(false)
-    window.addEventListener("online", up)
-    window.addEventListener("offline", down)
-
-    return () => {
-      window.removeEventListener("online", up)
-      window.removeEventListener("offline", down)
-    }
-  }, [])
+  // queued POSTs); only the final submit requires internet. Uses the real
+  // reachability probe (not navigator.onLine alone, which lies on phones):
+  // the banner/gate only trigger on VERIFIED outage (false), unknown (null)
+  // behaves as online so slow networks never see a bogus offline state.
+  const probedOnline = useOnlineStatus()
+  const online = probedOnline !== false
 
   const finish = React.useCallback(async () => {
     if (!examSessionId) return
 
-    if (!navigator.onLine) {
+    if (probedOnline === false || !navigator.onLine) {
       toast({
         variant: "destructive",
         title: "برای ثبت نهایی باید آنلاین باشی",
@@ -344,6 +354,7 @@ export function ExamView() {
 
       return
     }
+
     setFinishing(true)
 
     try {
@@ -378,10 +389,12 @@ export function ExamView() {
   const loadReview = React.useCallback(async () => {
     if (!examSessionId) return
     setLoadingReview(true)
+
     try {
       const res = await apiFetch<ReviewData>(
         `/api/exam/${examSessionId}/review`,
       )
+
       setReviewData(res)
       setReviewMode(true)
     } catch (err) {
@@ -434,6 +447,7 @@ export function ExamView() {
       </div>
     )
   }
+
   if (error || !data) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-background px-6 text-center gap-4">
@@ -444,6 +458,7 @@ export function ExamView() {
       </div>
     )
   }
+
   if (result && reviewMode && reviewData) {
     return (
       <ExamReview
@@ -457,6 +472,7 @@ export function ExamView() {
       />
     )
   }
+
   if (result) {
     return (
       <ExamResult
@@ -471,6 +487,7 @@ export function ExamView() {
 
   const question = data.questions[index]
   const total = data.questions.length
+
   const answeredCount = Object.values(answers).filter(
     (v) => v !== null && v !== undefined,
   ).length
@@ -626,6 +643,7 @@ export function ExamView() {
                   const isCorrect = isRevealed && revealed[question.id].correctOption === i
                   const isWrong = isRevealed && selected && !isCorrect
                   const disabled = isRevealed
+
                   return (
                     <li key={i}>
                       <button
@@ -734,6 +752,7 @@ export function ExamView() {
                     const isAnswered = answers[q.id] !== undefined && answers[q.id] !== null
                     const isCurrent = i === index
                     const isFlagged = flagged.has(q.id)
+
                     return (
                       <button
                         key={q.id}
@@ -999,14 +1018,17 @@ function ExamResult({
   loadingReview: boolean
 }) {
   const pct = result.scorePercent
+
   const verdict =
     pct >= 50 ? "success" : pct >= 25 ? "warning" : "error"
+
   const verdictText =
     verdict === "success"
       ? "آفرین! نتیجه‌ی خوبی بود."
       : verdict === "warning"
         ? "قابل‌قبول، اما جای بهبود هست."
         : "تلاش بیشتری لازم است."
+
   const verdictColor =
     verdict === "success"
       ? "text-success"
@@ -1161,6 +1183,7 @@ function ExamReview({
             const userAnswer = data.answers[question.id]
             const selected = userAnswer?.selectedOption ?? null
             const isFlagged = flagged.has(question.id)
+
             return (
               <motion.div
                 key={question.id}
@@ -1198,6 +1221,7 @@ function ExamReview({
                       const isCorrect = i === question.correctOption
                       const isSelected = selected === i
                       const isWrong = isSelected && !isCorrect
+
                       return (
                         <li key={i}>
                           <div
@@ -1283,6 +1307,7 @@ function ResultStat({
       : tone === "error"
         ? "text-destructive"
         : "text-muted-foreground"
+
   return (
     <div className="rounded-lg border border-border bg-card p-3 flex flex-col items-center gap-1">
       <span className={toneClass}>{icon}</span>

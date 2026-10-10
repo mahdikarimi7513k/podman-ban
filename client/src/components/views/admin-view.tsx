@@ -69,6 +69,8 @@ interface AdminConfig {
   registrationOpen: boolean
   registrationMessage: string
   dailyGoalNotify: boolean
+  konkurDate: string | null
+  studyDailyGoalMin: number
   externalApiEnabled: boolean
   externalApiKeyPrefix: string
 }
@@ -163,11 +165,13 @@ function AdminDashboard() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     try {
       const [s, c] = await Promise.all([
         apiFetch<{ stats: Stats }>("/api/admin/stats"),
         apiFetch<{ state: AdminConfig }>("/api/admin/config"),
       ])
+
       setStats(s.stats)
       setConfig(c.state)
     } catch {
@@ -183,6 +187,7 @@ function AdminDashboard() {
 
   const toggleLock = async (locked: boolean) => {
     setSavingLock(true)
+
     try {
       const res = await apiFetch<{ state: AdminConfig }>(
         "/api/admin/config",
@@ -191,6 +196,7 @@ function AdminDashboard() {
           body: JSON.stringify({ siteLocked: locked }),
         },
       )
+
       setConfig(res.state)
       void refreshConfig()
       toast({
@@ -210,6 +216,7 @@ function AdminDashboard() {
 
   const toggleRegistration = async (open: boolean) => {
     setSavingReg(true)
+
     try {
       const res = await apiFetch<{ state: AdminConfig }>(
         "/api/admin/config",
@@ -218,6 +225,7 @@ function AdminDashboard() {
           body: JSON.stringify({ registrationOpen: open }),
         },
       )
+
       setConfig(res.state)
       void refreshConfig()
       toast({
@@ -240,11 +248,13 @@ function AdminDashboard() {
   const issueKey = async () => {
     if (!confirm("کلید قبلی (اگر وجود داشته) باطل می‌شود. ادامه می‌دهید؟")) return
     setExtBusy(true)
+
     try {
       const res = await apiFetch<{ apiKey: string; prefix: string }>(
         "/api/admin/external-api/key",
         { method: "POST" },
       )
+
       setNewKey(res.apiKey)
       setCopied(false)
       const c = await apiFetch<{ state: AdminConfig }>("/api/admin/config")
@@ -265,6 +275,7 @@ function AdminDashboard() {
   const revokeKey = async () => {
     if (!confirm("کلید API خارجی باطل شود؟ سرویس خارجی دیگر تأیید نمی‌گیرد.")) return
     setExtBusy(true)
+
     try {
       await apiFetch("/api/admin/external-api/key", { method: "DELETE" })
       setNewKey(null)
@@ -373,6 +384,7 @@ function AdminDashboard() {
                           body: JSON.stringify({ lockMessage: config.lockMessage }),
                         },
                       )
+
                       setConfig(res.state)
                       toast({ title: "پیام ذخیره شد" })
                     } catch {
@@ -456,6 +468,7 @@ function AdminDashboard() {
                           body: JSON.stringify({ registrationMessage: config.registrationMessage }),
                         },
                       )
+
                       setConfig(res.state)
                       void refreshConfig()
                       toast({ title: "پیام ذخیره شد" })
@@ -554,6 +567,7 @@ function AdminDashboard() {
                   "/api/admin/config",
                   { method: "PUT", body: JSON.stringify({ bannerActive: v }) },
                 )
+
                 setConfig(res.state)
                 useApp.getState().refreshConfig()
                 toast({ title: v ? "بنر فعال شد" : "بنر غیرفعال شد" })
@@ -584,6 +598,7 @@ function AdminDashboard() {
                   "/api/admin/config",
                   { method: "PUT", body: JSON.stringify({ bannerText: config.bannerText }) },
                 )
+
                 setConfig(res.state)
                 useApp.getState().refreshConfig()
                 toast({ title: "بنر ذخیره شد" })
@@ -596,6 +611,9 @@ function AdminDashboard() {
           </Button>
         </div>
       </section>
+
+      {/* Study rooms: konkur date + daily goal */}
+      <AdminStudySettings config={config} setConfig={setConfig} />
 
       {/* Daily-goal reminder */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -649,6 +667,105 @@ function Stat({ label, value }: { label: string; value: number }) {
   )
 }
 
+// Study-room settings (super-admin): konkur countdown date + daily study goal.
+// The countdown card in the app reads these — no app update needed.
+function AdminStudySettings({
+  config,
+  setConfig,
+}: {
+  config: AdminConfig
+  setConfig: React.Dispatch<React.SetStateAction<AdminConfig | null>>
+}) {
+  const { toast } = useToast()
+  const [konkur, setKonkur] = React.useState(config.konkurDate ?? "")
+  const [goal, setGoal] = React.useState(config.studyDailyGoalMin ?? 180)
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    setKonkur(config.konkurDate ?? "")
+    setGoal(config.studyDailyGoalMin ?? 180)
+  }, [config.konkurDate, config.studyDailyGoalMin])
+
+  const save = async () => {
+    const trimmed = konkur.trim()
+
+    if (trimmed && Number.isNaN(Date.parse(trimmed))) {
+      toast({ variant: "destructive", title: "تاریخ کنکور معتبر نیست", description: "قالب میلادی مثل 2026-07-06" })
+
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const res = await apiFetch<{ state: AdminConfig }>("/api/admin/config", {
+        method: "PUT",
+        body: JSON.stringify({ konkurDate: trimmed === "" ? null : trimmed, studyDailyGoalMin: goal }),
+      })
+
+      setConfig(res.state)
+      useApp.getState().refreshConfig()
+      toast({ title: "تنظیمات مطالعه ذخیره شد" })
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "ذخیره ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
+          <Users className="size-5" strokeWidth={ICON_STROKE} />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold">اتاق مطالعه و تایمر کنکور</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            تاریخ کنکور روی کارت شمارش معکوس نمایش داده می‌شود. خالی = مخفی.
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="konkur-date" className="text-xs">تاریخ کنکور (میلادی)</Label>
+          <Input
+            id="konkur-date"
+            value={konkur}
+            onChange={(e) => setKonkur(e.target.value)}
+            placeholder="2026-07-06"
+            dir="ltr"
+            className="h-10 text-left"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="study-goal" className="text-xs">هدف روزانه مطالعه (دقیقه)</Label>
+          <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
+            <SelectTrigger id="study-goal" className="h-10 cursor-pointer" dir="ltr">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[60, 120, 180, 240, 300, 360, 480].map((m) => (
+                <SelectItem key={m} value={String(m)} className="cursor-pointer">
+                  <FaNum>{m}</FaNum> دقیقه
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Button size="sm" variant="outline" onClick={save} disabled={saving} className="cursor-pointer">
+        {saving && <Loader2 className="size-4 animate-spin" />}
+        ذخیره تنظیمات مطالعه
+      </Button>
+    </section>
+  )
+}
+
 // ---------------- Users ----------------
 
 function AdminUsers() {
@@ -668,16 +785,22 @@ function AdminUsers() {
 
   const createUser = async () => {
     const username = cUsername.trim().toLowerCase().replace(/\s+/g, "")
+
     if (!/^[a-z0-9_.]{3,32}$/.test(username)) {
       toast({ variant: "destructive", title: "نام کاربری معتبر نیست", description: "۳ تا ۳۲ نویسه (انگلیسی، عدد، _ یا نقطه)" })
+
       return
     }
+
     if (cName.trim().length < 2) {
       toast({ variant: "destructive", title: "نام معتبر نیست", description: "نام حداقل ۲ نویسه باشد" })
+
       return
     }
+
     if (cPassword.length < 8 || !(/[a-zA-Z]/.test(cPassword) && /\d/.test(cPassword))) {
       toast({ variant: "destructive", title: "رمز معتبر نیست", description: "حداقل ۸ نویسه شامل حرف و عدد" })
+
       return
     }
 
@@ -688,7 +811,9 @@ function AdminUsers() {
 
       return
     }
+
     setCreating(true)
+
     try {
       await apiFetch("/api/admin/users", {
         method: "POST",
@@ -713,6 +838,7 @@ function AdminUsers() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     try {
       const res = await apiFetch<{ users: AppUserLite[] }>("/api/admin/users")
       setUsers(res.users)
@@ -727,8 +853,19 @@ function AdminUsers() {
     load()
   }, [load])
 
+  // User management (create/edit/delete) is main-admin only — the server
+  // enforces requireSuperAdmin; the UI explains instead of 403-spamming.
+  if (user?.role !== "ADMIN") {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        مدیریت کاربران فقط برای مدیر اصلی است.
+      </div>
+    )
+  }
+
   const remove = async (id: string, name: string) => {
     if (!confirm(`حذف کاربر «${name}»؟ این عمل قابل بازگشت نیست.`)) return
+
     try {
       await apiFetch(`/api/admin/users/${id}`, { method: "DELETE" })
       await load()
@@ -906,6 +1043,7 @@ function UserEditDialog({
 
   const save = async () => {
     setSaving(true)
+
     try {
       await apiFetch(`/api/admin/users/${user.id}`, {
         method: "PUT",
@@ -1002,10 +1140,12 @@ function UserEditDialog({
 // ---------------- Archive ----------------
 
 const ARCHIVE_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.zip"
+
 const ARCHIVE_MAX_BYTES = 25 * 1024 * 1024
 
 function AdminArchive() {
   const { toast } = useToast()
+
   const [files, setFiles] = React.useState<
     Array<{
       id: string
@@ -1019,9 +1159,11 @@ function AdminArchive() {
       answerPath: string | null
     }>
   | null>(null)
+
   const [loading, setLoading] = React.useState(true)
   const [mode, setMode] = React.useState<"link" | "upload">("upload")
   const [saving, setSaving] = React.useState(false)
+
   const [form, setForm] = React.useState({
     title: "",
     field: "FANI_HERFEI" as "FANI_HERFEI" | "KARDANESH",
@@ -1030,11 +1172,13 @@ function AdminArchive() {
     fileUrl: "",
     answerUrl: "",
   })
+
   const [questionFile, setQuestionFile] = React.useState<File | null>(null)
   const [answerFile, setAnswerFile] = React.useState<File | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
+
     try {
       const res = await apiFetch<{ files: typeof files }>("/api/admin/archive")
       setFiles(res.files)
@@ -1057,26 +1201,35 @@ function AdminArchive() {
 
   const pickFile = (file: File | undefined, setter: (f: File | null) => void): boolean => {
     if (!file) return false
+
     if (file.size > ARCHIVE_MAX_BYTES) {
       toast({ variant: "destructive", title: "حجم فایل بیش از حد مجاز است", description: "حداکثر ۲۵ مگابایت" })
+
       return false
     }
+
     setter(file)
+
     return true
   }
 
   const add = async () => {
     if (!form.title.trim()) return
+
     if (mode === "link" && !form.fileUrl.trim()) return
+
     if (mode === "upload" && !questionFile && !answerFile) {
       toast({
         variant: "destructive",
         title: "فایلی انتخاب نشده",
         description: "فایل سوالات یا پاسخنامه را انتخاب کنید یا به حالت لینک بروید.",
       })
+
       return
     }
+
     setSaving(true)
+
     try {
       const created = await apiFetch<{ file: { id: string } }>("/api/admin/archive", {
         method: "POST",
@@ -1093,14 +1246,17 @@ function AdminArchive() {
           uploadQuestion: mode === "upload",
         }),
       })
+
       if (mode === "upload") {
         if (questionFile) {
           await apiUpload(`/api/admin/archive/${created.file.id}/file/question`, questionFile)
         }
+
         if (answerFile) {
           await apiUpload(`/api/admin/archive/${created.file.id}/file/answer`, answerFile)
         }
       }
+
       resetForm()
       await load()
       toast({ title: "فایل آرشیو افزوده شد" })
@@ -1117,6 +1273,7 @@ function AdminArchive() {
 
   const remove = async (id: string) => {
     if (!confirm("حذف این فایل آرشیو؟")) return
+
     try {
       await apiFetch(`/api/admin/archive/${id}`, { method: "DELETE" })
       await load()
@@ -1450,6 +1607,7 @@ function AdminSupport() {
       lastMessage: { id: string; text: string; sender: string; createdAt: string } | null
     }>
   | null>(null)
+
   const [loading, setLoading] = React.useState(true)
   const [selected, setSelected] = React.useState<string | null>(null)
 
@@ -1457,17 +1615,21 @@ function AdminSupport() {
     // Background refreshes stay silent: flipping `loading` every 15s flashes
     // a full-view spinner and drops the list scroll position.
     if (!quiet) setLoading(true)
+
     try {
       const res = await apiFetch<{ conversations: NonNullable<typeof conversations> }>(
         "/api/support/conversations",
       )
+
       // SAFETY: server already sorts by activity; re-sort client-side so
       // optimistic socket bumps and polls share one order.
       const rows = [...res.conversations].sort((a, b) => {
         const at = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : -1
         const bt = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : -1
+
         return bt - at
       })
+
       setConversations(rows)
     } catch {
       setConversations([])
@@ -1480,6 +1642,7 @@ function AdminSupport() {
     load()
     // poll for unread updates every 15s (silent — no spinner, no scroll jump)
     const id = setInterval(() => load(true), 15000)
+
     return () => clearInterval(id)
   }, [load])
 
@@ -1492,26 +1655,34 @@ function AdminSupport() {
       try {
         const { io } = await import("socket.io-client")
         const { API_BASE } = await import("@/lib/api-client")
+
         const socket = io(API_BASE || undefined, {
           transports: API_BASE ? ["polling", "websocket"] : ["websocket", "polling"],
           withCredentials: true,
           reconnection: true,
         })
+
         if (cancelled) {
           socket.disconnect()
+
           return
         }
+
         disconnect = () => socket.disconnect()
         socket.on("chat:message", (msg: { userId: string; text: string; sender: string; createdAt: string; id: string }) => {
           setConversations((prev) => {
             if (!prev) return prev
             const idx = prev.findIndex((c) => c.id === msg.userId)
+
             if (idx === -1) {
               // Unknown conversation (new student) — refresh quietly.
               void load(true)
+
               return prev
             }
+
             const current = prev[idx]
+
             const updated = {
               ...current,
               lastMessage: { id: msg.id, text: msg.text, sender: msg.sender, createdAt: msg.createdAt },
@@ -1519,7 +1690,9 @@ function AdminSupport() {
               // unless the thread is open (ChatPanel marks read on view).
               unread: msg.sender === "STUDENT" ? current.unread + 1 : current.unread,
             }
+
             const next = [updated, ...prev.filter((c) => c.id !== msg.userId)]
+
             return next
           })
         })
@@ -1527,6 +1700,7 @@ function AdminSupport() {
         /* socket is progressive enhancement — polling covers it */
       }
     })()
+
     return () => {
       cancelled = true
       disconnect?.()
@@ -1543,6 +1717,7 @@ function AdminSupport() {
 
   if (selected) {
     const conv = conversations?.find((c) => c.id === selected)
+
     return (
       <div className="space-y-3">
         <button

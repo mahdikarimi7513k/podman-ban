@@ -35,20 +35,27 @@ const chatSendSchemaWithUser = z.object({
 
 supportRouter.get("/messages", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   // For students: only their own conversation.
   // For staff (ADMIN / CONTENT_ADMIN): ?userId=<id> required — any conversation.
   const isStaff = user.role === "ADMIN" || user.role === "CONTENT_ADMIN"
+
   const targetUserId = isStaff
     ? (req.query.userId as string | undefined)
     : user.id
+
   if (!targetUserId) {
     res.status(403).json({ error: "userId لازم است" })
+
     return
   }
+
   // Newest-first fetch + reverse: LIMIT 200 with ASC drops the newest rows
   // once a thread grows past 200. DESC keeps the latest 200, reverse restores
   // chronological display without losing recent messages.
@@ -66,6 +73,7 @@ supportRouter.get("/messages", async (req, res) => {
     .orderBy(desc(chatMessages.createdAt))
     .limit(200)
     .all()
+
   const messages = rows.reverse()
   res.json({ messages, userId: targetUserId })
 })
@@ -74,12 +82,16 @@ supportRouter.get("/messages", async (req, res) => {
 
 supportRouter.post("/messages", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
@@ -103,6 +115,7 @@ supportRouter.post("/messages", async (req, res) => {
   }
 
   const data = parseBody(chatSendSchemaWithUser, req.body, res)
+
   if (!data) return
   const { text, userId: bodyUserId } = data
 
@@ -111,20 +124,27 @@ supportRouter.post("/messages", async (req, res) => {
   // takes priority over query string).
   const isStaff = user.role === "ADMIN" || user.role === "CONTENT_ADMIN"
   let targetUserId = user.id
+
   if (isStaff) {
     const q = bodyUserId ?? (req.query.userId as string | undefined)
+
     if (!q) {
       res.status(400).json({ error: "برای پاسخ، userId لازم است" })
+
       return
     }
+
     targetUserId = q
+
     const exists = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.id, q))
       .get()
+
     if (!exists) {
       res.status(404).json({ error: "کاربر یافت نشد" })
+
       return
     }
   }
@@ -154,6 +174,7 @@ supportRouter.post("/messages", async (req, res) => {
 
 supportRouter.get("/conversations", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
 
   const userRows = await db.query.users.findMany({
@@ -168,6 +189,7 @@ supportRouter.get("/conversations", async (req, res) => {
       },
     },
   })
+
   // count unread (student→admin, unread) per user
   const unreadCounts = await db
     .select({ userId: chatMessages.userId, n: count() })
@@ -175,7 +197,9 @@ supportRouter.get("/conversations", async (req, res) => {
     .where(and(eq(chatMessages.sender, "STUDENT"), isNull(chatMessages.readAt)))
     .groupBy(chatMessages.userId)
     .all()
+
   const unreadMap = new Map(unreadCounts.map((u) => [u.userId, u.n]))
+
   // New activity first: a fresh message bumps the conversation to the top so
   // admins never scroll to find it. Nulls (no messages yet) sort last, then
   // account recency as a stable tiebreak.
@@ -191,8 +215,10 @@ supportRouter.get("/conversations", async (req, res) => {
     .sort((a, b) => {
       const at = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : -1
       const bt = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : -1
+
       return bt - at
     })
+
   res.json({ conversations })
 })
 
@@ -200,16 +226,23 @@ supportRouter.get("/conversations", async (req, res) => {
 
 supportRouter.post("/read", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const userId = req.query.userId as string | undefined
+
   if (!userId) {
     res.status(400).json({ error: "userId لازم است" })
+
     return
   }
+
   await db
     .update(chatMessages)
     .set({ readAt: new Date() })

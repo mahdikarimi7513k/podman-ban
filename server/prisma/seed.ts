@@ -483,8 +483,10 @@ async function main() {
   }
 
   // ---- Institutions ----
-  const inst1 = await db.insert(institutions).values({ name: "قلمچی", order: 1 }).returning({ id: institutions.id }).get()
-  const inst2 = await db.insert(institutions).values({ name: "تیک کلاس", order: 2 }).returning({ id: institutions.id }).get()
+  await db.insert(institutions).values({ name: "قلمچی", order: 1 }).onConflictDoNothing().run()
+  await db.insert(institutions).values({ name: "تیک کلاس", order: 2 }).onConflictDoNothing().run()
+  const inst1 = await db.select({ id: institutions.id }).from(institutions).where(eq(institutions.name, "قلمچی")).get()
+  const inst2 = await db.select({ id: institutions.id }).from(institutions).where(eq(institutions.name, "تیک کلاس")).get()
   if (!inst1 || !inst2) throw new Error("seed: institution insert failed")
 
   // ---- Archive files ----

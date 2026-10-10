@@ -92,33 +92,53 @@ function tehranDayStartMs(nowMs: number): number {
 // hosts need no object storage; initials fallback when null.
 userRouter.put("/profile", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(profileUpdateSchema, req.body, res)
+
   if (!data) return
+
   if (data.name === undefined && data.avatarBase64 === undefined) {
     res.status(422).json({ error: "تغییری ارسال نشده است" })
+
     return
   }
-  const patch: { name?: string; avatarBase64?: string | null } = {}
+
+  interface ProfilePatch {
+    name?: string
+    avatarBase64?: string | null
+  }
+
+  const patch: ProfilePatch = {}
+
   if (data.name !== undefined) patch.name = data.name.trim()
+
   if (data.avatarBase64 !== undefined) patch.avatarBase64 = data.avatarBase64 ?? null
+
   const updated = await db
     .update(users)
     .set(patch)
     .where(eq(users.id, user.id))
     .returning({ id: users.id, name: users.name, avatarBase64: users.avatarBase64 })
     .get()
+
   if (!updated) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   res.json({ user: updated })
 })
 
@@ -126,16 +146,21 @@ userRouter.put("/profile", async (req, res) => {
 
 userRouter.put("/prefs", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
   const data = parseBody(prefsSchema, req.body, res)
+
   if (!data) return
 
   const dbUser = await db
@@ -143,10 +168,13 @@ userRouter.put("/prefs", async (req, res) => {
     .from(users)
     .where(eq(users.id, user.id))
     .get()
+
   if (!dbUser) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const current = JSON.parse(dbUser.prefs || "{}")
   const next = { ...current, ...data }
   await db.update(users).set({ prefs: JSON.stringify(next) }).where(eq(users.id, user.id)).run()
@@ -168,12 +196,16 @@ const passwordChangeSchema = z.object({
 
 userRouter.put("/password", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
 
@@ -196,6 +228,7 @@ userRouter.put("/password", async (req, res) => {
   }
 
   const data = parseBody(passwordChangeSchema, req.body, res)
+
   if (!data) return
   const { currentPassword, newPassword } = data
 
@@ -204,19 +237,24 @@ userRouter.put("/password", async (req, res) => {
     .from(users)
     .where(eq(users.id, user.id))
     .get()
+
   if (!dbUser) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 
   const valid = await verifyPassword(currentPassword, dbUser.passwordHash)
+
   if (!valid) {
     res.status(422).json({ error: "رمز عبور فعلی نادرست است" })
+
     return
   }
 
   if (currentPassword === newPassword) {
     res.status(422).json({ error: "رمز عبور جدید نباید با رمز فعلی یکسان باشد" })
+
     return
   }
 
@@ -250,8 +288,10 @@ interface Achievement {
 
 userRouter.get("/achievements", async (req, res) => {
   const me = await getSession(req)
+
   if (!me) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 
@@ -381,8 +421,10 @@ userRouter.get("/achievements", async (req, res) => {
 
 userRouter.get("/daily-progress", async (req, res) => {
   const me = await getSession(req)
+
   if (!me) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 
@@ -402,6 +444,7 @@ userRouter.get("/daily-progress", async (req, res) => {
   // daily goal — everyone else's activity completed it.)
   if (sessionIds.length === 0) {
     res.json({ todayAnswered: 0, date: tehranDayKey(new Date(nowMs)) })
+
     return
   }
 
@@ -429,8 +472,10 @@ userRouter.get("/daily-progress", async (req, res) => {
 
 userRouter.get("/heatmap", async (req, res) => {
   const me = await getSession(req)
+
   if (!me) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
 

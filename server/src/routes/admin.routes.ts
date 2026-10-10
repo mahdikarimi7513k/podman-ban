@@ -87,6 +87,7 @@ import {
   isArchiveKind,
 } from "../lib/archive-files.js"
 import { getAppState, updateAppState } from "../lib/remote-config.js"
+import { logInfo } from "../lib/logger.js"
 import {
   bookCreateSchema,
   bookUpdateSchema,
@@ -157,7 +158,9 @@ async function deleteModuleContents(moduleIds: string[]): Promise<void> {
 
 adminRouter.get("/books", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   const bookRows = await db.query.books.findMany({
     orderBy: [asc(books.order), asc(books.title)],
     with: {
@@ -167,6 +170,7 @@ adminRouter.get("/books", async (req, res) => {
       },
     },
   })
+
   const counts =
     bookRows.length > 0
       ? await db
@@ -175,6 +179,7 @@ adminRouter.get("/books", async (req, res) => {
           .groupBy(questions.moduleId)
           .all()
       : []
+
   const countByModule = new Map(counts.map((c) => [c.moduleId, c.n]))
   res.json({
     books: bookRows.map((b) => ({
@@ -189,12 +194,17 @@ adminRouter.get("/books", async (req, res) => {
 
 adminRouter.post("/books", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(bookCreateSchema, req.body, res)
+
   if (!data) return
   const { title, field, order } = data
   const book = await db.insert(books).values({ title, field, order }).returning().get()
@@ -203,19 +213,27 @@ adminRouter.post("/books", async (req, res) => {
 
 adminRouter.put("/books/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const data = parseBody(bookUpdateSchema, req.body, res)
+
   if (!data) return
   const exists = await db.select({ id: books.id }).from(books).where(eq(books.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "کتاب یافت نشد" })
+
     return
   }
+
   const book = await db.update(books).set(data).where(eq(books.id, id)).returning().get()
   res.json({ book })
 })
@@ -261,42 +279,59 @@ adminRouter.delete("/books/:id", async (req, res) => {
 
 adminRouter.post("/modules", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(moduleCreateSchema, req.body, res)
+
   if (!data) return
   const { bookId, title, description, order } = data
   const book = await db.select({ id: books.id }).from(books).where(eq(books.id, bookId)).get()
+
   if (!book) {
     res.status(404).json({ error: "کتاب یافت نشد" })
+
     return
   }
+
   const mod = await db
     .insert(modules)
     .values({ bookId, title, description, order })
     .returning()
     .get()
+
   res.status(201).json({ module: mod })
 })
 
 adminRouter.put("/modules/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const data = parseBody(moduleUpdateSchema, req.body, res)
+
   if (!data) return
   const exists = await db.select({ id: modules.id }).from(modules).where(eq(modules.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "پودمان یافت نشد" })
+
     return
   }
+
   const mod = await db.update(modules).set(data).where(eq(modules.id, id)).returning().get()
   res.json({ module: mod })
 })
@@ -345,12 +380,16 @@ const bulkImportSchema = z.object({
 // GET list (?moduleId=...)
 adminRouter.get("/questions", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
   const moduleId = req.query.moduleId as string | undefined
+
   if (!moduleId) {
     res.status(403).json({ error: "moduleId لازم است" })
+
     return
   }
+
   const qRows = await db
     .select({
       id: questions.id,
@@ -365,6 +404,7 @@ adminRouter.get("/questions", async (req, res) => {
     .where(eq(questions.moduleId, moduleId))
     .orderBy(asc(questions.createdAt))
     .all()
+
   res.json({
     questions: qRows.map((q) => ({
       ...q,
@@ -377,24 +417,36 @@ adminRouter.get("/questions", async (req, res) => {
 // POST single
 adminRouter.post("/questions", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(questionCreateSchema, req.body, res)
+
   if (!data) return
+
   const { moduleId, text, imageBase64, options, correctOption, explanation } =
     data
+
   const mod = await db.select({ id: modules.id }).from(modules).where(eq(modules.id, moduleId)).get()
+
   if (!mod) {
     res.status(404).json({ error: "پودمان یافت نشد" })
+
     return
   }
+
   if (correctOption >= options.length) {
     res.status(403).json({ error: "گزینه‌ی صحیح خارج از بازه است" })
+
     return
   }
+
   const q = await db
     .insert(questions)
     .values({
@@ -407,24 +459,32 @@ adminRouter.post("/questions", async (req, res) => {
     })
     .returning()
     .get()
+
   res.status(201).json({ question: q })
 })
 
 // POST bulk — MUST be defined before /:id so "bulk" isn't captured as :id
 adminRouter.post("/questions/bulk", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(bulkImportSchema, req.body, res)
+
   if (!data) return
   const { moduleId, questions: incoming } = data
 
   const mod = await db.select({ id: modules.id }).from(modules).where(eq(modules.id, moduleId)).get()
+
   if (!mod) {
     res.status(404).json({ error: "پودمان یافت نشد" })
+
     return
   }
 
@@ -434,6 +494,7 @@ adminRouter.post("/questions/bulk", async (req, res) => {
       res.status(422).json({
         error: `گزینه‌ی صحیح برای سوال «${q.text.slice(0, 30)}…» خارج از بازه است`,
       })
+
       return
     }
   }
@@ -457,8 +518,10 @@ adminRouter.post("/questions/bulk", async (req, res) => {
 // GET single
 adminRouter.get("/questions/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
   const { id } = req.params
+
   const q = await db
     .select({
       id: questions.id,
@@ -473,36 +536,52 @@ adminRouter.get("/questions/:id", async (req, res) => {
     .from(questions)
     .where(eq(questions.id, id))
     .get()
+
   if (!q) {
     res.status(404).json({ error: "یافت نشد" })
+
     return
   }
+
   res.json({ question: { ...q, options: JSON.parse(q.options) } })
 })
 
 // PUT update
 adminRouter.put("/questions/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const data = parseBody(questionUpdateSchema, req.body, res)
+
   if (!data) return
   const exists = await db.select({ id: questions.id }).from(questions).where(eq(questions.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "یافت نشد" })
+
     return
   }
+
   // Drizzle binds undefined as NULL (unlike Prisma, which skips it), so only
   // include keys the caller actually sent.
   const updateData: Partial<typeof questions.$inferInsert> = {}
+
   if (data.text !== undefined) updateData.text = data.text
+
   if (data.imageBase64 !== undefined) updateData.imageBase64 = data.imageBase64 ?? null
+
   if (data.options !== undefined) updateData.options = JSON.stringify(data.options)
+
   if (data.correctOption !== undefined) updateData.correctOption = data.correctOption
+
   if (data.explanation !== undefined) updateData.explanation = data.explanation
   const q = await db.update(questions).set(updateData).where(eq(questions.id, id)).returning().get()
   res.json({ question: q })
@@ -511,17 +590,24 @@ adminRouter.put("/questions/:id", async (req, res) => {
 // DELETE
 adminRouter.delete("/questions/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const deleted = await db.delete(questions).where(eq(questions.id, id)).returning({ id: questions.id }).get()
+
   if (!deleted) {
     res.status(404).json({ error: "سوال یافت نشد" })
+
     return
   }
+
   res.json({ ok: true })
 })
 
@@ -531,28 +617,39 @@ adminRouter.delete("/questions/:id", async (req, res) => {
 
 adminRouter.get("/archive", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   const files = await db.query.archiveFiles.findMany({
     orderBy: [desc(archiveFiles.year), desc(archiveFiles.month)],
     with: { institution: { columns: { id: true, name: true } } },
   })
+
   res.json({ files })
 })
 
 adminRouter.post("/archive", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(archiveCreateSchema, req.body, res)
+
   if (!data) return
+
   // A record needs at least one deliverable (link or a file uploaded after).
   if (!data.fileUrl && !req.body?.uploadQuestion) {
     res.status(422).json({ error: "لینک دانلود بدهید یا در حالت آپلود، فایل سوالات را انتخاب کنید" })
+
     return
   }
+
   const file = await db.insert(archiveFiles).values(data).returning().get()
   res.status(201).json({ file })
 })
@@ -568,31 +665,43 @@ adminRouter.post(
   express.raw({ type: "*/*", limit: "35mb" }),
   async (req, res) => {
     const user = await requireAdmin(req, res)
+
     if (!user) return
+
     if (!(await requireCsrf(user, req))) {
       res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
       return
     }
+
     const { id } = req.params
     const kind = String(req.params.kind)
+
     if (!isArchiveKind(kind)) {
       res.status(400).json({ error: "نوع فایل نامعتبر است" })
+
       return
     }
+
     const exists = await db.select({ id: archiveFiles.id }).from(archiveFiles).where(eq(archiveFiles.id, id)).get()
+
     if (!exists) {
       res.status(404).json({ error: "فایل آرشیو یافت نشد" })
+
       return
     }
+
     try {
       let originalName = Array.isArray(req.headers["x-file-name"])
         ? req.headers["x-file-name"][0]
         : req.headers["x-file-name"]
+
       try {
         if (originalName) originalName = decodeURIComponent(originalName)
       } catch {
         /* keep raw value */
       }
+
       const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "")
       // Bridge-safe uploads from the native app arrive base64-encoded
       // (see apiUpload) — the native bridge cannot transport ArrayBuffer
@@ -600,6 +709,7 @@ adminRouter.post(
       const transfer = req.headers["x-transfer-encoding"]
       const transferName = (Array.isArray(transfer) ? transfer[0] : transfer ?? "").toLowerCase()
       const bytes = transferName === "base64" ? Buffer.from(raw.toString("utf8"), "base64") : raw
+
       const name = saveArchiveUpload(
         id,
         kind,
@@ -607,12 +717,14 @@ adminRouter.post(
         originalName,
         req.headers["content-type"],
       )
+
       const updated = await db
         .update(archiveFiles)
         .set(kind === "question" ? { questionPath: name } : { answerPath: name })
         .where(eq(archiveFiles.id, id))
         .returning()
         .get()
+
       res.json({ file: updated })
     } catch (err) {
       res.status(422).json({
@@ -624,36 +736,51 @@ adminRouter.post(
 
 adminRouter.put("/archive/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const data = parseBody(archiveUpdateSchema, req.body, res)
+
   if (!data) return
   const exists = await db.select({ id: archiveFiles.id }).from(archiveFiles).where(eq(archiveFiles.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "یافت نشد" })
+
     return
   }
+
   const file = await db.update(archiveFiles).set(data).where(eq(archiveFiles.id, id)).returning().get()
   res.json({ file })
 })
 
 adminRouter.delete("/archive/:id", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const existing = await db.select().from(archiveFiles).where(eq(archiveFiles.id, id)).get()
+
   if (!existing) {
     res.status(404).json({ error: "فایل یافت نشد" })
+
     return
   }
+
   await db.delete(archiveFiles).where(eq(archiveFiles.id, id)).run()
   deleteArchiveUploads(existing)
   res.json({ ok: true })
@@ -665,6 +792,7 @@ adminRouter.delete("/archive/:id", async (req, res) => {
 
 adminRouter.get("/config", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
   const state = await getAppState()
   res.json({ state })
@@ -672,12 +800,17 @@ adminRouter.get("/config", async (req, res) => {
 
 adminRouter.put("/config", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(remoteConfigUpdateSchema, req.body, res)
+
   if (!data) return
   const state = await updateAppState(data)
   res.json({ state })
@@ -689,23 +822,28 @@ adminRouter.put("/config", async (req, res) => {
 
 adminRouter.get("/stats", async (req, res) => {
   const user = await requireAdmin(req, res)
+
   if (!user) return
   const usersCount = db.select({ n: count() }).from(users).get()?.n ?? 0
   const studentsCount = db.select({ n: count() }).from(users).where(eq(users.role, "STUDENT")).get()?.n ?? 0
   const booksCount = db.select({ n: count() }).from(books).get()?.n ?? 0
   const modulesCount = db.select({ n: count() }).from(modules).get()?.n ?? 0
   const questionsCount = db.select({ n: count() }).from(questions).get()?.n ?? 0
+
   const sessionsCount = db
     .select({ n: count() })
     .from(examSessions)
     .where(eq(examSessions.status, "FINISHED"))
     .get()?.n ?? 0
+
   const archiveCount = db.select({ n: count() }).from(archiveFiles).get()?.n ?? 0
+
   const unreadChats = db
     .select({ n: count() })
     .from(chatMessages)
     .where(and(eq(chatMessages.sender, "STUDENT"), isNull(chatMessages.readAt)))
     .get()?.n ?? 0
+
   res.json({
     stats: {
       usersCount,
@@ -728,6 +866,7 @@ const institutionCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
   order: z.number().int().default(0),
 })
+
 const institutionUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   order: z.number().int().optional(),
@@ -735,11 +874,14 @@ const institutionUpdateSchema = z.object({
 
 adminRouter.get("/institutions", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   const institutionRows = await db.query.institutions.findMany({
     orderBy: asc(institutions.order),
     with: { files: { columns: { id: true } } },
   })
+
   res.json({
     institutions: institutionRows.map((i) => ({
       id: i.id,
@@ -752,12 +894,17 @@ adminRouter.get("/institutions", async (req, res) => {
 
 adminRouter.post("/institutions", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(institutionCreateSchema, req.body, res)
+
   if (!data) return
   const institution = await db.insert(institutions).values(data).returning().get()
   res.status(201).json({ institution })
@@ -765,36 +912,51 @@ adminRouter.post("/institutions", async (req, res) => {
 
 adminRouter.put("/institutions/:id", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const data = parseBody(institutionUpdateSchema, req.body, res)
+
   if (!data) return
   const exists = await db.select({ id: institutions.id }).from(institutions).where(eq(institutions.id, id)).get()
+
   if (!exists) {
     res.status(404).json({ error: "یافت نشد" })
+
     return
   }
+
   const institution = await db.update(institutions).set(data).where(eq(institutions.id, id)).returning().get()
   res.json({ institution })
 })
 
 adminRouter.delete("/institutions/:id", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const deleted = await db.delete(institutions).where(eq(institutions.id, id)).returning({ id: institutions.id }).get()
+
   if (!deleted) {
     res.status(404).json({ error: "یافت نشد" })
+
     return
   }
+
   res.json({ ok: true })
 })
 
@@ -810,7 +972,9 @@ const userUpdateSchema = z.object({
 
 adminRouter.get("/users", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   const userRows = await db
     .select({
       id: users.id,
@@ -825,6 +989,7 @@ adminRouter.get("/users", async (req, res) => {
     .from(users)
     .orderBy(desc(users.createdAt))
     .all()
+
   res.json({ users: userRows })
 })
 
@@ -832,17 +997,24 @@ adminRouter.get("/users", async (req, res) => {
 // sign-up is closed). The given username/password log in immediately.
 adminRouter.post("/users", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const data = parseBody(registerSchema, req.body, res)
+
   if (!data) return
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.username, data.username)).get()
+
   if (existing) {
     res.status(409).json({ error: "این نام کاربری قبلاً ثبت شده است" })
+
     return
   }
 
@@ -855,6 +1027,7 @@ adminRouter.post("/users", async (req, res) => {
   }
 
   const passwordHash = await hashPassword(data.password)
+
   const created = await db
     .insert(users)
     .values({
@@ -876,24 +1049,39 @@ adminRouter.post("/users", async (req, res) => {
       createdAt: users.createdAt,
     })
     .get()
+
+  // Host audit trail: manual account creation (works even with sign-up closed).
+  logInfo("[admin] user created", {
+    by: user.id,
+    username: created.username,
+    field: created.field,
+  })
+
   res.status(201).json({ user: created })
 })
 
 adminRouter.put("/users/:id", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
 
   const data = parseBody(userUpdateSchema, req.body, res)
+
   if (!data) return
 
   const existing = await db.select().from(users).where(eq(users.id, id)).get()
+
   if (!existing) {
     res.status(404).json({ error: "کاربر یافت نشد" })
+
     return
   }
 
@@ -923,39 +1111,54 @@ adminRouter.put("/users/:id", async (req, res) => {
       createdAt: users.createdAt,
     })
     .get()
+
   res.json({ user: updated })
 })
 
 adminRouter.delete("/users/:id", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const { id } = req.params
   const me = await getSession(req)
+
   // prevent self-deletion
   if (me?.id === id) {
     res.status(403).json({ error: "نمی‌توانید حساب خودتان را حذف کنید" })
+
     return
   }
 
   const existing = await db.select({ role: users.role }).from(users).where(eq(users.id, id)).get()
+
   if (!existing) {
     res.status(404).json({ error: "کاربر یافت نشد" })
+
     return
   }
+
   // prevent deleting the last admin
   if (existing.role === "ADMIN") {
     const adminCount = db.select({ n: count() }).from(users).where(eq(users.role, "ADMIN")).get()?.n ?? 0
+
     if (adminCount <= 1) {
       res.status(400).json({ error: "نمی‌توان تنها مدیر را حذف کرد" })
+
       return
     }
   }
 
   await db.delete(users).where(eq(users.id, id)).run()
+
+  logInfo("[admin] user deleted", { by: user.id, deletedId: id })
+
   res.json({ ok: true })
 })
 
@@ -967,6 +1170,7 @@ adminRouter.delete("/users/:id", async (req, res) => {
 // GET status — never exposes the key or its hash.
 adminRouter.get("/external-api", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
   const state = await getAppState()
   res.json({
@@ -978,11 +1182,15 @@ adminRouter.get("/external-api", async (req, res) => {
 // POST — issue a fresh key (rotates: the previous key stops working).
 adminRouter.post("/external-api/key", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   const apiKey = `pbx_${randomBytes(32).toString("hex")}`
   const prefix = apiKey.slice(0, 12) + "…"
   await updateAppState({
@@ -995,11 +1203,15 @@ adminRouter.post("/external-api/key", async (req, res) => {
 // DELETE — revoke the key (external verification turns off).
 adminRouter.delete("/external-api/key", async (req, res) => {
   const user = await requireSuperAdmin(req, res)
+
   if (!user) return
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   await updateAppState({ externalApiKeyHash: null, externalApiKeyPrefix: "" })
   res.json({ ok: true })
 })

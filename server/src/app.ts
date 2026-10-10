@@ -72,11 +72,13 @@ export function buildApp(): express.Express {
   // --- security headers ---
   app.use((req, res, next) => {
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+
     // Dynamic JSON API must never be cached (auth tokens, PII, exam answers).
     if (req.path.startsWith("/api") || req.path === "/health") {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate")
       res.setHeader("Pragma", "no-cache")
     }
+
     // The strict document-lock CSP applies to API responses only. When the same
     // app serves the SPA (CLIENT_DIST), HTML needs scripts/styles inline.
     if (req.path.startsWith("/api") || req.path === "/health") {
@@ -85,6 +87,7 @@ export function buildApp(): express.Express {
         "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
       )
     }
+
     res.setHeader("Cross-Origin-Embedder-Policy", "require-corp")
     res.setHeader("X-Content-Type-Options", "nosniff")
     res.setHeader("X-Frame-Options", "DENY")
@@ -113,6 +116,7 @@ export function buildApp(): express.Express {
   app.use(async (req, res, next) => {
     if (req.method === "OPTIONS") return next()
     const p = req.path
+
     const exempt =
       p === "/health" ||
       // Public, read-only, and required by the client to render the lock screen
@@ -123,11 +127,15 @@ export function buildApp(): express.Express {
       p.startsWith("/api/admin") ||
       // Stateless credential check (API-key auth) — an auth flow like login.
       p.startsWith("/api/external")
+
     if (exempt) return next()
+
     try {
       const state = await getAppState()
+
       if (!state.siteLocked) return next()
       const user = await getSession(req)
+
       if (user && (user.role === "ADMIN" || user.role === "CONTENT_ADMIN")) return next()
       res.status(503).json({
         error: state.lockMessage || "سایت موقتاً در دست تعمیر است",
@@ -198,11 +206,20 @@ export function buildApp(): express.Express {
   app.use(
     (
       err: unknown,
-      _req: express.Request,
+      req: express.Request,
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      console.error("[api-error]", err instanceof Error ? err.message : err)
+      // Full detail goes to the host log file (timestamp, reqId, stack);
+      // clients only ever see the generic message.
+      logError("[api-error]", {
+        reqId: getReqId(req),
+        method: req.method,
+        path: req.path,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.slice(0, 4000) : undefined,
+      })
+
       if (res.headersSent) return
       res.status(500).json({ error: "خطای داخلی سرور" })
     },

@@ -34,6 +34,7 @@ export const APP_VIEWS = [
   "admin",
   "leaderboard",
   "achievements",
+  "study",
 ] as const
 
 /** The closed set of view names — history only ever round-trips these. */

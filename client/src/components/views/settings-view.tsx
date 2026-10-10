@@ -3,7 +3,6 @@ import * as React from "react"
 import {
   Moon,
   Sun,
-  Monitor,
   Repeat,
   Timer,
   Target,
@@ -16,6 +15,8 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ImagePlus,
+  Trash2,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
 import type { Theme } from "@/lib/theme"
@@ -118,8 +119,12 @@ export function SettingsView() {
       {/* Profile */}
       <section className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-3 p-4 border-b border-border">
-          <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-base font-semibold">
-            {user.name.charAt(0)}
+          <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-base font-semibold overflow-hidden">
+            {user.avatarBase64 ? (
+              <img src={user.avatarBase64} alt="پروفایل" className="size-full object-cover" />
+            ) : (
+              user.name.charAt(0)
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold truncate">{user.name}</p>
@@ -144,6 +149,9 @@ export function SettingsView() {
         </ul>
       </section>
 
+      {/* Edit profile */}
+      <ProfileEditSection />
+
       {/* Theme */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -154,6 +162,7 @@ export function SettingsView() {
           {themeOptions.map((opt) => {
             const active = mounted && theme === opt.value
             const Icon = opt.icon
+
             return (
               <button
                 key={opt.value}
@@ -340,6 +349,170 @@ function ProfileRow({
   )
 }
 
+const AVATAR_MAX_BYTES = 500 * 1024
+
+function ProfileEditSection() {
+  const user = useApp((s) => s.user)
+  const { toast } = useToast()
+  const [name, setName] = React.useState(user?.name ?? "")
+  const [avatar, setAvatar] = React.useState<string | null>(user?.avatarBase64 ?? null)
+  const [avatarTouched, setAvatarTouched] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const fileRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    setName(user?.name ?? "")
+    setAvatar(user?.avatarBase64 ?? null)
+    setAvatarTouched(false)
+  }, [user?.id])
+
+  if (!user) return null
+  const nameDirty = name.trim() !== user.name && name.trim().length >= 2
+  const avatarDirty = avatarTouched && (avatar ?? null) !== (user.avatarBase64 ?? null)
+  const canSave = (nameDirty || avatarDirty) && !saving
+
+  const pickFile = (file: File | undefined) => {
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast({ variant: "destructive", title: "فایل معتبر نیست", description: "فقط تصویر انتخاب کنید." })
+
+      return
+    }
+
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast({ variant: "destructive", title: "تصویر خیلی بزرگ است", description: "حداکثر ۵۰۰ کیلوبایت." })
+
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const url = String(reader.result ?? "")
+
+      if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url)) {
+        setAvatar(url)
+        setAvatarTouched(true)
+      } else {
+        toast({ variant: "destructive", title: "فرمت تصویر پشتیبانی نمی‌شود" })
+      }
+    }
+
+    reader.readAsDataURL(file)
+  }
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+
+    try {
+      interface ProfileSaveBody {
+        name?: string
+        avatarBase64?: string | null
+      }
+
+      const body: ProfileSaveBody = {}
+
+      if (nameDirty) body.name = name.trim()
+
+      if (avatarDirty) body.avatarBase64 = avatar
+
+      const res = await apiFetch<{ user: { name: string; avatarBase64: string | null } }>(
+        "/api/user/profile",
+        { method: "PUT", body: JSON.stringify(body) },
+      )
+
+      useApp.getState().patchUser({ name: res.user.name, avatarBase64: res.user.avatarBase64 })
+      setAvatarTouched(false)
+      toast({ title: "پروفایل به‌روزرسانی شد" })
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "ذخیره پروفایل ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <User className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <h2 className="text-sm font-semibold">ویرایش پروفایل</h2>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex size-14 items-center justify-center rounded-full bg-secondary text-lg font-semibold overflow-hidden shrink-0">
+          {avatar ? (
+            <img src={avatar} alt="پیش‌نمایش پروفایل" className="size-full object-cover" />
+          ) : (
+            (name.trim() || user.name).charAt(0)
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="cursor-pointer"
+            onClick={() => fileRef.current?.click()}
+          >
+            <ImagePlus className="size-4" />
+            انتخاب عکس
+          </Button>
+          {avatar && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="cursor-pointer text-destructive hover:text-destructive"
+              onClick={() => {
+                setAvatar(null)
+                setAvatarTouched(true)
+              }}
+            >
+              <Trash2 className="size-4" />
+              حذف عکس
+            </Button>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            pickFile(e.target.files?.[0])
+            e.target.value = ""
+          }}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="profile-name" className="text-xs">نام نمایشی</Label>
+        <Input
+          id="profile-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="نام و نام خانوادگی"
+          maxLength={40}
+          className="h-10"
+        />
+        {name.trim().length > 0 && name.trim().length < 2 && (
+          <p className="text-xs text-destructive">نام حداقل ۲ نویسه باشد.</p>
+        )}
+      </div>
+      <Button type="button" size="sm" disabled={!canSave} onClick={save} className="cursor-pointer">
+        {saving && <Loader2 className="size-4 animate-spin" />}
+        ذخیره پروفایل
+      </Button>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        نام و عکس شما در اتاق‌های مطالعه برای بقیه کاربران نمایش داده می‌شود.
+      </p>
+    </section>
+  )
+}
+
 function formatDate(iso: string): string {
   try {
     return new Intl.DateTimeFormat("fa-IR", {
@@ -363,6 +536,7 @@ function PasswordChangeSection() {
   const [showNew, setShowNew] = React.useState(false)
 
   const passwordsMatch = next === confirm
+
   const canSubmit =
     current.length >= 1 &&
     next.length >= 8 &&
@@ -373,8 +547,10 @@ function PasswordChangeSection() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!canSubmit) return
     setSaving(true)
+
     try {
       await apiFetch("/api/user/password", {
         method: "PUT",

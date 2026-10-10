@@ -7,13 +7,18 @@
  *  - Navigations: network-first, fall back to the cached shell when offline.
  *  - Static assets (/assets, /fonts, icons): stale-while-revalidate.
  */
-const VERSION = "pb-v2";
+const VERSION = "pb-v3";
+
 const ASSET_CACHE = `${VERSION}-assets`;
+
 const PAGE_CACHE = `${VERSION}-pages`;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(PAGE_CACHE).then((cache) => cache.addAll(["/"])).then(() => self.skipWaiting()),
+    caches
+      .open(PAGE_CACHE)
+      .then((cache) => cache.addAll(["/", "/offline.html"]))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -30,10 +35,13 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
+
   if (url.origin !== self.location.origin) return;
+
   // Auth + realtime: always the network, never the cache.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/socket.io")) return;
 
@@ -42,13 +50,21 @@ self.addEventListener("fetch", (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
+
           // Only cache real pages — a 500/503 error shell must never
           // become the offline fallback.
           if (res.ok) caches.open(PAGE_CACHE).then((c) => c.put("/", copy));
+
           return res;
         })
-        .catch(() => caches.match("/").then((cached) => cached ?? Response.error())),
+        .catch(() =>
+          caches
+            .match("/")
+            .then((cached) => cached ?? caches.match("/offline.html"))
+            .then((page) => page ?? Response.error()),
+        ),
     );
+
     return;
   }
 
@@ -58,16 +74,20 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/fonts/") ||
     url.pathname === "/icon.svg" ||
     url.pathname === "/icon-maskable.svg";
+
   if (isStatic) {
     event.respondWith(
       caches.open(ASSET_CACHE).then(async (cache) => {
         const cached = await cache.match(req);
+
         const network = fetch(req)
           .then((res) => {
             if (res.ok) cache.put(req, res.clone());
+
             return res;
           })
           .catch(() => cached ?? Response.error());
+
         return cached ?? network;
       }),
     );

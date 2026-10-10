@@ -4,12 +4,15 @@ import { z } from "zod"
 /** Standard zod parse → 422 on failure. Returns the parsed data or null. */
 export function parseBody<T>(schema: z.ZodType<T>, body: unknown, res: Response): T | null {
   const result = schema.safeParse(body)
+
   if (!result.success) {
     res
       .status(422)
       .json({ error: result.error.issues[0]?.message ?? "ورودی نامعتبر است" })
+
     return null
   }
+
   return result.data
 }
 
@@ -119,6 +122,7 @@ export const bookCreateSchema = z.object({
   field: z.enum(["FANI_HERFEI", "KARDANESH"]).nullable().optional(),
   order: z.number().int().default(0),
 })
+
 export const bookUpdateSchema = bookCreateSchema.partial()
 
 export const moduleCreateSchema = z.object({
@@ -127,6 +131,7 @@ export const moduleCreateSchema = z.object({
   description: z.string().trim().max(400).optional(),
   order: z.number().int().default(0),
 })
+
 export const moduleUpdateSchema = moduleCreateSchema.partial().omit({ bookId: true })
 
 // imageBase64 may be a data URL; cap at ~2MB
@@ -149,6 +154,7 @@ export const questionCreateSchema = z.object({
     .optional()
     .nullable(),
 })
+
 export const questionUpdateSchema = questionCreateSchema.partial().omit({ moduleId: true })
 
 export const archiveCreateSchema = z.object({
@@ -173,6 +179,7 @@ export const archiveCreateSchema = z.object({
     .nullable(),
   institutionId: z.string().optional().nullable(),
 })
+
 export const archiveUpdateSchema = archiveCreateSchema.partial()
 
 export const remoteConfigUpdateSchema = z.object({

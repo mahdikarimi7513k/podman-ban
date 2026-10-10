@@ -42,6 +42,7 @@ const ArchiveView = lazyNamed(() => import("@/components/views/archive-view"), "
 const AdminView = lazyNamed(() => import("@/components/views/admin-view"), "AdminView")
 const LeaderboardView = lazyNamed(() => import("@/components/views/leaderboard-view"), "LeaderboardView")
 const AchievementsView = lazyNamed(() => import("@/components/views/achievements-view"), "AchievementsView")
+const StudyView = lazyNamed(() => import("@/components/views/study-view"), "StudyView")
 // Takes a `message` prop — direct lazy() keeps its real prop types.
 const MaintenanceView = React.lazy(() =>
   import("@/components/views/maintenance-view").then((m) => ({ default: m.MaintenanceView })),
@@ -242,6 +243,7 @@ function AppContent() {
             <React.Suspense fallback={<ViewFallback />}>
               {view === "report" && <ReportView />}
               {view === "settings" && <SettingsView />}
+              {view === "study" && <StudyView />}
               {view === "calculator" && <CalculatorView />}
               {view === "archive" && <ArchiveView />}
               {view === "leaderboard" && <LeaderboardView />}

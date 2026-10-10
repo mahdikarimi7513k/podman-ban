@@ -26,12 +26,15 @@ const here =
   typeof __dirname !== "undefined"
     ? __dirname
     : dirname(fileURLToPath(import.meta.url))
+
 const PRISMA_DIR = resolve(here, "..", "..", "prisma")
 
 function dbPath(): string {
   const url = process.env.DATABASE_URL ?? "file:./dev.db"
   const file = url.startsWith("file:") ? url.slice("file:".length) : url
+
   if (file === ":memory:") return file
+
   // Prisma resolves a relative sqlite path against prisma/ — keep that so the
   // same DATABASE_URL keeps pointing at the same file after the migration.
   return isAbsolute(file) ? file : resolve(PRISMA_DIR, file)
@@ -97,8 +100,11 @@ export const RUNTIME_DDL_OAUTH = [
 
 // SQLite has no ADD COLUMN IF NOT EXISTS: each ALTER throws "duplicate
 // column name" on every boot after the first, so they run through this
-// tolerant wrapper instead of the blind loop above. Any other error
-// (e.g. missing User table) still fails fast.
+// tolerant wrapper instead of the blind loop above. "no such table" is
+// tolerated for the same reason: minimal/old databases (and the old-schema
+// boot test) may lack an entire table the guard backfills — fresh databases
+// get their tables from drizzle-kit migrate instead. Any other error
+// (e.g. a corrupt file) still fails fast.
 export const RUNTIME_ALTERS = [
   "ALTER TABLE `User` ADD `email` text",
   "ALTER TABLE `User` ADD `googleSub` text",
@@ -166,7 +172,7 @@ export function ensureRuntimeTables(exec: (sql: string) => void): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
 
-      if (!/duplicate column name/i.test(msg)) {
+      if (!/duplicate column name|no such table/i.test(msg)) {
         throw err
       }
     }
@@ -207,7 +213,9 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     const { Database } = cjsRequire("bun:sqlite") as {
       Database: new (p: string) => { exec(sql: string): void }
     }
+
     type BunDrizzle = typeof import("drizzle-orm/bun-sqlite").drizzle
+
     // SAFETY: the drizzle-orm/bun-sqlite entry point is typed; the cast only
     // bridges the untyped require boundary.
     const { drizzle: drizzleBun } = cjsRequire("drizzle-orm/bun-sqlite") as { drizzle: BunDrizzle }
@@ -219,6 +227,7 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     // SAFETY: bun:sqlite's Database is exactly what drizzle-orm/bun-sqlite
     // wraps; the double assertion only bridges the untyped require boundary.
     const bunClient = client as unknown as Parameters<BunDrizzle>[0]
+
     // SAFETY: both sync drivers expose the same query-builder surface, and
     // every call site only uses that shared surface.
     return drizzleBun(bunClient, { schema, logger }) as unknown as BetterSQLite3Database<typeof schema>
@@ -226,13 +235,16 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     // SAFETY: better-sqlite3's typings are authoritative here; the cast only
     // bridges the untyped require boundary.
     const Better = cjsRequire("better-sqlite3") as typeof import("better-sqlite3")
+
     // SAFETY: same as above — the drizzle entry point is typed.
     const { drizzle: drizzleBetter } = cjsRequire("drizzle-orm/better-sqlite3") as {
       drizzle: typeof drizzleBetterFn
     }
+
     const client = new Better(path)
     client.exec("PRAGMA foreign_keys = ON")
     ensureRuntimeTables((stmt) => client.exec(stmt))
+
     return drizzleBetter(client, { schema, logger })
   }
 }
@@ -240,4 +252,5 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
 const db = openDatabase()
 
 export { db }
+
 export type AppDb = typeof db

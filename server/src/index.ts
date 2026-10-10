@@ -5,6 +5,22 @@ import express from "express"
 import "./lib/load-env.js"
 import { buildApp } from "./app.js"
 import { attachChatSocket } from "./lib/chat-socket.js"
+import { logError } from "./lib/logger.js"
+
+// Last-resort crash telemetry: a shared host gives no journald — without
+// this, a startup throw leaves zero trace of WHY the 503 happened.
+process.on("uncaughtException", (err) => {
+  logError("[uncaught-exception]", {
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack?.slice(0, 4000) : undefined,
+  })
+})
+
+process.on("unhandledRejection", (reason) => {
+  logError("[unhandled-rejection]", {
+    message: reason instanceof Error ? reason.message : String(reason),
+  })
+})
 
 // cPanel/Passenger assigns PORT; local dev falls back to 3001.
 // SECURITY: with TRUST_PROXY=true the X-Forwarded-For chain is trusted,
@@ -61,7 +77,9 @@ const here =
   typeof __dirname !== "undefined"
     ? __dirname
     : dirname(fileURLToPath(import.meta.url))
+
 const clientDist = resolve(here, "..", "..", "client", "dist")
+
 if (process.env.CLIENT_DIST === "1" || existsSync(clientDist)) {
   // dotfiles denied so .htaccess/.env can never leak via static; index:false
   // because the SPA fallback below serves index.html explicitly.
@@ -78,6 +96,7 @@ if (process.env.CLIENT_DIST === "1" || existsSync(clientDist)) {
   // SPA fallback — plain middleware (Express 5 has no "*" route syntax)
   app.use((req, res, next) => {
     if (req.method !== "GET") return next()
+
     if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next()
     spaShellHeaders(res)
     res.sendFile(resolve(clientDist, "index.html"))
@@ -87,6 +106,7 @@ if (process.env.CLIENT_DIST === "1" || existsSync(clientDist)) {
 const done = () => {
   console.log(`[podman-ban-api] listening on ${BIND_HOST ?? "0.0.0.0"}:${PORT}`)
 }
+
 const server = BIND_HOST ? app.listen(PORT, BIND_HOST, done) : app.listen(PORT, done)
 
 attachChatSocket(server, ALLOWED_ORIGINS)

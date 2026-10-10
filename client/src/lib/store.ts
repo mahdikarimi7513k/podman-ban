@@ -12,15 +12,34 @@ async function doBoot(
     apiFetch<{ state: RemoteConfigState }>("/api/config"),
     apiFetch<{ user: AppUser }>("/api/auth/me"),
   ])
+
   const next: Partial<AppState> = { booted: true }
+
   if (configRes.status === "fulfilled") next.config = configRes.value.state
+
   if (meRes.status === "fulfilled") {
     next.user = meRes.value.user
     next.view = "home"
+  } else if (meRes.status === "rejected" && meRes.reason instanceof ApiError && meRes.reason.status === 401) {
+    // Access token expired while refresh is still valid (backgrounded APK,
+    // 15-minute access lifetime): one explicit refresh + retry before
+    // dropping the user to the login screen. apiFetch already retries once
+    // per request, but racing boot calls can exhaust that single retry —
+    // this second chance is what keeps users signed in.
+    try {
+      await apiFetch("/api/auth/refresh", { method: "POST" })
+      const retry = await apiFetch<{ user: AppUser }>("/api/auth/me")
+      next.user = retry.user
+      next.view = "home"
+    } catch {
+      next.user = null
+      next.view = "auth"
+    }
   } else {
     next.user = null
     next.view = "auth"
   }
+
   set(next)
 }
 
@@ -35,6 +54,7 @@ export interface AppUser {
   field: "FANI_HERFEI" | "KARDANESH"
   role: "STUDENT" | "ADMIN" | "CONTENT_ADMIN"
   totalTests: number
+  avatarBase64?: string | null
   prefs?: string
   createdAt?: string
 }
@@ -49,6 +69,10 @@ export interface RemoteConfigState {
   negativeMarking: boolean
   // Nightly daily-goal reminder (23:00 Tehran) kill-switch.
   dailyGoalNotify: boolean
+  // Konkur countdown target (ISO string, admin-selectable). Null = hidden.
+  konkurDate?: string | null
+  // Daily study goal (minutes) for the study-room overview card.
+  studyDailyGoalMin?: number
   // Social-login capability (computed from server env, never stored).
   // Absent on old cached payloads → no social buttons (server enforces).
   oauth?: { google: boolean; github: boolean }
@@ -96,11 +120,13 @@ export const useApp = create<AppState>((set, get) => ({
   // shares one in-flight boot instead of issuing duplicate API calls.
   async boot() {
     if (get().booted) return
+
     if (!bootPromise) {
       bootPromise = doBoot(set).finally(() => {
         bootPromise = null
       })
     }
+
     await bootPromise
   },
 
@@ -129,6 +155,7 @@ export const useApp = create<AppState>((set, get) => ({
     } catch {
       /* ignore */
     }
+
     set({ user: null, view: "auth", examSessionId: null })
   },
 

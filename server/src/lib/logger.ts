@@ -5,20 +5,41 @@ import type { NextFunction, Request, Response } from "express"
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
+/** JSON-safe primitives only — the log file stays greppable line-by-line. */
+export type LogMetaValue = string | number | boolean | null | undefined
+
+export interface LogMeta {
+  [key: string]: LogMetaValue
+}
+
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
-const MIN_LEVEL: LogLevel = (process.env.LOG_LEVEL as LogLevel) || "info"
+
+/** Decode LOG_LEVEL at the boundary — unknown values fall back to info. */
+function parseLevel(raw: string | undefined): LogLevel {
+  if (raw === "debug" || raw === "info" || raw === "warn" || raw === "error") return raw
+
+  return "info"
+}
+
+const MIN_LEVEL: LogLevel = parseLevel(process.env.LOG_LEVEL)
 
 function hereDir(): string {
   try {
-    if (typeof __dirname !== "undefined") return __dirname as string
+    if (typeof __dirname !== "undefined") {
+      // SAFETY: __dirname is a Node ambient string where defined; the
+      // typeof guard proves existence, the assertion only names the type.
+      return __dirname as string
+    }
   } catch {
     /* ESM */
   }
+
   return dirname(fileURLToPath(import.meta.url))
 }
 
 function logDir(): string {
   if (process.env.LOG_DIR) return process.env.LOG_DIR
+
   // server/src/lib → repo root/logs (host-writable, gitignored via uploads-style rule)
   return resolve(hereDir(), "..", "..", "..", "logs")
 }
@@ -27,6 +48,7 @@ function dayKey(d: Date = new Date()): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
   const day = String(d.getDate()).padStart(2, "0")
+
   return `${y}-${m}-${day}`
 }
 
@@ -37,6 +59,7 @@ function ensureDir(dir: string): void {
 function writeLine(stream: "app" | "client" | "request", line: string): void {
   try {
     const dir = logDir()
+
     ensureDir(dir)
     appendFileSync(resolve(dir, `${stream}-${dayKey()}.log`), `${line}\n`, { encoding: "utf8" })
   } catch {
@@ -44,50 +67,61 @@ function writeLine(stream: "app" | "client" | "request", line: string): void {
   }
 }
 
-function base(level: LogLevel, message: string, meta?: Record<string, unknown>): string {
+function base(level: LogLevel, message: string, meta?: LogMeta): string {
   const entry = {
     ts: new Date().toISOString(),
     level,
     msg: message,
     ...meta,
   }
+
   return JSON.stringify(entry)
 }
 
-export function log(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
+export function log(level: LogLevel, message: string, meta?: LogMeta): void {
   if (LEVEL_ORDER[level] < LEVEL_ORDER[MIN_LEVEL]) return
+
   const line = base(level, message, meta)
+
   if (level === "error" || level === "warn") console.error(line)
   else console.log(line)
+
   writeLine("app", line)
 }
 
-export function logInfo(message: string, meta?: Record<string, unknown>): void {
+export function logInfo(message: string, meta?: LogMeta): void {
   log("info", message, meta)
 }
 
-export function logWarn(message: string, meta?: Record<string, unknown>): void {
+export function logWarn(message: string, meta?: LogMeta): void {
   log("warn", message, meta)
 }
 
-export function logError(message: string, meta?: Record<string, unknown>): void {
+export function logError(message: string, meta?: LogMeta): void {
   log("error", message, meta)
 }
 
-export function logClient(source: string, level: LogLevel, message: string, meta?: Record<string, unknown>): void {
+export function logClient(source: string, level: LogLevel, message: string, meta?: LogMeta): void {
   const line = base(level, `[client:${source}] ${message}`, meta)
+
   console.error(line)
   writeLine("client", line)
 }
+
+/** Request ids without touching the Express object shape (no assertions). */
+const requestIds = new WeakMap<object, string>()
 
 /** Request id + access log (method, path, status, duration, ip, user). */
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now()
   const reqId = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-  ;(req as Request & { reqId?: string }).reqId = reqId
+
+  requestIds.set(req, reqId)
+
   res.on("finish", () => {
     const ms = Date.now() - start
-    // SAFETY: never log cookies/headers bodies — only shape + status.
+
+    // Never log cookies/headers bodies — only shape + status.
     const line = base("info", "request", {
       reqId,
       method: req.method,
@@ -95,12 +129,15 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       status: res.statusCode,
       ms,
     })
+
     if (process.env.LOG_REQUESTS !== "false") console.log(line)
+
     writeLine("request", line)
   })
+
   next()
 }
 
 export function getReqId(req: Request): string | undefined {
-  return (req as Request & { reqId?: string }).reqId
+  return requestIds.get(req)
 }

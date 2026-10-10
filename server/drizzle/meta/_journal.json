@@ -43,6 +43,13 @@
       "when": 1790152037027,
       "tag": "0005_add-exam-pausedat",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791648028898,
+      "tag": "0006_add-study-rooms-avatar",
+      "breakpoints": true
     }
   ]
 }

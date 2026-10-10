@@ -3,6 +3,7 @@ import * as React from "react"
 import { useApp } from "@/lib/store"
 import { showBroadcastOnce, startBroadcastWatcher } from "@/lib/notify-inbox"
 import { startDailyGoalReminder } from "@/lib/daily-goal-reminder"
+import { installErrorReporting } from "@/lib/error-report"
 
 export function AppBootstrap({ children }: { children: React.ReactNode }) {
   const boot = useApp((s) => s.boot)
@@ -10,6 +11,8 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     boot()
+    // Client crash telemetry → /api/client-logs (throttled, best-effort).
+    installErrorReporting()
     // Latest admin broadcast (web: toast). Exactly-once, failure-silent.
     void showBroadcastOnce()
     // Broadcast watcher + nightly goal reminder (23:00 Tehran).

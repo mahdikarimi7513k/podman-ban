@@ -32,6 +32,7 @@ import { db } from "../lib/db.js"
 import { notifications, users } from "../lib/db/schema.js"
 import { registerSchema, loginSchema, parseBody } from "../lib/validations.js"
 import { getAppState } from "../lib/remote-config.js"
+import { logInfo } from "../lib/logger.js"
 
 export const authRouter = Router()
 
@@ -52,24 +53,29 @@ authRouter.post("/auth/register", async (req, res) => {
   }
 
   const data = parseBody(registerSchema, req.body, res)
+
   if (!data) return
 
   // Admin-controlled sign-up gate (server-side; the client hiding the tab
   // is cosmetic). Admin-created users bypass this via /api/admin/users.
   const appState = await getAppState()
+
   if (!appState.registrationOpen) {
     res.status(403).json({
       error: "ثبت‌نام فعلاً توسط مدیر بسته شده است",
       code: "REGISTRATION_CLOSED",
     })
+
     return
   }
 
   const { name, username, password, email, field } = data
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).get()
+
   if (existing) {
     res.status(409).json({ error: "این نام کاربری قبلاً ثبت شده است" })
+
     return
   }
 
@@ -82,11 +88,19 @@ authRouter.post("/auth/register", async (req, res) => {
   }
 
   const passwordHash = await hashPassword(password)
+
   const user = await db
     .insert(users)
     .values({ name, username, passwordHash, email, field, role: "STUDENT" })
     .returning()
     .get()
+
+  // Host audit trail: who signed up, from where. No password/secret here.
+  logInfo("[auth] user registered", {
+    username,
+    field,
+    ip: clientIp(req),
+  })
 
   await issueSession(
     {
@@ -127,6 +141,7 @@ authRouter.post("/auth/login", async (req, res) => {
 
   // Parse first (cheap zod, no DB) so the per-account+IP bucket can key on it.
   const parsedBody = parseBody(loginSchema, req.body, res)
+
   if (!parsedBody) return
 
   // Three-tier limit (per-XFF buckets plus socket-IP floors):
@@ -158,8 +173,10 @@ authRouter.post("/auth/login", async (req, res) => {
   const { username, password } = parsedBody
   const user = await db.select().from(users).where(eq(users.username, username)).get()
   const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH)
+
   if (!user || !ok) {
     res.status(401).json({ error: "نام کاربری یا رمز عبور نادرست است" })
+
     return
   }
 
@@ -192,14 +209,19 @@ authRouter.post("/auth/login", async (req, res) => {
 
 authRouter.post("/auth/logout", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
     return
   }
+
   await logout(req, res)
   res.json({ ok: true })
 })
@@ -230,10 +252,13 @@ authRouter.post("/auth/refresh", async (req, res) => {
   }
 
   const user = await rotateRefreshToken(req, res)
+
   if (!user) {
     res.status(401).json({ error: "نشست نامعتبر است — دوباره وارد شوید" })
+
     return
   }
+
   res.json({
     user: { id: user.id, name: user.name, role: user.role, field: user.field },
   })
@@ -243,10 +268,13 @@ authRouter.post("/auth/refresh", async (req, res) => {
 
 authRouter.get("/auth/me", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   const dbUser = await db
     .select({
       id: users.id,
@@ -263,10 +291,13 @@ authRouter.get("/auth/me", async (req, res) => {
     .from(users)
     .where(eq(users.id, user.id))
     .get()
+
   if (!dbUser) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   res.json({
     user: dbUser,
     csrf: issueCsrfToken(user.id),
@@ -277,10 +308,13 @@ authRouter.get("/auth/me", async (req, res) => {
 
 authRouter.get("/csrf", async (req, res) => {
   const user = await getSession(req)
+
   if (!user) {
     res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
     return
   }
+
   res.json({ csrf: issueCsrfToken(user.id) })
 })
 
