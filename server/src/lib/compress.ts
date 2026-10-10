@@ -31,6 +31,10 @@ export function gzipJson(req: Request, res: Response, next: NextFunction): void 
 
   const origJson = res.json.bind(res)
 
+  // Caches (proxy/CDN) must key on encoding: the same URL serves plain or
+  // gzipped bytes depending on Accept-Encoding.
+  res.setHeader("Vary", "Accept-Encoding")
+
   res.json = (body: JsonValue | undefined): Response => {
     let raw: string
 

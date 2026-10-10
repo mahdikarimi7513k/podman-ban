@@ -64,6 +64,9 @@ describe("support ordering", () => {
     const list = await admin.get("/api/support/messages")
 
     expect(list.status).toBe(200)
+
+    // SAFETY: endpoint contract returns { messages: [...] }; a shape change
+    // fails the assertion below instead of passing silently.
     expect((list.body.messages as Array<{ text: string }>).some((m) => m.text === "یادداشت مدیر")).toBe(true)
   })
 
