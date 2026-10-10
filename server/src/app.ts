@@ -14,8 +14,10 @@ import { archiveRouter } from "./routes/archive.routes.js"
 import { adminRouter } from "./routes/admin.routes.js"
 import { externalRouter } from "./routes/external.routes.js"
 import { oauthRouter } from "./routes/oauth.routes.js"
+import { studyRouter } from "./routes/study.routes.js"
 import { getSession } from "./lib/auth/index.js"
 import { getAppState } from "./lib/remote-config.js"
+import { getReqId, logError, requestLogger } from "./lib/logger.js"
 
 /**
  * Origins allowed to call the API with credentials (comma-separated env).
@@ -52,6 +54,7 @@ export function buildApp(): express.Express {
 
   // --- middleware ---
   app.use(cookieParser())
+  app.use(requestLogger)
 
   app.use(
     cors({
@@ -142,6 +145,7 @@ export function buildApp(): express.Express {
   app.use("/api/support", supportRouter) // /api/support/*
   app.use("/api/archive", archiveRouter) // /api/archive
   app.use("/api/admin", adminRouter) // /api/admin/*
+  app.use("/api", studyRouter)      // /api/study/*, /api/client-logs
   app.use("/api", externalRouter) // /api/external/verify (API-key auth)
   app.use("/api", oauthRouter) // /api/auth/oauth/* (social login)
 

@@ -1,0 +1,22 @@
+# Graphify exclusions: generated previews, agent workspaces, installed skills,
+# figma tooling scripts, and deploy bundles are not project architecture.
+.figma-preview/
+.figma-export/
+.figma-r3/
+.figma-collector3.mjs
+.figma-db.cjs
+.figma-inspect.cjs
+.figma-pull.cjs
+.figma-serve.mjs
+.figma-svgcheck.cjs
+.opencode/
+.agents/
+.agent/
+.claude/
+.codex/
+.grok/
+deploy-bundle-no-db/
+deploy/
+*.zip
+logs/
+graphify-out/

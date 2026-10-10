@@ -26,7 +26,7 @@ import {
   verifyPassword,
   logout,
 } from "../lib/auth/index.js"
-import { prefsSchema, parseBody } from "../lib/validations.js"
+import { prefsSchema, parseBody, profileUpdateSchema } from "../lib/validations.js"
 
 export const userRouter = Router()
 
@@ -86,6 +86,41 @@ function tehranDayStartMs(nowMs: number): number {
 
   return Date.UTC(y, m - 1, d, 0, 0, 0) - off
 }
+
+// ---- PUT /profile (CSRF) --------------------------------------------
+// Self-service display name + avatar. Avatar is a small data URL so shared
+// hosts need no object storage; initials fallback when null.
+userRouter.put("/profile", async (req, res) => {
+  const user = await getSession(req)
+  if (!user) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+    return
+  }
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+    return
+  }
+  const data = parseBody(profileUpdateSchema, req.body, res)
+  if (!data) return
+  if (data.name === undefined && data.avatarBase64 === undefined) {
+    res.status(422).json({ error: "تغییری ارسال نشده است" })
+    return
+  }
+  const patch: { name?: string; avatarBase64?: string | null } = {}
+  if (data.name !== undefined) patch.name = data.name.trim()
+  if (data.avatarBase64 !== undefined) patch.avatarBase64 = data.avatarBase64 ?? null
+  const updated = await db
+    .update(users)
+    .set(patch)
+    .where(eq(users.id, user.id))
+    .returning({ id: users.id, name: users.name, avatarBase64: users.avatarBase64 })
+    .get()
+  if (!updated) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+    return
+  }
+  res.json({ user: updated })
+})
 
 // ---- PUT /prefs (CSRF) ----------------------------------------------
 

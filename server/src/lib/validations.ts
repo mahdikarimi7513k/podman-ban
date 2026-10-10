@@ -97,6 +97,21 @@ export const prefsSchema = z.object({
   dailyGoal: z.number().int().min(5).max(200).optional(),
 })
 
+// Self-service profile: display name + small avatar data URL.
+// Avatar capped at ~700KB wire (≈500KB binary) — initials fallback when null.
+export const profileUpdateSchema = z.object({
+  name: nameSchema.optional(),
+  avatarBase64: z
+    .string()
+    .max(700_000, "تصویر پروفایل خیلی بزرگ است (حداکثر ۵۰۰ کیلوبایت)")
+    .refine(
+      (v) => !v || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v),
+      "تصویر باید یک data URL معتبر (png، jpg، webp یا gif) باشد",
+    )
+    .optional()
+    .nullable(),
+})
+
 // ---- Admin content management ----
 export const bookCreateSchema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -179,6 +194,15 @@ export const remoteConfigUpdateSchema = z.object({
   registrationOpen: z.boolean().optional(),
   registrationMessage: z.string().max(500).optional(),
   dailyGoalNotify: z.boolean().optional(),
+  // Konkur countdown target (ISO date). Null/empty clears it.
+  konkurDate: z
+    .string()
+    .trim()
+    .max(32)
+    .refine((v) => v === "" || !Number.isNaN(Date.parse(v)), "تاریخ کنکور معتبر نیست")
+    .optional()
+    .nullable(),
+  studyDailyGoalMin: z.number().int().min(30).max(960).optional(),
 })
 
 export const chatSendSchema = z.object({
@@ -191,4 +215,26 @@ export const chatSendSchema = z.object({
 export const notificationCreateSchema = z.object({
   title: z.string().trim().min(1, "عنوان را وارد کنید").max(120, "عنوان حداکثر ۱۲۰ نویسه باشد"),
   body: z.string().trim().min(1, "متن پیام را وارد کنید").max(500, "متن پیام حداکثر ۵۰۰ نویسه باشد"),
+})
+
+// ---- Study rooms ----
+export const studyRoomCreateSchema = z.object({
+  name: z.string().trim().min(2, "نام اتاق حداقل ۲ نویسه باشد").max(60, "نام اتاق حداکثر ۶۰ نویسه باشد"),
+  type: z.enum(["COMPETITIVE", "FRIENDLY"]).default("COMPETITIVE"),
+  capacity: z.number().int().min(2, "ظرفیت حداقل ۲ نفر است").max(20, "هر اتاق حداکثر ۲۰ نفر ظرفیت دارد").default(20),
+  requireInvite: z.boolean().default(true),
+})
+
+export const studyJoinSchema = z.object({
+  roomId: z.string().min(1).optional(),
+  inviteCode: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "کد دعوت باید ۶ رقم باشد")
+    .optional(),
+}).refine((v) => v.roomId || v.inviteCode, { message: "roomId یا inviteCode لازم است" })
+
+export const studySessionStartSchema = z.object({
+  roomId: z.string().min(1),
+  subject: z.string().trim().max(80).optional().nullable(),
 })

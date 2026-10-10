@@ -103,7 +103,53 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `User` ADD `email` text",
   "ALTER TABLE `User` ADD `googleSub` text",
   "ALTER TABLE `User` ADD `githubId` text",
+  "ALTER TABLE `User` ADD `avatarBase64` text",
   "ALTER TABLE `ExamSession` ADD `pausedAt` integer",
+  "ALTER TABLE `RemoteConfig` ADD `konkurDate` text",
+  "ALTER TABLE `RemoteConfig` ADD `studyDailyGoalMin` integer DEFAULT 180 NOT NULL",
+]
+
+// Study rooms (host-safe: shared hosts can't run drizzle-kit migrate).
+export const RUNTIME_DDL_STUDY = [
+  `CREATE TABLE IF NOT EXISTS \`StudyRoom\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`name\` text NOT NULL,
+	\`type\` text DEFAULT 'COMPETITIVE' NOT NULL,
+	\`capacity\` integer DEFAULT 20 NOT NULL,
+	\`inviteCode\` text NOT NULL,
+	\`requireInvite\` integer DEFAULT true NOT NULL,
+	\`ownerId\` text,
+	\`createdAt\` integer NOT NULL,
+	FOREIGN KEY (\`ownerId\`) REFERENCES \`User\`(\`id\`) ON UPDATE no action ON DELETE set null
+)`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS `StudyRoom_inviteCode_unique` ON `StudyRoom` (`inviteCode`)",
+  "CREATE INDEX IF NOT EXISTS `StudyRoom_createdAt_idx` ON `StudyRoom` (`createdAt`)",
+  `CREATE TABLE IF NOT EXISTS \`StudyMember\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`roomId\` text NOT NULL,
+	\`userId\` text NOT NULL,
+	\`joinedAt\` integer NOT NULL,
+	FOREIGN KEY (\`roomId\`) REFERENCES \`StudyRoom\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`userId\`) REFERENCES \`User\`(\`id\`) ON UPDATE no action ON DELETE cascade
+)`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS `StudyMember_roomId_userId_key` ON `StudyMember` (`roomId`,`userId`)",
+  "CREATE INDEX IF NOT EXISTS `StudyMember_roomId_idx` ON `StudyMember` (`roomId`)",
+  "CREATE INDEX IF NOT EXISTS `StudyMember_userId_idx` ON `StudyMember` (`userId`)",
+  `CREATE TABLE IF NOT EXISTS \`StudySession\` (
+	\`id\` text PRIMARY KEY NOT NULL,
+	\`roomId\` text NOT NULL,
+	\`userId\` text NOT NULL,
+	\`status\` text DEFAULT 'ACTIVE' NOT NULL,
+	\`startedAt\` integer NOT NULL,
+	\`accumulatedMs\` integer DEFAULT 0 NOT NULL,
+	\`pausedAt\` integer,
+	\`endedAt\` integer,
+	\`subject\` text,
+	FOREIGN KEY (\`roomId\`) REFERENCES \`StudyRoom\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`userId\`) REFERENCES \`User\`(\`id\`) ON UPDATE no action ON DELETE cascade
+)`,
+  "CREATE INDEX IF NOT EXISTS `StudySession_roomId_status_idx` ON `StudySession` (`roomId`,`status`)",
+  "CREATE INDEX IF NOT EXISTS `StudySession_userId_startedAt_idx` ON `StudySession` (`userId`,`startedAt`)",
 ]
 
 // Exported for the old-schema boot test (idempotent re-runs).
@@ -127,6 +173,8 @@ export function ensureRuntimeTables(exec: (sql: string) => void): void {
   }
 
   for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
+
+  for (const stmt of RUNTIME_DDL_STUDY) exec(stmt)
 }
 
 function openDatabase(): BetterSQLite3Database<typeof schema> {

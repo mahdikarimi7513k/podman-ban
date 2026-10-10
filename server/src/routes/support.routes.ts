@@ -10,7 +10,7 @@
 
 import { Router } from "express"
 import { z } from "zod"
-import { and, asc, count, desc, eq, isNull } from "drizzle-orm"
+import { and, count, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../lib/db.js"
 import { chatMessages, users } from "../lib/db/schema.js"
 import {
@@ -49,7 +49,10 @@ supportRouter.get("/messages", async (req, res) => {
     res.status(403).json({ error: "userId لازم است" })
     return
   }
-  const messages = await db
+  // Newest-first fetch + reverse: LIMIT 200 with ASC drops the newest rows
+  // once a thread grows past 200. DESC keeps the latest 200, reverse restores
+  // chronological display without losing recent messages.
+  const rows = await db
     .select({
       id: chatMessages.id,
       userId: chatMessages.userId,
@@ -60,9 +63,10 @@ supportRouter.get("/messages", async (req, res) => {
     })
     .from(chatMessages)
     .where(eq(chatMessages.userId, targetUserId))
-    .orderBy(asc(chatMessages.createdAt))
+    .orderBy(desc(chatMessages.createdAt))
     .limit(200)
     .all()
+  const messages = rows.reverse()
   res.json({ messages, userId: targetUserId })
 })
 
@@ -155,7 +159,7 @@ supportRouter.get("/conversations", async (req, res) => {
   const userRows = await db.query.users.findMany({
     where: eq(users.role, "STUDENT"),
     orderBy: desc(users.createdAt),
-    columns: { id: true, username: true, name: true, field: true },
+    columns: { id: true, username: true, name: true, field: true, createdAt: true },
     with: {
       chatMessages: {
         orderBy: desc(chatMessages.createdAt),
@@ -172,16 +176,24 @@ supportRouter.get("/conversations", async (req, res) => {
     .groupBy(chatMessages.userId)
     .all()
   const unreadMap = new Map(unreadCounts.map((u) => [u.userId, u.n]))
-  res.json({
-    conversations: userRows.map((u) => ({
+  // New activity first: a fresh message bumps the conversation to the top so
+  // admins never scroll to find it. Nulls (no messages yet) sort last, then
+  // account recency as a stable tiebreak.
+  const conversations = userRows
+    .map((u) => ({
       id: u.id,
       username: u.username,
       name: u.name,
       field: u.field,
       unread: unreadMap.get(u.id) ?? 0,
       lastMessage: u.chatMessages[0] ?? null,
-    })),
-  })
+    }))
+    .sort((a, b) => {
+      const at = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : -1
+      const bt = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : -1
+      return bt - at
+    })
+  res.json({ conversations })
 })
 
 // ---- POST /read (admin-only, CSRF, ?userId=...) ----------------------

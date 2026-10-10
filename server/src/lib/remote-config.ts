@@ -18,6 +18,10 @@ export interface AppState {
   registrationMessage: string
   // Nightly daily-goal reminder (23:00 Tehran) — admin kill-switch.
   dailyGoalNotify: boolean
+  // Konkur countdown target (ISO string, admin-selectable). Null = hidden.
+  konkurDate: string | null
+  // Daily study goal (minutes) for the study-room overview card.
+  studyDailyGoalMin: number
   // external verify API — hash never leaves the server; clients only see
   // whether it is enabled + a short prefix to identify the active key.
   externalApiEnabled: boolean
@@ -49,6 +53,16 @@ async function ensureColumnsOnce(): Promise<void> {
   } catch {
     // Already migrated (or otherwise unfixable here) — the read below decides.
   }
+  try {
+    await db.run(sql.raw("ALTER TABLE `RemoteConfig` ADD `konkurDate` text"))
+  } catch {
+    /* already migrated */
+  }
+  try {
+    await db.run(sql.raw("ALTER TABLE `RemoteConfig` ADD `studyDailyGoalMin` integer DEFAULT 180 NOT NULL"))
+  } catch {
+    /* already migrated */
+  }
 }
 
 export async function getAppState(): Promise<AppState> {
@@ -69,6 +83,8 @@ export async function getAppState(): Promise<AppState> {
     registrationOpen: row.registrationOpen,
     registrationMessage: row.registrationMessage,
     dailyGoalNotify: row.dailyGoalNotify,
+    konkurDate: (row as { konkurDate?: string | null }).konkurDate ?? null,
+    studyDailyGoalMin: (row as { studyDailyGoalMin?: number }).studyDailyGoalMin ?? 180,
     externalApiEnabled: !!row.externalApiKeyHash,
     externalApiKeyPrefix: row.externalApiKeyPrefix ?? "",
   }
@@ -88,6 +104,8 @@ const PATCHABLE = [
   "registrationOpen",
   "registrationMessage",
   "dailyGoalNotify",
+  "konkurDate",
+  "studyDailyGoalMin",
   "externalApiKeyHash",
   "externalApiKeyPrefix",
 ] as const

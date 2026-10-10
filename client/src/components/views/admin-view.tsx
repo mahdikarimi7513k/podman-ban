@@ -1461,7 +1461,14 @@ function AdminSupport() {
       const res = await apiFetch<{ conversations: NonNullable<typeof conversations> }>(
         "/api/support/conversations",
       )
-      setConversations(res.conversations)
+      // SAFETY: server already sorts by activity; re-sort client-side so
+      // optimistic socket bumps and polls share one order.
+      const rows = [...res.conversations].sort((a, b) => {
+        const at = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : -1
+        const bt = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : -1
+        return bt - at
+      })
+      setConversations(rows)
     } catch {
       setConversations([])
     } finally {
@@ -1474,6 +1481,56 @@ function AdminSupport() {
     // poll for unread updates every 15s (silent — no spinner, no scroll jump)
     const id = setInterval(() => load(true), 15000)
     return () => clearInterval(id)
+  }, [load])
+
+  // Live bump: a new chat:message moves its conversation to the top instantly
+  // (no scroll hunt, no 15s wait). Polling remains as the fallback.
+  React.useEffect(() => {
+    let cancelled = false
+    let disconnect: (() => void) | undefined
+    void (async () => {
+      try {
+        const { io } = await import("socket.io-client")
+        const { API_BASE } = await import("@/lib/api-client")
+        const socket = io(API_BASE || undefined, {
+          transports: API_BASE ? ["polling", "websocket"] : ["websocket", "polling"],
+          withCredentials: true,
+          reconnection: true,
+        })
+        if (cancelled) {
+          socket.disconnect()
+          return
+        }
+        disconnect = () => socket.disconnect()
+        socket.on("chat:message", (msg: { userId: string; text: string; sender: string; createdAt: string; id: string }) => {
+          setConversations((prev) => {
+            if (!prev) return prev
+            const idx = prev.findIndex((c) => c.id === msg.userId)
+            if (idx === -1) {
+              // Unknown conversation (new student) — refresh quietly.
+              void load(true)
+              return prev
+            }
+            const current = prev[idx]
+            const updated = {
+              ...current,
+              lastMessage: { id: msg.id, text: msg.text, sender: msg.sender, createdAt: msg.createdAt },
+              // Own admin replies don't raise unread; student messages do —
+              // unless the thread is open (ChatPanel marks read on view).
+              unread: msg.sender === "STUDENT" ? current.unread + 1 : current.unread,
+            }
+            const next = [updated, ...prev.filter((c) => c.id !== msg.userId)]
+            return next
+          })
+        })
+      } catch {
+        /* socket is progressive enhancement — polling covers it */
+      }
+    })()
+    return () => {
+      cancelled = true
+      disconnect?.()
+    }
   }, [load])
 
   if (loading) {

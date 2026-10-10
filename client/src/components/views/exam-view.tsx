@@ -1186,7 +1186,8 @@ function ExamReview({
                       <img
                         src={question.imageBase64}
                         alt="تصویر سوال"
-                        className="max-w-full max-h-[35vh] w-auto h-auto rounded-lg border border-border object-contain"
+                        loading="lazy"
+                        className="max-w-full max-h-[40vh] w-auto h-auto rounded-lg border border-border object-contain"
                       />
                     </div>
                   ) : null}

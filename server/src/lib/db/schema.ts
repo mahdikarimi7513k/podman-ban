@@ -49,6 +49,9 @@ export const users = sqliteTable("User", {
   // provider identity can never attach to two accounts.
   googleSub: text("googleSub").unique(),
   githubId: text("githubId").unique(),
+  // Profile avatar as a small data URL (png/jpg/webp/gif, ≤500KB).
+  // Nullable — initials fallback when empty. Shown in settings + study rooms.
+  avatarBase64: text("avatarBase64"),
   field: text("field").notNull().$type<StudyField>(),
   role: text("role").notNull().default("STUDENT").$type<UserRole>(),
   prefs: text("prefs").notNull().default("{}"),
@@ -181,6 +184,10 @@ export const remoteConfig = sqliteTable("RemoteConfig", {
   registrationOpen: integer("registrationOpen", { mode: "boolean" }).notNull().default(true),
   registrationMessage: text("registrationMessage").notNull().default(""),
   dailyGoalNotify: integer("dailyGoalNotify", { mode: "boolean" }).notNull().default(true),
+  // Konkur countdown target (ISO date string, admin-selectable). Null = hidden.
+  konkurDate: text("konkurDate"),
+  // Daily study goal in minutes for the study-room overview card.
+  studyDailyGoalMin: integer("studyDailyGoalMin").notNull().default(180),
   externalApiKeyHash: text("externalApiKeyHash"),
   externalApiKeyPrefix: text("externalApiKeyPrefix").notNull().default(""),
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
@@ -188,6 +195,66 @@ export const remoteConfig = sqliteTable("RemoteConfig", {
     .$defaultFn(() => new Date())
     .$onUpdateFn(() => new Date()),
 })
+
+export const StudyRoomType = { COMPETITIVE: "COMPETITIVE", FRIENDLY: "FRIENDLY" } as const
+export type StudyRoomType = (typeof StudyRoomType)[keyof typeof StudyRoomType]
+
+export const StudySessionStatus = { ACTIVE: "ACTIVE", PAUSED: "PAUSED", ENDED: "ENDED" } as const
+export type StudySessionStatus = (typeof StudySessionStatus)[keyof typeof StudySessionStatus]
+
+// Study rooms (اتاق مطالعه): small group focus rooms, max 20 members.
+export const studyRooms = sqliteTable("StudyRoom", {
+  id: id("id"),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("COMPETITIVE").$type<StudyRoomType>(),
+  capacity: integer("capacity").notNull().default(20),
+  // 6-digit invite code, unique. Required when requireInvite is true.
+  inviteCode: text("inviteCode").notNull().unique(),
+  requireInvite: integer("requireInvite", { mode: "boolean" }).notNull().default(true),
+  ownerId: text("ownerId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt("createdAt"),
+}, (t) => [index("StudyRoom_createdAt_idx").on(t.createdAt)])
+
+export const studyMembers = sqliteTable("StudyMember", {
+  id: id("id"),
+  roomId: text("roomId")
+    .notNull()
+    .references(() => studyRooms.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: integer("joinedAt", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (t) => [
+  unique("StudyMember_roomId_userId_key").on(t.roomId, t.userId),
+  index("StudyMember_roomId_idx").on(t.roomId),
+  index("StudyMember_userId_idx").on(t.userId),
+])
+
+// Server-authoritative focus sessions: wall-clock survives background/kill.
+export const studySessions = sqliteTable("StudySession", {
+  id: id("id"),
+  roomId: text("roomId")
+    .notNull()
+    .references(() => studyRooms.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("ACTIVE").$type<StudySessionStatus>(),
+  startedAt: integer("startedAt", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  // Accumulated active ms before the current active stretch (pause/resume).
+  accumulatedMs: integer("accumulatedMs").notNull().default(0),
+  // Set while PAUSED: wall clock stops here, resume shifts forward.
+  pausedAt: integer("pausedAt", { mode: "timestamp_ms" }),
+  endedAt: integer("endedAt", { mode: "timestamp_ms" }),
+  subject: text("subject"),
+}, (t) => [
+  index("StudySession_roomId_status_idx").on(t.roomId, t.status),
+  index("StudySession_userId_startedAt_idx").on(t.userId, t.startedAt),
+])
 
 export const chatMessages = sqliteTable("ChatMessage", {
   id: id("id"),
@@ -243,6 +310,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   examSessions: many(examSessions),
   chatMessages: many(chatMessages),
   notifications: many(notifications),
+  studyMembers: many(studyMembers),
+  studySessions: many(studySessions),
 }))
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -306,4 +375,20 @@ export const archiveFilesRelations = relations(archiveFiles, ({ one }) => ({
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   author: one(users, { fields: [notifications.createdBy], references: [users.id] }),
+}))
+
+export const studyRoomsRelations = relations(studyRooms, ({ one, many }) => ({
+  owner: one(users, { fields: [studyRooms.ownerId], references: [users.id] }),
+  members: many(studyMembers),
+  sessions: many(studySessions),
+}))
+
+export const studyMembersRelations = relations(studyMembers, ({ one }) => ({
+  room: one(studyRooms, { fields: [studyMembers.roomId], references: [studyRooms.id] }),
+  user: one(users, { fields: [studyMembers.userId], references: [users.id] }),
+}))
+
+export const studySessionsRelations = relations(studySessions, ({ one }) => ({
+  room: one(studyRooms, { fields: [studySessions.roomId], references: [studyRooms.id] }),
+  user: one(users, { fields: [studySessions.userId], references: [users.id] }),
 }))

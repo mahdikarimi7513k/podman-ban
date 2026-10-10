@@ -107,6 +107,7 @@ authRouter.post("/auth/register", async (req, res) => {
       email: user.email,
       field: user.field,
       role: user.role,
+      avatarBase64: null,
     },
   })
 })
@@ -182,6 +183,7 @@ authRouter.post("/auth/login", async (req, res) => {
       field: user.field,
       role: user.role,
       totalTests: user.totalTests,
+      avatarBase64: user.avatarBase64 ?? null,
     },
   })
 })
@@ -255,6 +257,7 @@ authRouter.get("/auth/me", async (req, res) => {
       role: users.role,
       totalTests: users.totalTests,
       prefs: users.prefs,
+      avatarBase64: users.avatarBase64,
       createdAt: users.createdAt,
     })
     .from(users)
