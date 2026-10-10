@@ -54,6 +54,19 @@ describe("user profile", () => {
 })
 
 describe("support ordering", () => {
+  it("serves an admin's own thread without userId", async () => {
+    await ensureUser("conv_adminself", "ADMIN", "FANI_HERFEI")
+    const admin = await login("conv_adminself", PASSWORD)
+    const sent = await admin.post("/api/support/messages", { text: "یادداشت مدیر" })
+
+    expect(sent.status).toBe(201)
+
+    const list = await admin.get("/api/support/messages")
+
+    expect(list.status).toBe(200)
+    expect((list.body.messages as Array<{ text: string }>).some((m) => m.text === "یادداشت مدیر")).toBe(true)
+  })
+
   it("bumps the newest conversation to the top", async () => {
     await ensureUser("conv_admin", "ADMIN", "FANI_HERFEI")
     await ensureUser("conv_first", "STUDENT", "FANI_HERFEI")

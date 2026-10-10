@@ -18,6 +18,7 @@ import { ensureFixtures, PASSWORD } from "./fixtures.js"
 beforeAll(ensureFixtures)
 
 let base = ""
+
 let closeServer: () => Promise<void> = async () => {}
 
 beforeAll(async () => {
@@ -37,7 +38,9 @@ afterAll(() => closeServer())
 
 function cookieOf(cookies: string, name: string): string {
   const hit = cookies.split("; ").find((c) => c.startsWith(`${name}=`))
+
   if (!hit) throw new Error(`missing cookie ${name}`)
+
   return hit.slice(name.length + 1)
 }
 
@@ -47,6 +50,7 @@ function connectSocket(accessToken: string): Promise<Socket> {
       transports: ["websocket"],
       extraHeaders: { cookie: `pb_access=${accessToken}` },
     })
+
     s.on("connect", () => resolve(s))
     s.on("connect_error", reject)
   })
@@ -69,6 +73,7 @@ describe("chat socket fan-out", () => {
     const admin = await login("sec_admin", PASSWORD)
 
     const adminSock = await connectSocket(cookieOf(admin.cookies, "pb_access"))
+
     try {
       const me = await stu.get("/api/auth/me")
       const studentId = me.body.user.id as string
@@ -138,20 +143,24 @@ describe("chat socket origin gate", () => {
       transports: ["websocket"],
       extraHeaders: { cookie: `pb_access=${accessToken}`, origin },
     })
+
     const connected = new Promise<Socket>((resolve, reject) => {
       socket.on("connect", () => resolve(socket))
       socket.on("connect_error", reject)
     })
+
     return { socket, connected }
   }
 
   it("denies a handshake carrying a forged cross-site Origin", async () => {
     await ensureUser("chatcswsh", "STUDENT", "FANI_HERFEI")
     const stu = await login("chatcswsh", PASSWORD)
+
     const { socket, connected } = connectWithOrigin(
       cookieOf(stu.cookies, "pb_access"),
       "https://evil.example",
     )
+
     try {
       await expect(connected).rejects.toThrow()
     } finally {
@@ -162,10 +171,30 @@ describe("chat socket origin gate", () => {
   it("accepts a handshake from an allowlisted Origin", async () => {
     await ensureUser("chatcswsh2", "STUDENT", "FANI_HERFEI")
     const stu = await login("chatcswsh2", PASSWORD)
+
     const { socket, connected } = connectWithOrigin(
       cookieOf(stu.cookies, "pb_access"),
       "https://app.example",
     )
+
+    try {
+      await connected
+    } finally {
+      socket.disconnect()
+    }
+  })
+
+  it("accepts a same-origin handshake without allowlist config", async () => {
+    // Single-origin deploys (local :3001 bundle, any custom domain) send
+    // Origin == Host: first-party by construction, no env config needed.
+    await ensureUser("chatcswsh3", "STUDENT", "FANI_HERFEI")
+    const stu = await login("chatcswsh3", PASSWORD)
+
+    const { socket, connected } = connectWithOrigin(
+      cookieOf(stu.cookies, "pb_access"),
+      gatedBase,
+    )
+
     try {
       await connected
     } finally {

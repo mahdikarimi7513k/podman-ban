@@ -38,11 +38,29 @@ export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[
     // only decides response headers — it never rejects. Browsers always send
     // Origin on cross-site handshakes, so the allowlist is enforced here.
     // Origin-less clients (curl, native) still need the auth cookie below.
+    // Same-origin shells (single-origin deploy on ANY domain, including the
+    // :3001 local bundle) are first-party by construction — trusting them
+    // keeps the socket working without env config on every host.
     allowRequest: (req, fn) => {
       const origin = req.headers.origin
 
-      if (!origin || allowedOrigins.includes(origin)) fn(null, true)
-      else fn("origin not allowed", false)
+      if (!origin || allowedOrigins.includes(origin)) {
+        fn(null, true)
+
+        return
+      }
+
+      try {
+        if (new URL(origin).host === req.headers.host) {
+          fn(null, true)
+
+          return
+        }
+      } catch {
+        /* malformed origin — fall through to reject */
+      }
+
+      fn("origin not allowed", false)
     },
     cors: {
       origin(origin, cb) {

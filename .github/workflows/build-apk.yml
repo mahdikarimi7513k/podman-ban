@@ -228,6 +228,24 @@ jobs:
           echo "WEB_DIR=$W" >> $GITHUB_ENV
           echo "webDir = $W"
 
+      # Project-specific bundle gate: the study room, offline page, service
+      # worker and manifest power the headline features — a build that drops
+      # any of them (stale cache, renamed chunk) must fail here, not on a phone.
+      - name: Verify release bundle contents
+        working-directory: client
+        env:
+          WEB_DIR: ${{ env.WEB_DIR }}
+        run: |
+          set -e
+          D="${WEB_DIR:-dist}"
+          test -f "$D/index.html" || { echo "❌ $D/index.html missing"; exit 1; }
+          test -f "$D/offline.html" || { echo "❌ offline.html missing (offline fallback broken)"; exit 1; }
+          test -f "$D/sw.js" || { echo "❌ sw.js missing (offline cache broken)"; exit 1; }
+          test -f "$D/manifest.webmanifest" || { echo "❌ manifest missing (install prompt broken)"; exit 1; }
+          ls "$D"/assets/study-view-*.js >/dev/null || { echo "❌ study-view chunk missing (study rooms broken)"; exit 1; }
+          test -f "$D/icon.svg" || { echo "❌ icon.svg missing"; exit 1; }
+          echo "✅ bundle complete: shell + offline + sw + manifest + study rooms + icon"
+
       # Branded offline fallback (offline.html ships from client/public via
       # vite; regenerate here only if somehow missing). Capacitor shows it
       # through server.errorPath when the remote site is unreachable.

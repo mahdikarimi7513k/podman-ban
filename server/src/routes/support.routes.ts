@@ -43,18 +43,14 @@ supportRouter.get("/messages", async (req, res) => {
   }
 
   // For students: only their own conversation.
-  // For staff (ADMIN / CONTENT_ADMIN): ?userId=<id> required — any conversation.
+  // For staff (ADMIN / CONTENT_ADMIN): ?userId=<id> opens any conversation;
+  // omitting it means their OWN thread (the settings support panel sends
+  // none — previously every admin hit a 403 here).
   const isStaff = user.role === "ADMIN" || user.role === "CONTENT_ADMIN"
 
   const targetUserId = isStaff
-    ? (req.query.userId as string | undefined)
+    ? ((req.query.userId as string | undefined) ?? user.id)
     : user.id
-
-  if (!targetUserId) {
-    res.status(403).json({ error: "userId لازم است" })
-
-    return
-  }
 
   // Newest-first fetch + reverse: LIMIT 200 with ASC drops the newest rows
   // once a thread grows past 200. DESC keeps the latest 200, reverse restores
@@ -120,19 +116,13 @@ supportRouter.post("/messages", async (req, res) => {
   const { text, userId: bodyUserId } = data
 
   // For a student, the conversation is theirs (userId = self).
-  // For admin, they reply to an existing conversation — userId required (body
-  // takes priority over query string).
+  // For admin, userId in body (or query) selects the conversation —
+  // omitted means their own thread.
   const isStaff = user.role === "ADMIN" || user.role === "CONTENT_ADMIN"
   let targetUserId = user.id
 
   if (isStaff) {
-    const q = bodyUserId ?? (req.query.userId as string | undefined)
-
-    if (!q) {
-      res.status(400).json({ error: "برای پاسخ، userId لازم است" })
-
-      return
-    }
+    const q = bodyUserId ?? (req.query.userId as string | undefined) ?? user.id
 
     targetUserId = q
 
