@@ -120,6 +120,9 @@ export const questions = sqliteTable("Question", {
   options: text("options").notNull(),
   correctOption: integer("correctOption").notNull(),
   explanation: text("explanation"),
+  // Optional explanation image (admin-set, rendered in the answer sheet
+  // exactly like the question image).
+  explanationImageBase64: text("explanationImageBase64"),
   createdAt: createdAt("createdAt"),
 }, (t) => [index("Question_moduleId_idx").on(t.moduleId)])
 

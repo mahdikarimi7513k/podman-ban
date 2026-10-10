@@ -8,6 +8,9 @@ server/tests/data/
 # uploads (user content)
 uploads/*
 
+# structured runtime logs (host debugging, regenerated daily)
+logs/
+
 # agent workspace (local-only)
 .agents/
 
