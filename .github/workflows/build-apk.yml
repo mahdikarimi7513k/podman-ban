@@ -777,7 +777,11 @@ jobs:
 
       - name: Build release APK
         working-directory: client/android
-        run: ./gradlew clean assembleRelease
+        run: |
+          mkdir -p ~/.gradle
+          grep -q 'org.gradle.caching=true' ~/.gradle/gradle.properties 2>/dev/null \
+            || echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          ./gradlew clean assembleRelease --build-cache
 
       - name: Sign APK (v1+v2, universal)
         working-directory: client/android
@@ -843,3 +847,16 @@ jobs:
           name: podman-ban-adhoc-apk
           path: client/android/signed.apk
           retention-days: 7
+
+      # Release summary: size + sha256 + ABI proof in one place so a bad
+      # artifact is visible without downloading it.
+      - name: APK summary
+        working-directory: client/android
+        run: |
+          set -e
+          echo "--- size ---"
+          du -h signed.apk
+          echo "--- sha256 ---"
+          sha256sum signed.apk | cut -d' ' -f1
+          echo "--- ABIs ---"
+          unzip -l signed.apk | grep -E 'lib/(armeabi-v7a|arm64-v8a|x86|x86_64)/' | awk '{print $4}' | cut -d/ -f1-2 | sort -u

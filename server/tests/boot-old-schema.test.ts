@@ -97,6 +97,27 @@ describe("boot against an old-schema database", () => {
     )
     expect(kept).toEqual({ username: "olduser", totalTests: 3 })
 
+    // Zero-touch host upgrade: study tables + newer columns backfill too —
+    // the host never runs drizzle-kit migrate and never replaces its DB.
+    expect(names.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["StudyRoom", "StudyMember", "StudySession"]),
+    )
+    expect(userColumns()).toEqual(
+      expect.arrayContaining(["avatarBase64"]),
+    )
+
+    const examProbe = new Better(dbFile, { readonly: true })
+
+    const examCols: { name: string }[] = examProbe
+      .prepare("PRAGMA table_info(ExamSession)")
+      .all()
+
+    examProbe.close()
+
+    expect(examCols.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["pausedAt"]),
+    )
+
     // Second and third boots are pure no-ops (duplicate columns/indexes).
     const live = new Better(dbFile)
     ensureRuntimeTables((stmt) => live.exec(stmt))

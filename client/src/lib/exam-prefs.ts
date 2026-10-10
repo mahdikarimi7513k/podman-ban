@@ -17,6 +17,7 @@ export interface ExamPrefs {
   examDurationMin?: number
   dailyGoal?: number
   studyGoalMin?: number
+  bgPromptSeen?: boolean
   repeatQuestions?: boolean
 }
 
@@ -25,6 +26,7 @@ interface PrefsJson {
   examDurationMin?: unknown
   dailyGoal?: unknown
   studyGoalMin?: unknown
+  bgPromptSeen?: unknown
   repeatQuestions?: unknown
 }
 
@@ -64,6 +66,8 @@ export function parseExamPrefs(prefsJson: string | undefined | null): ExamPrefs 
   if (rec.repeatQuestions === true || rec.repeatQuestions === false) {
     out.repeatQuestions = rec.repeatQuestions
   }
+
+  if (rec.bgPromptSeen === true) out.bgPromptSeen = true
 
   return out
 }

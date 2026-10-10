@@ -175,51 +175,71 @@ function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
 
   return (
     <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1B6FF2] via-[#0B93C7] to-[#0FA968] text-white p-5 pb-3">
-      {/* Painterly backdrop: a kid bent over an open book under a lamp —
-          soft blurred shapes, kept faint so the text stays king. */}
+      {/* Painterly backdrop: a girl bent over an open book under a lamp —
+          simple flat shapes, kept faint so the text stays king. */}
       <svg
-        className="pointer-events-none absolute -left-8 top-1/2 h-[130%] -translate-y-1/2 opacity-25"
+        className="pointer-events-none absolute -left-6 top-1/2 h-[135%] -translate-y-1/2 opacity-30"
         viewBox="0 0 200 220"
         aria-hidden
       >
         <defs>
           <radialGradient id="konkurLamp" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="white" stopOpacity="0.85" />
+            <stop offset="0%" stopColor="white" stopOpacity="0.8" />
             <stop offset="100%" stopColor="white" stopOpacity="0" />
           </radialGradient>
           <filter id="konkurSoft" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="7" />
           </filter>
         </defs>
-        <circle cx="138" cy="52" r="46" fill="url(#konkurLamp)" />
-        <g filter="url(#konkurSoft)" fill="white" fillOpacity="0.5">
-          <ellipse cx="70" cy="190" rx="62" ry="16" />
+        <circle cx="140" cy="48" r="48" fill="url(#konkurLamp)" />
+        <g filter="url(#konkurSoft)" fill="white" fillOpacity="0.45">
+          <ellipse cx="80" cy="196" rx="64" ry="15" />
         </g>
         {/* desk */}
-        <rect x="18" y="158" width="150" height="7" rx="3.5" fill="white" fillOpacity="0.55" />
+        <rect x="22" y="162" width="152" height="7" rx="3.5" fill="white" fillOpacity="0.55" />
         {/* open book */}
         <path
-          d="M48 158 C 66 146, 84 146, 96 154 C 108 146, 126 146, 144 158 L 144 132 C 126 120, 108 120, 96 128 C 84 120, 66 120, 48 132 Z"
+          d="M52 162 C 70 150, 88 150, 100 158 C 112 150, 130 150, 148 162 L 148 136 C 130 124, 112 124, 100 132 C 88 124, 70 124, 52 136 Z"
           fill="white"
-          fillOpacity="0.5"
+          fillOpacity="0.55"
         />
-        {/* kid: head bent over the book + back arc */}
-        <circle cx="118" cy="104" r="17" fill="white" fillOpacity="0.6" />
+        <path d="M100 132 L100 158" stroke="#0B93C7" strokeOpacity="0.5" strokeWidth="2" />
+        {/* neck + dress */}
+        <path d="M104 118 L104 132 M96 132 L112 132 L118 162 L90 162 Z" fill="white" fillOpacity="0.4" />
+        {/* head */}
+        <circle cx="106" cy="100" r="19" fill="#FFE3C2" fillOpacity="0.95" />
+        {/* blonde hair: back mass + fringe */}
         <path
-          d="M104 118 C 96 138, 92 148, 90 158 L 128 158 C 128 144, 130 132, 134 122 Z"
-          fill="white"
-          fillOpacity="0.45"
+          d="M84 98 C 82 72, 96 60, 108 62 C 124 64, 132 78, 128 100 C 126 112, 124 120, 122 126 L 118 112 C 120 100, 118 92, 112 90 C 104 96, 94 96, 90 104 Z"
+          fill="#F5B942"
+          fillOpacity="0.95"
         />
-        {/* pencil */}
-        <rect x="140" y="128" width="26" height="5" rx="2.5" transform="rotate(-24 140 128)" fill="white" fillOpacity="0.6" />
+        <path
+          d="M88 92 C 94 78, 118 76, 126 90 C 118 84, 108 84, 102 88 C 96 84, 90 86, 88 92 Z"
+          fill="#F5B942"
+          fillOpacity="0.95"
+        />
+        {/* happy closed eyes */}
+        <path d="M96 102 q4 -4 8 0" fill="none" stroke="#7A4A21" strokeWidth="2" strokeLinecap="round" />
+        <path d="M112 102 q4 -4 8 0" fill="none" stroke="#7A4A21" strokeWidth="2" strokeLinecap="round" />
+        {/* smile */}
+        <path d="M104 112 q6 5 12 0" fill="none" stroke="#7A4A21" strokeWidth="2" strokeLinecap="round" />
+        {/* cheeks */}
+        <circle cx="97" cy="109" r="2.6" fill="#F08A80" fillOpacity="0.8" />
+        <circle cx="121" cy="109" r="2.6" fill="#F08A80" fillOpacity="0.8" />
+        {/* waving hand */}
+        <path d="M126 128 C 136 122, 144 116, 150 108" fill="none" stroke="white" strokeWidth="7" strokeLinecap="round" strokeOpacity="0.85" />
+        <circle cx="151" cy="106" r="5" fill="#FFE3C2" fillOpacity="0.95" />
+        <path d="M147 102 l-3 -6 M151 100 l0 -7 M155 102 l3 -6" stroke="#FFE3C2" strokeWidth="2.4" strokeLinecap="round" fillOpacity="0.95" />
+        {/* pencil in other hand */}
+        <rect x="70" y="140" width="24" height="5" rx="2.5" transform="rotate(18 70 140)" fill="white" fillOpacity="0.7" />
         {/* lamp */}
-        <rect x="150" y="60" width="6" height="70" rx="3" fill="white" fillOpacity="0.55" />
-        <path d="M132 66 L172 66 L162 84 L142 84 Z" fill="white" fillOpacity="0.6" />
+        <rect x="156" y="56" width="6" height="72" rx="3" fill="white" fillOpacity="0.55" />
+        <path d="M138 62 L178 62 L168 80 L148 80 Z" fill="white" fillOpacity="0.6" />
         {/* study dust */}
-        <circle cx="40" cy="60" r="3" fill="white" fillOpacity="0.5" />
-        <circle cx="62" cy="36" r="2.2" fill="white" fillOpacity="0.4" />
-        <circle cx="96" cy="52" r="2.6" fill="white" fillOpacity="0.45" />
-        <circle cx="30" cy="110" r="2.2" fill="white" fillOpacity="0.4" />
+        <circle cx="38" cy="58" r="3" fill="white" fillOpacity="0.5" />
+        <circle cx="58" cy="34" r="2.2" fill="white" fillOpacity="0.4" />
+        <circle cx="30" cy="112" r="2.2" fill="white" fillOpacity="0.4" />
       </svg>
 
       <div className="relative flex justify-end">

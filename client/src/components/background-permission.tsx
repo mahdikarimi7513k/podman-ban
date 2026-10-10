@@ -10,6 +10,8 @@ import * as React from "react"
 import { BellRing, Loader2 } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
 import { isNativeApp, scheduleNativeNotification } from "@/lib/native-notify"
+import { parseExamPrefs } from "@/lib/exam-prefs"
+import { useApp } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,6 +24,7 @@ import {
 const FLAG = "study:bg-entry-asked"
 
 export function BackgroundPermissionPrompt() {
+  const prefs = useApp((s) => s.user?.prefs)
   const [open, setOpen] = React.useState(false)
   const [liveTimer, setLiveTimer] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
@@ -29,6 +32,7 @@ export function BackgroundPermissionPrompt() {
   React.useEffect(() => {
     if (!isNativeApp()) return
 
+    // Once ever: device flag OR synced server flag (reinstall-proof).
     let stored: string | null = null
 
     try {
@@ -37,13 +41,13 @@ export function BackgroundPermissionPrompt() {
       return
     }
 
-    if (stored === "1") return
+    if (stored === "1" || parseExamPrefs(prefs).bgPromptSeen === true) return
 
     void apiFetch<{ session: { id: string } | null }>("/api/study/session/active")
       .then((r) => setLiveTimer(!!r.session))
       .catch(() => {})
       .finally(() => setOpen(true))
-  }, [])
+  }, [prefs])
 
   const done = (granted: boolean) => {
     try {
@@ -51,6 +55,18 @@ export function BackgroundPermissionPrompt() {
     } catch {
       /* ignore */
     }
+
+    // Sync the one-ever flag so other devices/reinstalls never re-ask.
+    // Best-effort: a failure here still keeps the local flag above.
+    void apiFetch("/api/user/prefs", {
+      method: "PUT",
+      body: JSON.stringify({ bgPromptSeen: true }),
+    }).catch(() => {})
+
+    // Refresh local user so the synced flag is visible immediately.
+    void apiFetch<{ user: { prefs: string } }>("/api/auth/me")
+      .then((r) => useApp.getState().patchUser({ prefs: r.user.prefs }))
+      .catch(() => {})
 
     setOpen(false)
 

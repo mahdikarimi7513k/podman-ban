@@ -99,6 +99,9 @@ export const prefsSchema = z.object({
   theme: z.enum(["dark", "light", "system"]).optional(),
   dailyGoal: z.number().int().min(5).max(200).optional(),
   studyGoalMin: z.number().int().min(30).max(960).optional(),
+  // One-ever background prompt (Android entry): synced so reinstalls and
+  // other devices never re-ask.
+  bgPromptSeen: z.boolean().optional(),
 })
 
 // Self-service profile: display name + small avatar data URL.
