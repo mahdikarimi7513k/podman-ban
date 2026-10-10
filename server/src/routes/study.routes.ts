@@ -22,7 +22,7 @@ import { db } from "../lib/db.js"
 import { studyMembers, studyRooms, studySessions, users } from "../lib/db/schema.js"
 import { getSession, requireCsrf, rateLimit, clientIp, socketIp } from "../lib/auth/index.js"
 import { getAppState } from "../lib/remote-config.js"
-import { logClient, logWarn } from "../lib/logger.js"
+import { logClient, logInfo, logWarn } from "../lib/logger.js"
 import {
   parseBody,
   studyJoinSchema,
@@ -475,7 +475,7 @@ studyRouter.post("/study/rooms/join", async (req, res) => {
   const count = await db.select({ id: studyMembers.id }).from(studyMembers).where(eq(studyMembers.roomId, room.id)).all()
 
   if (count.length >= room.capacity && !already) {
-    res.status(409).json({ error: "ظرفیت اتاق تکمیل است (حداکثر ۲۰ نفر)" })
+    res.status(409).json({ error: "ظرفیت اتاق تکمیل است (حداکثر ۳۰ نفر)" })
 
     return
   }
@@ -517,6 +517,7 @@ studyRouter.post("/study/rooms/:id/leave", async (req, res) => {
   for (const s of live) {
     if (s.status === "ENDED") continue
     const extra = s.status === "ACTIVE" ? Math.max(0, now.getTime() - s.startedAt.getTime()) : 0
+
     await db
       .update(studySessions)
       .set({ status: "ENDED", accumulatedMs: s.accumulatedMs + extra, endedAt: now, pausedAt: null })
@@ -528,6 +529,110 @@ studyRouter.post("/study/rooms/:id/leave", async (req, res) => {
     .delete(studyMembers)
     .where(and(eq(studyMembers.roomId, roomId), eq(studyMembers.userId, user.id)))
     .run()
+
+  // Ownership passes to the earliest-joined remaining member so the room
+  // never becomes ownerless (members stay manageable).
+  const room = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
+
+  if (room && room.ownerId === user.id) {
+    const next = await db
+      .select({ userId: studyMembers.userId, joinedAt: studyMembers.joinedAt })
+      .from(studyMembers)
+      .where(eq(studyMembers.roomId, roomId))
+      .orderBy(studyMembers.joinedAt)
+      .limit(1)
+      .get()
+
+    await db
+      .update(studyRooms)
+      .set({ ownerId: next?.userId ?? null })
+      .where(eq(studyRooms.id, roomId))
+      .run()
+  }
+
+  res.json({ ok: true })
+})
+
+// ---- POST /study/rooms/:id/members/:userId/remove (owner only, CSRF) ----
+// The room owner manages the roster: removing a member also stops their
+// live session in this room. The owner cannot remove themselves here —
+// leaving (which transfers ownership) is the exit path.
+
+studyRouter.post("/study/rooms/:id/members/:userId/remove", async (req, res) => {
+  const user = await getSession(req)
+
+  if (!user) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
+    return
+  }
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  const roomId = req.params.id
+  const targetId = req.params.userId
+  const room = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
+
+  if (!room) {
+    res.status(404).json({ error: "اتاق یافت نشد" })
+
+    return
+  }
+
+  if (room.ownerId !== user.id) {
+    res.status(403).json({ error: "فقط سازنده اتاق می‌تواند اعضا را حذف کند" })
+
+    return
+  }
+
+  if (targetId === user.id) {
+    res.status(400).json({ error: "برای خروج از اتاق از دکمه خروج استفاده کنید" })
+
+    return
+  }
+
+  const membership = await db
+    .select({ id: studyMembers.id })
+    .from(studyMembers)
+    .where(and(eq(studyMembers.roomId, roomId), eq(studyMembers.userId, targetId)))
+    .get()
+
+  if (!membership) {
+    res.status(404).json({ error: "این کاربر عضو اتاق نیست" })
+
+    return
+  }
+
+  const now = new Date()
+
+  const live = await db
+    .select()
+    .from(studySessions)
+    .where(and(eq(studySessions.roomId, roomId), eq(studySessions.userId, targetId)))
+    .all()
+
+  for (const s of live) {
+    if (s.status === "ENDED") continue
+    const extra = s.status === "ACTIVE" ? Math.max(0, now.getTime() - s.startedAt.getTime()) : 0
+
+    await db
+      .update(studySessions)
+      .set({ status: "ENDED", accumulatedMs: s.accumulatedMs + extra, endedAt: now, pausedAt: null })
+      .where(eq(studySessions.id, s.id))
+      .run()
+  }
+
+  await db
+    .delete(studyMembers)
+    .where(and(eq(studyMembers.roomId, roomId), eq(studyMembers.userId, targetId)))
+    .run()
+
+  logInfo("[study] member removed", { roomId, by: user.id, removedId: targetId })
+
   res.json({ ok: true })
 })
 
@@ -646,6 +751,7 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
       memberCount: memberRows.length,
       studyingNow: [...liveStatus.values()].filter((v) => v === "studying").length,
       joined: memberIds.includes(user.id),
+      isOwner: room.ownerId === user.id,
     },
     leaderboard,
     mySession: mySession

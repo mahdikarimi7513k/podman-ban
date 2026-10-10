@@ -35,6 +35,7 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { FaNum } from "@/components/fa-utils"
+import { formatTehran } from "@/lib/tehran-time"
 import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
@@ -568,15 +569,11 @@ function ProfileCard() {
 }
 
 function formatDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("fa-IR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(iso))
-  } catch {
-    return ""
-  }
+  return formatTehran(iso, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
 }
 
 function PasswordChangeSection() {

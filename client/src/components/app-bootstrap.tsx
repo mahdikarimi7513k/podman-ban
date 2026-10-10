@@ -4,6 +4,7 @@ import { useApp } from "@/lib/store"
 import { showBroadcastOnce, startBroadcastWatcher } from "@/lib/notify-inbox"
 import { startDailyGoalReminder } from "@/lib/daily-goal-reminder"
 import { installErrorReporting } from "@/lib/error-report"
+import { installStudyTimerActions } from "@/lib/study-timer-notify"
 
 export function AppBootstrap({ children }: { children: React.ReactNode }) {
   const boot = useApp((s) => s.boot)
@@ -13,6 +14,8 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
     boot()
     // Client crash telemetry → /api/client-logs (throttled, best-effort).
     installErrorReporting()
+    // Shade actions for the study timer (native APK only, no-op on web).
+    installStudyTimerActions()
     // Latest admin broadcast (web: toast). Exactly-once, failure-silent.
     void showBroadcastOnce()
     // Broadcast watcher + nightly goal reminder (23:00 Tehran).

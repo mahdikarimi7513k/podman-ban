@@ -69,6 +69,15 @@ async function doRefresh(): Promise<boolean> {
   return refreshing
 }
 
+/**
+ * Public session refresh for non-fetch channels (the chat socket): after a
+ * drop, the httpOnly access cookie may have expired while refresh is still
+ * valid — renewing before the socket retries breaks the disconnect loop.
+ */
+export function refreshSession(): Promise<boolean> {
+  return doRefresh()
+}
+
 export async function apiFetch<T = unknown>(
   input: string,
   init: RequestInit = {},

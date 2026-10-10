@@ -1,7 +1,7 @@
 
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { BookOpen, ChevronLeft, Play, FileQuestion, Loader2, RotateCcw, Clock, Check, Archive, Calculator } from "lucide-react"
+import { BookOpen, ChevronLeft, Play, FileQuestion, Loader2, RotateCcw, Clock, Check } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -147,26 +147,6 @@ export function HomeView() {
           </p>
         </div>
       </section>
-
-      {/* Quick actions: archive + calculator */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          onClick={() => setView("archive")}
-          className="h-11 cursor-pointer"
-        >
-          <Archive className="size-4" strokeWidth={ICON_STROKE} />
-          آرشیو آزمون‌ها
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => setView("calculator")}
-          className="h-11 cursor-pointer"
-        >
-          <Calculator className="size-4" strokeWidth={ICON_STROKE} />
-          درصدگیری
-        </Button>
-      </div>
 
       {/* Resume in-progress exam banner */}
       <AnimatePresence>

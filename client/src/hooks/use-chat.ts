@@ -1,7 +1,8 @@
 
 import * as React from "react"
-import { io, type Socket } from "socket.io-client"
-import { apiFetch, API_BASE } from "@/lib/api-client"
+import type { Socket } from "socket.io-client"
+import { apiFetch } from "@/lib/api-client"
+import { getChatSocket } from "@/lib/chat-socket-client"
 
 export interface ChatMessage {
   id: string
@@ -39,10 +40,12 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
 
   const fetchMessages = React.useCallback(async () => {
     if (!userId) return
+
     try {
       const endpoint = isAdmin
         ? `/api/support/messages?userId=${encodeURIComponent(userId)}`
         : "/api/support/messages"
+
       const res = await apiFetch<{ messages: ChatMessage[] }>(endpoint)
       setMessages(res.messages)
     } catch {
@@ -57,54 +60,64 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
   // ---- load history ----
   React.useEffect(() => {
     if (!userId) return
+
     let cancelled = false
+
     ;(async () => {
       setLoading(true)
       await fetchMessages()
+
       if (!cancelled) setLoading(false)
     })()
+
     return () => {
       cancelled = true
     }
   }, [userId, isAdmin, fetchMessages])
 
-  // ---- socket (the live channel — retries forever, catches up on reconnect) ----
+  // ---- socket (shared singleton — retries forever, catches up on reconnect) ----
   React.useEffect(() => {
-    // Transport order: websocket-first on web, polling-first inside the native
-    // app. A raw WebSocket handshake from a WebView carries no synced auth
-    // cookies, so the server drops it and the client never retries (stuck on
-    // "connecting" forever). Polling rides the native HTTP stack (cookies OK)
-    // and the later upgrade reuses the authenticated session — no re-auth
-    // happens on upgrade. API_BASE is only set in APK builds.
-    const socket = io(API_BASE || undefined, {
-      transports: API_BASE ? ["polling", "websocket"] : ["websocket", "polling"],
-      withCredentials: true,
-      reconnection: true,
-    })
+    const socket: Socket = getChatSocket()
     socketRef.current = socket
 
-    socket.on("connect", () => setConnected(true))
-    socket.on("disconnect", () => setConnected(false))
-    socket.on("connect_error", () => setConnected(false))
+    const onConnect = () => setConnected(true)
+    const onDisconnect = () => setConnected(false)
+    const onError = () => setConnected(false)
+
+    const onReconnect = () => {
+      setConnected(true)
+      void fetchRef.current()
+    }
+
+    const onMessage = (msg: ChatMessage) => {
+      if (msg.userId !== userIdRef.current) return
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev
+
+        return [...prev, msg]
+      })
+    }
+
+    socket.on("connect", onConnect)
+    socket.on("disconnect", onDisconnect)
+    socket.on("connect_error", onError)
 
     // Reconnected after a drop (server restart, network blip): one catch-up
     // fetch covers missed messages. No interval polling — the socket is the
     // single source of live updates and it retries forever by default.
-    socket.io.on("reconnect", () => {
-      setConnected(true)
-      void fetchRef.current()
-    })
+    socket.io.on("reconnect", onReconnect)
+    socket.on("chat:message", onMessage)
 
-    socket.on("chat:message", (msg: ChatMessage) => {
-      if (msg.userId !== userIdRef.current) return
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev
-        return [...prev, msg]
-      })
-    })
+    // If the shared socket is already live (second screen mounting),
+    // reflect it immediately instead of waiting for the next event.
+    if (socket.connected) setConnected(true)
 
     return () => {
-      socket.disconnect()
+      socket.off("connect", onConnect)
+      socket.off("disconnect", onDisconnect)
+      socket.off("connect_error", onError)
+      socket.io.off("reconnect", onReconnect)
+      socket.off("chat:message", onMessage)
       socketRef.current = null
     }
   }, [])
@@ -112,11 +125,14 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
   // ---- catch-up on tab focus (covers a socket that never connects at all) ----
   React.useEffect(() => {
     if (!userId) return
+
     const onFocus = () => {
       if (document.visibilityState === "visible") void fetchRef.current()
     }
+
     window.addEventListener("focus", onFocus)
     document.addEventListener("visibilitychange", onFocus)
+
     return () => {
       window.removeEventListener("focus", onFocus)
       document.removeEventListener("visibilitychange", onFocus)
@@ -126,18 +142,24 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
   const send = React.useCallback(
     async (text: string) => {
       const trimmed = text.trim()
+
       if (!trimmed || !userId) return
       setSending(true)
+
       try {
         const body: Record<string, unknown> = { text: trimmed }
+
         if (isAdmin) body.userId = userId
+
         const res = await apiFetch<{ message: ChatMessage }>("/api/support/messages", {
           method: "POST",
           body: JSON.stringify(body),
         })
+
         // optimistically add the message immediately
         setMessages((prev) => {
           if (prev.some((m) => m.id === res.message.id)) return prev
+
           return [...prev, res.message]
         })
       } finally {
@@ -149,6 +171,7 @@ export function useChat({ userId, isAdmin }: UseChatOpts) {
 
   const markRead = React.useCallback(async () => {
     if (!isAdmin || !userId) return
+
     try {
       await apiFetch(`/api/support/read?userId=${encodeURIComponent(userId)}`, {
         method: "POST",

@@ -698,6 +698,25 @@ jobs:
           $MX /tmp/ic_notification.png -resize 24x24 "$RES/drawable/ic_notification.png"
           echo "✅ All icons & splash generated"
 
+      # Study-timer background support (Android-APK only): the timer truth
+      # lives on the server clock, but the shade presence (ongoing
+      # notification + توقف action) needs three build-time guarantees —
+      # POST_NOTIFICATIONS (runtime permission on Android 13+), the
+      # monochrome ic_notification drawable, and exact-alarm-free inexact
+      # scheduling (no extra permission). Fail loudly if any is missing.
+      - name: Verify timer notification support
+        working-directory: client
+        run: |
+          set -e
+          M=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.POST_NOTIFICATIONS' "$M" \
+            || { echo "❌ POST_NOTIFICATIONS missing — shade notifications will never appear"; exit 1; }
+          ls android/app/src/main/res/drawable-*/ic_notification.png >/dev/null \
+            || { echo "❌ ic_notification drawable missing — notifications show a blank icon"; exit 1; }
+          echo "✅ POST_NOTIFICATIONS + ic_notification present (background timer notices OK)"
+          echo "ℹ️ Runtime grant happens in-app (first study start + app entry prompt);"
+          echo "ℹ️ users on aggressive OEM skins may also need: Apps → PodmanBan → Battery → Unrestricted."
+
       - name: Set versionName / versionCode
         working-directory: client/android
         env:

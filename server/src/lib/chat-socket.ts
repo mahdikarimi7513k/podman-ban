@@ -3,6 +3,7 @@ import { Server as SocketIOServer } from "socket.io"
 import type { ChatSender } from "./db/schema.js"
 import { verifyAccessToken } from "./auth/jwt.js"
 import { readCookieFromHeader } from "./auth/cookies.js"
+import { logWarn } from "./logger.js"
 
 /**
  * Realtime chat — runs in the same process as the API (no separate service,
@@ -13,8 +14,11 @@ import { readCookieFromHeader } from "./auth/cookies.js"
  */
 
 type Role = "STUDENT" | "ADMIN" | "CONTENT_ADMIN"
+
 const isStaff = (role: Role) => role === "ADMIN" || role === "CONTENT_ADMIN"
+
 const userRoom = (id: string) => `user:${id}`
+
 const ADMINS_ROOM = "admins"
 
 interface ChatMessageEvent {
@@ -36,6 +40,7 @@ export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[
     // Origin-less clients (curl, native) still need the auth cookie below.
     allowRequest: (req, fn) => {
       const origin = req.headers.origin
+
       if (!origin || allowedOrigins.includes(origin)) fn(null, true)
       else fn("origin not allowed", false)
     },
@@ -51,21 +56,36 @@ export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[
     pingInterval: 25000,
   })
 
+  // Handshake failures (bad origin, firewall mangling, expired cookie on a
+  // polling upgrade) used to vanish silently while the client spun on
+  // "connecting". One host-log line per failure — no PII, just the cause.
+  io.engine.on("connection_error", (err) => {
+    logWarn("[socket] connection_error", {
+      code: err.code,
+      message: String(err.message ?? "").slice(0, 200),
+    })
+  })
+
   io.on("connection", (socket) => {
     const cookieHeader = socket.request.headers["cookie"]
     const token = readCookieFromHeader(cookieHeader, "pb_access")
+
     if (!token) {
       socket.disconnect(true)
+
       return
     }
 
     verifyAccessToken(token).then((payload) => {
       if (!payload) {
         socket.disconnect(true)
+
         return
       }
+
       const user = { id: payload.sub, role: payload.role as Role, name: payload.name }
       void socket.join(userRoom(user.id))
+
       if (isStaff(user.role)) void socket.join(ADMINS_ROOM)
 
       // NOTE: no "chat:send" handler by design. Messages are persisted via
@@ -75,18 +95,23 @@ export function attachChatSocket(httpServer: HttpServer, allowedOrigins: string[
       socket.on("chat:typing", (raw: unknown) => {
         const p = (raw ?? {}) as { userId?: unknown }
         let targetUserId = typeof p.userId === "string" ? p.userId.trim() : ""
+
         if (!targetUserId) return
+
         if (!isStaff(user.role)) {
           targetUserId = user.id
           io!.to(ADMINS_ROOM).emit("chat:typing", { userId: targetUserId, sender: user.role })
+
           return
         }
+
         io!.to(userRoom(targetUserId)).emit("chat:typing", { userId: targetUserId, sender: user.role })
       })
 
       socket.on("chat:read", (raw: unknown) => {
         const p = (raw ?? {}) as { userId?: unknown }
         const targetUserId = typeof p.userId === "string" ? p.userId.trim() : ""
+
         if (!targetUserId || !isStaff(user.role)) return
         io!.to(userRoom(targetUserId)).emit("chat:read", { userId: targetUserId })
       })

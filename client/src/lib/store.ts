@@ -5,9 +5,45 @@ import { replaceViewState, type AppView } from "@/lib/view-history"
 // Shared in-flight boot (see useApp.boot)
 let bootPromise: Promise<void> | null = null
 
+const SEEN_SESSION_KEY = "pb_seen_session"
+
+function hasSeenSession(): boolean {
+  try {
+    return window.localStorage.getItem(SEEN_SESSION_KEY) === "1"
+  } catch {
+    return true
+  }
+}
+
+function markSeenSession(seen: boolean): void {
+  try {
+    if (seen) window.localStorage.setItem(SEEN_SESSION_KEY, "1")
+    else window.localStorage.removeItem(SEEN_SESSION_KEY)
+  } catch {
+    /* private mode — boot normally */
+  }
+}
+
 async function doBoot(
   set: (partial: Partial<AppState>) => void,
 ): Promise<void> {
+  // Fresh installs never held a session: skip /me + /refresh entirely so
+  // first boot makes zero failing (console-red 401) requests.
+  if (!hasSeenSession()) {
+    const next: Partial<AppState> = { booted: true, user: null, view: "auth" }
+
+    try {
+      const configRes = await apiFetch<{ state: RemoteConfigState }>("/api/config")
+      next.config = configRes.state
+    } catch {
+      /* offline — shell still boots */
+    }
+
+    set(next)
+
+    return
+  }
+
   const [configRes, meRes] = await Promise.allSettled([
     apiFetch<{ state: RemoteConfigState }>("/api/config"),
     apiFetch<{ user: AppUser }>("/api/auth/me"),
@@ -135,6 +171,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setUser(u) {
+    markSeenSession(u !== null)
     set({ user: u, view: u ? "home" : "auth" })
   },
 

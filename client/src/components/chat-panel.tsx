@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Send, Loader2, Circle } from "lucide-react"
 import { useChat, type ChatMessage } from "@/hooks/use-chat"
 import { sanitizeMessageText } from "@/lib/sanitize"
+import { formatTehran } from "@/lib/tehran-time"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FaNum } from "@/components/fa-utils"
@@ -155,10 +156,10 @@ export function ChatPanel({
 
 function MessageBubble({ msg, isAdmin }: { msg: ChatMessage; isAdmin: boolean }) {
   const mine = isAdmin ? msg.sender === "ADMIN" : msg.sender === "STUDENT"
-  const time = new Intl.DateTimeFormat("fa-IR", {
+  const time = formatTehran(msg.createdAt, {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(msg.createdAt))
+  })
 
   return (
     <motion.div

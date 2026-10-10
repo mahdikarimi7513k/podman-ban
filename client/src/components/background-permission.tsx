@@ -90,6 +90,11 @@ export function BackgroundPermissionPrompt() {
             </p>
           )}
           <p>برای این خبررسانی، اجازه اعلان لازم است.</p>
+          <p className="text-[12px]">
+            نکته گوشی‌های اندرویدی: اگر گوشی اعلان را دیر نشان داد، در تنظیمات گوشی مسیر
+            برنامه‌ها ← پودمان‌بان ← باتری را روی «بدون محدودیت» بگذار تا اندروید
+            برنامه را در پس‌زمینه نبندد.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => done(false)} className="cursor-pointer">

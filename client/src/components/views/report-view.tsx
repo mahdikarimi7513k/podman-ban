@@ -33,6 +33,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { FaNum, ToPersianDigits } from "@/components/fa-utils"
+import { formatTehran } from "@/lib/tehran-time"
 import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 import { useApp } from "@/lib/store"
 import { Button } from "@/components/ui/button"
@@ -606,16 +607,11 @@ function StatCard({
 }
 
 function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat("fa-IR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(d)
-  } catch {
-    return ""
-  }
+  return formatTehran(iso, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
 }
 
 

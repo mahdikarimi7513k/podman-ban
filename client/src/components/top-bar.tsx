@@ -1,5 +1,5 @@
 
-import { Archive, GraduationCap, ShieldCheck, Trophy, Award } from "lucide-react"
+import { Archive, Calculator, GraduationCap, ShieldCheck, Trophy, Award } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { FaNum } from "@/components/fa-utils"
@@ -53,6 +53,20 @@ export function TopBar() {
             )}
           >
             <Archive className="size-4" strokeWidth={ICON_STROKE} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("calculator")}
+            aria-label="درصدگیری"
+            title="درصدگیری"
+            className={cn(
+              "inline-flex size-9 items-center justify-center rounded-md transition-colors cursor-pointer",
+              view === "calculator"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            <Calculator className="size-4" strokeWidth={ICON_STROKE} />
           </button>
           <button
             type="button"

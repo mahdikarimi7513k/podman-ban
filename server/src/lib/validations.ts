@@ -232,7 +232,7 @@ export const notificationCreateSchema = z.object({
 export const studyRoomCreateSchema = z.object({
   name: z.string().trim().min(2, "نام اتاق حداقل ۲ نویسه باشد").max(60, "نام اتاق حداکثر ۶۰ نویسه باشد"),
   type: z.enum(["COMPETITIVE", "FRIENDLY"]).default("COMPETITIVE"),
-  capacity: z.number().int().min(2, "ظرفیت حداقل ۲ نفر است").max(20, "هر اتاق حداکثر ۲۰ نفر ظرفیت دارد").default(20),
+  capacity: z.number().int().min(2, "ظرفیت حداقل ۲ نفر است").max(30, "هر اتاق حداکثر ۳۰ نفر ظرفیت دارد").default(20),
   requireInvite: z.boolean().default(true),
 })
 

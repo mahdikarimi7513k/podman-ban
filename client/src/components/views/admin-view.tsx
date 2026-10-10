@@ -1651,62 +1651,61 @@ function AdminSupport() {
 
   // Live bump: a new chat:message moves its conversation to the top instantly
   // (no scroll hunt, no 15s wait). Polling remains as the fallback.
+  // Uses the shared chat socket — no second connection.
   React.useEffect(() => {
-    let cancelled = false
-    let disconnect: (() => void) | undefined
-    void (async () => {
-      try {
-        const { io } = await import("socket.io-client")
-        const { API_BASE } = await import("@/lib/api-client")
+    interface BumpMessage {
+      userId: string
+      text: string
+      sender: string
+      createdAt: string
+      id: string
+    }
 
-        const socket = io(API_BASE || undefined, {
-          transports: API_BASE ? ["polling", "websocket"] : ["websocket", "polling"],
-          withCredentials: true,
-          reconnection: true,
-        })
+    const bump = (msg: BumpMessage) => {
+      setConversations((prev) => {
+        if (!prev) return prev
+        const idx = prev.findIndex((c) => c.id === msg.userId)
 
-        if (cancelled) {
-          socket.disconnect()
+        if (idx === -1) {
+          // Unknown conversation (new student) — refresh quietly.
+          void load(true)
 
-          return
+          return prev
         }
 
-        disconnect = () => socket.disconnect()
-        socket.on("chat:message", (msg: { userId: string; text: string; sender: string; createdAt: string; id: string }) => {
-          setConversations((prev) => {
-            if (!prev) return prev
-            const idx = prev.findIndex((c) => c.id === msg.userId)
+        const current = prev[idx]
 
-            if (idx === -1) {
-              // Unknown conversation (new student) — refresh quietly.
-              void load(true)
+        if (!current) return prev
 
-              return prev
-            }
+        const updated = {
+          ...current,
+          lastMessage: { id: msg.id, text: msg.text, sender: msg.sender, createdAt: msg.createdAt },
+          // Own admin replies don't raise unread; student messages do —
+          // unless the thread is open (ChatPanel marks read on view).
+          unread: msg.sender === "STUDENT" ? current.unread + 1 : current.unread,
+        }
 
-            const current = prev[idx]
+        const next = [updated, ...prev.filter((c) => c.id !== msg.userId)]
 
-            const updated = {
-              ...current,
-              lastMessage: { id: msg.id, text: msg.text, sender: msg.sender, createdAt: msg.createdAt },
-              // Own admin replies don't raise unread; student messages do —
-              // unless the thread is open (ChatPanel marks read on view).
-              unread: msg.sender === "STUDENT" ? current.unread + 1 : current.unread,
-            }
+        return next
+      })
+    }
 
-            const next = [updated, ...prev.filter((c) => c.id !== msg.userId)]
+    let socket: { on: (e: string, h: (m: BumpMessage) => void) => void; off: (e: string, h: (m: BumpMessage) => void) => void } | null = null
 
-            return next
-          })
-        })
+    void (async () => {
+      try {
+        const { getChatSocket } = await import("@/lib/chat-socket-client")
+
+        socket = getChatSocket()
+        socket.on("chat:message", bump)
       } catch {
         /* socket is progressive enhancement — polling covers it */
       }
     })()
 
     return () => {
-      cancelled = true
-      disconnect?.()
+      socket?.off("chat:message", bump)
     }
   }, [load])
 

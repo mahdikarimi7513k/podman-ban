@@ -19,9 +19,11 @@ import {
   LogOut,
   Loader2,
   ChevronRight,
+  ChevronDown,
   Timer,
   Trophy,
   Target,
+  UserMinus,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -37,7 +39,12 @@ import {
 } from "@/components/ui/dialog"
 import { FaNum } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
-import { isNativeApp, scheduleNativeNotification } from "@/lib/native-notify"
+import { isNativeApp } from "@/lib/native-notify"
+import {
+  showTimerNotification,
+  clearTimerNotification,
+  showTimerSummary,
+} from "@/lib/study-timer-notify"
 import { cn, ICON_STROKE } from "@/lib/utils"
 
 type SubView = { name: "overview" } | { name: "rooms" } | { name: "detail"; roomId: string } | { name: "create" }
@@ -89,6 +96,7 @@ interface RoomDetail {
     memberCount: number
     studyingNow: number
     joined: boolean
+    isOwner: boolean
   }
   leaderboard: LeaderRow[]
   mySession: { id: string; status: "ACTIVE" | "PAUSED"; elapsedMs: number; startedAt: string; serverNow: string } | null
@@ -147,8 +155,8 @@ const KONKUR_WINDOW_DAYS = 365
 
 function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
   const W = 400
-  const H = 64
-  const waveY = (x: number) => 34 - Math.sin((x / W) * Math.PI * 2.2) * 13
+  const H = 88
+  const waveY = (x: number) => 46 - Math.sin((x / W) * Math.PI * 2.2) * 14
 
   const pathD = Array.from({ length: 41 }, (_, i) => {
     const x = (i / 40) * W
@@ -160,17 +168,64 @@ function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
     ? Math.min(1, Math.max(0.03, 1 - konkur.totalDays / KONKUR_WINDOW_DAYS))
     : 0.03
 
-  const cx = 16 + progress * (W - 32)
+  const cx = 18 + progress * (W - 36)
   const cy = waveY(cx)
-  const ex = W - 10
+  const ex = W - 12
   const ey = waveY(ex)
 
   return (
     <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1B6FF2] via-[#0B93C7] to-[#0FA968] text-white p-5 pb-3">
-      <div className="flex justify-end">
+      {/* Painterly backdrop: a kid bent over an open book under a lamp —
+          soft blurred shapes, kept faint so the text stays king. */}
+      <svg
+        className="pointer-events-none absolute -left-8 top-1/2 h-[130%] -translate-y-1/2 opacity-25"
+        viewBox="0 0 200 220"
+        aria-hidden
+      >
+        <defs>
+          <radialGradient id="konkurLamp" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="white" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="white" stopOpacity="0" />
+          </radialGradient>
+          <filter id="konkurSoft" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="7" />
+          </filter>
+        </defs>
+        <circle cx="138" cy="52" r="46" fill="url(#konkurLamp)" />
+        <g filter="url(#konkurSoft)" fill="white" fillOpacity="0.5">
+          <ellipse cx="70" cy="190" rx="62" ry="16" />
+        </g>
+        {/* desk */}
+        <rect x="18" y="158" width="150" height="7" rx="3.5" fill="white" fillOpacity="0.55" />
+        {/* open book */}
+        <path
+          d="M48 158 C 66 146, 84 146, 96 154 C 108 146, 126 146, 144 158 L 144 132 C 126 120, 108 120, 96 128 C 84 120, 66 120, 48 132 Z"
+          fill="white"
+          fillOpacity="0.5"
+        />
+        {/* kid: head bent over the book + back arc */}
+        <circle cx="118" cy="104" r="17" fill="white" fillOpacity="0.6" />
+        <path
+          d="M104 118 C 96 138, 92 148, 90 158 L 128 158 C 128 144, 130 132, 134 122 Z"
+          fill="white"
+          fillOpacity="0.45"
+        />
+        {/* pencil */}
+        <rect x="140" y="128" width="26" height="5" rx="2.5" transform="rotate(-24 140 128)" fill="white" fillOpacity="0.6" />
+        {/* lamp */}
+        <rect x="150" y="60" width="6" height="70" rx="3" fill="white" fillOpacity="0.55" />
+        <path d="M132 66 L172 66 L162 84 L142 84 Z" fill="white" fillOpacity="0.6" />
+        {/* study dust */}
+        <circle cx="40" cy="60" r="3" fill="white" fillOpacity="0.5" />
+        <circle cx="62" cy="36" r="2.2" fill="white" fillOpacity="0.4" />
+        <circle cx="96" cy="52" r="2.6" fill="white" fillOpacity="0.45" />
+        <circle cx="30" cy="110" r="2.2" fill="white" fillOpacity="0.4" />
+      </svg>
+
+      <div className="relative flex justify-end">
         <span className="text-xs bg-white/20 rounded-full px-4 py-1.5">تا کنکور فنی</span>
       </div>
-      <p className="mt-5 text-right text-[28px] min-[380px]:text-[32px] leading-tight font-extrabold tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
+      <p className="relative mt-5 text-right text-[28px] min-[380px]:text-[32px] leading-tight font-extrabold tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
         {konkur ? (
           <>
             <FaNum>{konkur.months}</FaNum> ماه و <FaNum>{konkur.days}</FaNum> روز
@@ -179,7 +234,7 @@ function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
           "به‌زودی"
         )}
       </p>
-      <p className="mt-1 text-right text-sm text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
+      <p className="relative mt-1 text-right text-sm text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
         {konkur ? (
           <>
             <FaNum>{konkur.totalDays}</FaNum> روز فرصت داری
@@ -188,16 +243,16 @@ function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
           "تاریخ کنکور را مدیر تنظیم می‌کند"
         )}
       </p>
-      <svg className="mt-2 w-full" viewBox={`0 0 ${W} ${H}`} aria-hidden>
-        <path d={pathD} fill="none" stroke="white" strokeOpacity="0.75" strokeWidth="3" strokeLinecap="round" />
-        <circle cx={ex} cy={ey} r="6" fill="white" fillOpacity="0.9" />
-        <circle cx={cx} cy={cy} r="11" fill="white" />
-        <circle cx={cx} cy={cy} r="4.5" fill="#0B93C7" />
-        <text x={cx} y={cy - 18} textAnchor="middle" fill="white" fontSize="13">
+      <svg className="relative mt-1 w-full" viewBox={`0 0 ${W} ${H}`} aria-hidden>
+        <path d={pathD} fill="none" stroke="white" strokeOpacity="0.8" strokeWidth="3" strokeLinecap="round" />
+        <circle cx={ex} cy={ey} r="6" fill="white" fillOpacity="0.95" />
+        <text x={cx} y={Math.max(14, cy - 24)} textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
           الان
         </text>
+        <circle cx={cx} cy={cy} r="12" fill="white" />
+        <circle cx={cx} cy={cy} r="5" fill="#0B93C7" />
       </svg>
-      <div className="flex justify-between text-[11px] text-white/85 px-1 pb-1">
+      <div className="relative flex justify-between text-[11px] text-white/85 px-1 pb-1">
         <span>کنکور</span>
         <span>شروع</span>
       </div>
@@ -211,6 +266,8 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
   const [range, setRange] = React.useState<"today" | "week" | "month">("today")
   const [data, setData] = React.useState<Overview | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [entering, setEntering] = React.useState(false)
+  const { toast } = useToast()
 
   const load = React.useCallback(async () => {
     try {
@@ -227,6 +284,47 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
     setLoading(true)
     void load()
   }, [load])
+
+  // Entering takes the user to THEIR room (most recently visited and
+  // still joined, else the first joined room) — or the browser when they
+  // belong nowhere (kicked/left). Choice remembered per device.
+  const enter = async () => {
+    setEntering(true)
+
+    try {
+      const res = await apiFetch<{ rooms: RoomItem[] }>("/api/study/rooms")
+      const joined = res.rooms.filter((r) => r.joined)
+
+      if (joined.length === 0) {
+        go({ name: "rooms" })
+
+        return
+      }
+
+      let target = joined[0]
+
+      try {
+        const last = window.localStorage.getItem("study:last-room")
+        const remembered = joined.find((r) => r.id === last)
+
+        if (remembered) target = remembered
+      } catch {
+        /* ignore */
+      }
+
+      if (!target) {
+        go({ name: "rooms" })
+
+        return
+      }
+
+      go({ name: "detail", roomId: target.id })
+    } catch {
+      toast({ variant: "destructive", title: "ورود ناموفق بود" })
+    } finally {
+      setEntering(false)
+    }
+  }
 
   const rangeLabel = range === "today" ? "امروز" : range === "week" ? "این هفته" : "این ماه"
   const pct = data && data.goalMinutes > 0 ? Math.min(100, Math.round((data.totalMinutes / data.goalMinutes) * 100)) : 0
@@ -302,7 +400,8 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
         )}
       </section>
 
-      <Button onClick={() => go({ name: "rooms" })} className="w-full h-12 text-sm font-semibold cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9] hover:opacity-90">
+      <Button onClick={() => void enter()} disabled={entering} className="w-full h-12 text-sm font-semibold cursor-pointer">
+        {entering && <Loader2 className="size-4 animate-spin" />}
         ورود به اتاق مطالعه
       </Button>
       <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
@@ -391,12 +490,15 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
         </Button>
       </div>
 
-      <section className="rounded-2xl bg-gradient-to-bl from-[#18A8FF] via-[#0878F9] to-[#003CCB] text-white p-5 flex items-center gap-3">
+      <section className="rounded-2xl border border-border bg-card p-5 flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0">
+          <Users className="size-5" strokeWidth={ICON_STROKE} />
+        </div>
         <div className="flex-1">
           <p className="font-bold">اتاق جدید بساز</p>
-          <p className="text-xs text-white/85 mt-0.5">تایمر مشترک و جدول رتبه‌بندی زنده</p>
+          <p className="text-xs text-muted-foreground mt-0.5">تایمر مشترک و جدول رتبه‌بندی زنده</p>
         </div>
-        <Button variant="secondary" onClick={() => go({ name: "create" })} className="cursor-pointer shrink-0">
+        <Button onClick={() => go({ name: "create" })} className="cursor-pointer shrink-0">
           ساخت اتاق
         </Button>
       </section>
@@ -418,7 +520,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
                 <span
                   className={cn(
                     "text-[10px] rounded-full px-2.5 py-1",
-                    r.type === "COMPETITIVE" ? "bg-[#0878F9]/10 text-[#0878F9]" : "bg-success/10 text-success",
+                    r.type === "COMPETITIVE" ? "bg-primary/10 text-primary" : "bg-success/10 text-success",
                   )}
                 >
                   {r.type === "COMPETITIVE" ? "رقابتی" : "دوستانه"}
@@ -438,7 +540,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
                   variant="outline"
                   onClick={() => void join({ roomId: r.id })}
                   disabled={joining}
-                  className="ms-auto h-11 cursor-pointer border-[#0878F9] text-[#0878F9] hover:bg-[#0878F9]/10 hover:text-[#0878F9]"
+                  className="ms-auto h-11 cursor-pointer"
                 >
                   ورود
                 </Button>
@@ -450,7 +552,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-muted-foreground text-center">هر اتاق حداکثر ۲۰ نفر ظرفیت دارد.</p>
+      <p className="text-[11px] text-muted-foreground text-center">هر اتاق حداکثر ۳۰ نفر ظرفیت دارد.</p>
     </div>
   )
 }
@@ -465,12 +567,20 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
   const [busy, setBusy] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
   const [consentOpen, setConsentOpen] = React.useState(false)
+  const [showMembers, setShowMembers] = React.useState(false)
 
   const load = React.useCallback(async () => {
     try {
       const res = await apiFetch<RoomDetail>(`/api/study/rooms/${roomId}`)
+
       setDetail(res)
       setNow(Date.parse(res.serverNow))
+
+      try {
+        window.localStorage.setItem("study:last-room", roomId)
+      } catch {
+        /* ignore */
+      }
     } catch {
       /* keep previous on offline blips */
     } finally {
@@ -531,15 +641,11 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       // Native progress ping: the timer lives on the server clock, but the
       // user only trusts what the phone tells them — a system notification
       // marks start/stop even outside the app. Best-effort, never blocking.
-      if (path === "stop" && isNativeApp()) {
+      if (path === "stop") {
         const mins = Math.max(1, Math.round(elapsed / 60000))
 
-        void scheduleNativeNotification(undefined, {
-          id: 12,
-          title: "نشست مطالعه ثبت شد",
-          body: `${mins} دقیقه به امروزت اضافه شد.`,
-          delayMs: 1000,
-        })
+        await clearTimerNotification()
+        await showTimerSummary(mins)
       }
 
       await load()
@@ -554,9 +660,16 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     }
   }
 
-  // First start explains background truth + takes notification permission
-  // (native) — once per device, remembered in localStorage.
+  // First start explains background truth + takes notification permission.
+  // Android-APK only: on the website this flow does not exist — starting is
+  // immediate (the server clock keeps the time everywhere regardless).
   const requestStart = () => {
+    if (!isNativeApp()) {
+      void beginFocusedSession()
+
+      return
+    }
+
     try {
       if (window.localStorage.getItem("study:bg-consent") === "1") {
         void beginFocusedSession()
@@ -578,17 +691,18 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     }
 
     setConsentOpen(false)
+    await act("start", { roomId })
 
+    // Ongoing shade presence (native only, no-op on web): the notice stays
+    // while the session lives and carries a توقف action.
     if (isNativeApp()) {
-      await scheduleNativeNotification(undefined, {
-        id: 11,
-        title: "تایمر مطالعه شروع شد",
-        body: "می‌توانی برنامه را ببندی — زمانت روی سرور نگه داشته می‌شود.",
-        delayMs: 1000,
+      await showTimerNotification({
+        roomId,
+        roomName: detail?.room.name ?? "اتاق مطالعه",
+        body: "تایمر روشن شد — زمانت روی سرور نگه داشته می‌شود.",
+        ongoing: true,
       })
     }
-
-    await act("start", { roomId })
   }
 
   const leave = async () => {
@@ -596,6 +710,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
 
     try {
       await apiFetch(`/api/study/rooms/${roomId}/leave`, { method: "POST", body: JSON.stringify({}) })
+      await clearTimerNotification()
       go({ name: "rooms" })
     } catch (err) {
       toast({
@@ -605,6 +720,46 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       })
     }
   }
+
+  // Shade-notice lifecycle (native only): re-show after a process kill,
+  // refresh the elapsed text every minute, and mirror pause state.
+  const sessionStatus = detail?.mySession?.status ?? null
+  const roomName = detail?.room.name ?? "اتاق مطالعه"
+  const elapsedRef = React.useRef(elapsed)
+
+  elapsedRef.current = elapsed
+
+  React.useEffect(() => {
+    if (!isNativeApp() || !detail?.mySession) return
+
+    const session = detail.mySession
+    const mins = Math.max(0, Math.round(elapsedRef.current / 60000))
+
+    void showTimerNotification({
+      roomId,
+      roomName,
+      body:
+        session.status === "PAUSED"
+          ? `متوقف شده در ${formatDur(mins)} — برای ادامه وارد شو.`
+          : `${formatDur(mins)} مطالعه تا اینجا — در حال اجرا.`,
+      ongoing: true,
+    })
+
+    if (session.status !== "ACTIVE") return
+
+    const id = window.setInterval(() => {
+      const nowMin = Math.max(0, Math.round(elapsedRef.current / 60000))
+
+      void showTimerNotification({
+        roomId,
+        roomName,
+        body: `${formatDur(nowMin)} مطالعه تا اینجا — در حال اجرا.`,
+        ongoing: true,
+      })
+    }, 60000)
+
+    return () => window.clearInterval(id)
+  }, [roomId, roomName, sessionStatus])
 
   if (loading && !detail) {
     return (
@@ -642,17 +797,36 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       </button>
 
       <div className="text-center">
-        <h1 className="text-xl font-bold">{detail.room.name}</h1>
+        {/* Tapping the name reveals the member roster (with study
+            activity for everyone; remove buttons for the owner). */}
+        <button
+          type="button"
+          onClick={() => setShowMembers((v) => !v)}
+          aria-expanded={showMembers}
+          className="cursor-pointer rounded-lg px-2 py-1 hover:bg-accent/50 transition-colors"
+        >
+          <h1 className="text-xl font-bold inline">{detail.room.name}</h1>
+          <ChevronDown className={cn("size-4 inline-block ms-1 transition-transform", showMembers && "rotate-180")} />
+        </button>
         <p className="text-xs text-muted-foreground mt-0.5">
           <FaNum>{detail.room.memberCount}</FaNum> نفر · <FaNum>{detail.room.studyingNow}</FaNum> نفر در حال مطالعه
         </p>
       </div>
 
+      {showMembers && (
+        <MemberRoster
+          roomId={detail.room.id}
+          rows={detail.leaderboard}
+          isOwner={detail.room.isOwner}
+          onChanged={() => void load()}
+        />
+      )}
+
       <div className="flex items-center gap-2 justify-center">
         <span
           className={cn(
             "text-[11px] rounded-full px-3 py-1",
-            detail.room.type === "COMPETITIVE" ? "bg-[#0878F9]/10 text-[#0878F9]" : "bg-success/10 text-success",
+            detail.room.type === "COMPETITIVE" ? "bg-primary/10 text-primary" : "bg-success/10 text-success",
           )}
         >
           {detail.room.type === "COMPETITIVE" ? "رقابتی" : "دوستانه"}
@@ -667,7 +841,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
                 window.setTimeout(() => setCopied(false), 1500)
               }).catch(() => toast({ title: `کد دعوت: ${code}` }))
             }}
-            className="inline-flex items-center gap-1.5 min-h-[44px] text-[11px] rounded-full px-3 py-1 border border-dashed border-[#0878F9] text-[#0878F9] cursor-pointer"
+            className="inline-flex items-center gap-1.5 min-h-[44px] text-[11px] rounded-full px-3 py-1 border border-dashed border-primary text-primary cursor-pointer"
             dir="ltr"
           >
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
@@ -699,7 +873,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
             <Button
               onClick={requestStart}
               disabled={busy}
-              className="h-12 px-8 cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9]"
+              className="h-12 px-8 cursor-pointer"
             >
               <Play className="size-4" />
               شروع مطالعه
@@ -717,7 +891,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
             </>
           ) : (
             <>
-              <Button onClick={() => void act("resume")} disabled={busy} className="h-12 px-8 cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9]">
+              <Button onClick={() => void act("resume")} disabled={busy} className="h-12 px-8 cursor-pointer">
                 <Play className="size-4" />
                 ادامه
               </Button>
@@ -749,10 +923,10 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
               key={r.id}
               className={cn(
                 "flex items-center gap-3 rounded-xl border p-3",
-                r.isMe ? "border-[#0878F9] bg-[#0878F9]/5" : "border-border bg-card",
+                r.isMe ? "border-primary bg-primary/5" : "border-border bg-card",
               )}
             >
-              <span className={cn("text-sm font-bold w-5 text-center tabular-nums", i === 0 ? "text-[#0878F9]" : "text-muted-foreground")}>
+              <span className={cn("text-sm font-bold w-5 text-center tabular-nums", i === 0 ? "text-primary" : "text-muted-foreground")}>
                 <FaNum>{i + 1}</FaNum>
               </span>
               <Avatar name={r.name} avatar={r.avatarBase64} size="size-10" />
@@ -821,8 +995,89 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
   )
 }
 
-// ---------------- Create ----------------
+/**
+ * Member roster: tapping the room name reveals it. Everyone sees names,
+ * avatars and today-activity; the owner additionally gets remove buttons.
+ */
+function MemberRoster({
+  roomId,
+  rows,
+  isOwner,
+  onChanged,
+}: {
+  roomId: string
+  rows: LeaderRow[]
+  isOwner: boolean
+  onChanged: () => void
+}) {
+  const { toast } = useToast()
+  const [removing, setRemoving] = React.useState<string | null>(null)
 
+  const remove = async (row: LeaderRow) => {
+    if (!confirm(`«${row.name}» از اتاق حذف شود؟`)) return
+
+    setRemoving(row.id)
+
+    try {
+      await apiFetch(`/api/study/rooms/${roomId}/members/${row.id}/remove`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      })
+      toast({ title: "عضو حذف شد" })
+      onChanged()
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "حذف ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-3 space-y-1">
+      <p className="text-xs text-muted-foreground px-1 pb-1">
+        اعضای اتاق — فعالیت امروز همه اعضا برای همه قابل مشاهده است.
+      </p>
+      <ul className="space-y-1">
+        {rows.map((r) => (
+          <li key={r.id} className="flex items-center gap-2.5 rounded-xl px-2 py-2 hover:bg-accent/40 transition-colors">
+            <Avatar name={r.name} avatar={r.avatarBase64} size="size-9" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {r.isMe ? "تو" : r.name}
+              </p>
+              <p className={cn("text-[11px] tabular-nums", r.status === "studying" ? "text-success" : "text-muted-foreground")}>
+                <FaNum>{formatDur(r.todayMin)}</FaNum> امروز ·{" "}
+                {r.status === "studying" ? "در حال مطالعه" : "استراحت"}
+              </p>
+            </div>
+            {isOwner && !r.isMe && (
+              <button
+                type="button"
+                onClick={() => void remove(r)}
+                disabled={removing === r.id}
+                aria-label={`حذف ${r.name}`}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+              >
+                {removing === r.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <UserMinus className="size-4" />
+                )}
+              </button>
+            )}
+            {r.status === "studying" && <span className="size-2 rounded-full bg-success motion-safe:animate-pulse shrink-0" />}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// ---------------- Create ----------------
 function CreateScreen({ go }: { go: (s: SubView) => void }) {
   const { toast } = useToast()
   const [name, setName] = React.useState("")
@@ -915,10 +1170,10 @@ function CreateScreen({ go }: { go: (s: SubView) => void }) {
           <Button
             type="button"
             size="icon"
-            onClick={() => setCapacity((c) => Math.min(20, c + 1))}
-            disabled={capacity >= 20}
+            onClick={() => setCapacity((c) => Math.min(30, c + 1))}
+            disabled={capacity >= 30}
             aria-label="افزایش ظرفیت"
-            className="rounded-full cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9] size-11"
+            className="rounded-full cursor-pointer size-11"
           >
             <Plus className="size-4" />
           </Button>
@@ -953,7 +1208,7 @@ function CreateScreen({ go }: { go: (s: SubView) => void }) {
       <Button
         onClick={() => void submit()}
         disabled={name.trim().length < 2 || saving}
-        className="w-full h-12 cursor-pointer bg-gradient-to-l from-[#18A8FF] to-[#0878F9]"
+        className="w-full h-12 cursor-pointer"
       >
         {saving && <Loader2 className="size-4 animate-spin" />}
         ساخت اتاق

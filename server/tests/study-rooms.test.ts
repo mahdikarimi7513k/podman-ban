@@ -2,14 +2,15 @@
  * Study rooms E2E (HTTP seam): create → join via invite code → focus timer
  * lifecycle (start/pause/resume/stop) → overview + leaderboard.
  *
- * Also covers: capacity cap (20), non-member start rejection, unauth 401s.
+ * Also covers: capacity cap (30), non-member start rejection, owner member
+ * management + ownership transfer, unauth 401s.
  */
 import { describe, it, expect, beforeAll } from "vitest"
 import { eq } from "drizzle-orm"
 import { login, ensureUser } from "./helpers.js"
 import { ensureFixtures, PASSWORD } from "./fixtures.js"
 import { db } from "../src/lib/db.js"
-import { studyMembers, studyRooms } from "../src/lib/db/schema.js"
+import { studyMembers, studyRooms, users } from "../src/lib/db/schema.js"
 
 beforeAll(ensureFixtures)
 
@@ -34,7 +35,7 @@ describe("study rooms", () => {
     const s = await studentSession("owner2")
     const short = await s.post("/api/study/rooms", { name: "x" })
     expect(short.status).toBe(422)
-    const over = await s.post("/api/study/rooms", { name: "big", capacity: 21 })
+    const over = await s.post("/api/study/rooms", { name: "big", capacity: 31 })
     expect(over.status).toBe(422)
   })
 
@@ -70,7 +71,66 @@ describe("study rooms", () => {
     expect((await outsider.post("/api/study/rooms/join", { inviteCode: created.body.room.inviteCode })).status).toBe(200)
   })
 
-  it("enforces the 20-member capacity", async () => {
+  it("lets the owner remove a member (and stops their timer)", async () => {
+    const owner = await studentSession("owner8")
+    const created = await owner.post("/api/study/rooms", { name: "managed", capacity: 5, requireInvite: false })
+    const roomId: string = created.body.room.id
+    const guest = await studentSession("guest8")
+    const joinRes = await guest.post("/api/study/rooms/join", { roomId })
+
+    expect(joinRes.status).toBe(200)
+    await guest.post("/api/study/session/start", { roomId })
+
+    const guestRow = await db.select({ id: users.id }).from(users).where(eq(users.username, "study_guest8")).get()
+
+    if (!guestRow) throw new Error("guest missing")
+
+    const removed = await owner.post(`/api/study/rooms/${roomId}/members/${guestRow.id}/remove`, {})
+
+    expect(removed.status).toBe(200)
+
+    const detail = await owner.get(`/api/study/rooms/${roomId}`)
+
+    expect(detail.body.room.memberCount).toBe(1)
+    expect(detail.body.leaderboard.some((r: { id: string }) => r.id === guestRow.id)).toBe(false)
+
+    const active = await guest.get("/api/study/session/active")
+
+    expect(active.body.session).toBeNull()
+  })
+
+  it("refuses member removal to non-owners and self-removal", async () => {
+    const owner = await studentSession("owner9")
+    const created = await owner.post("/api/study/rooms", { name: "managed2", capacity: 5, requireInvite: false })
+    const roomId: string = created.body.room.id
+    const guest = await studentSession("guest9")
+
+    await guest.post("/api/study/rooms/join", { roomId })
+
+    const ownerRow = await db.select({ id: users.id }).from(users).where(eq(users.username, "study_owner9")).get()
+
+    if (!ownerRow) throw new Error("owner missing")
+
+    expect((await guest.post(`/api/study/rooms/${roomId}/members/${ownerRow.id}/remove`, {})).status).toBe(403)
+    expect((await owner.post(`/api/study/rooms/${roomId}/members/${ownerRow.id}/remove`, {})).status).toBe(400)
+  })
+
+  it("transfers ownership to the earliest member when the owner leaves", async () => {
+    const owner = await studentSession("owner10")
+    const created = await owner.post("/api/study/rooms", { name: "managed3", capacity: 5, requireInvite: false })
+    const roomId: string = created.body.room.id
+    const guest = await studentSession("guest10")
+
+    await guest.post("/api/study/rooms/join", { roomId })
+    expect((await owner.post(`/api/study/rooms/${roomId}/leave`, {})).status).toBe(200)
+
+    const guestRow = await db.select({ id: users.id }).from(users).where(eq(users.username, "study_guest10")).get()
+    const roomRow = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
+
+    expect(roomRow?.ownerId).toBe(guestRow?.id)
+  })
+
+  it("enforces the 30-member capacity", async () => {
     const owner = await studentSession("owner5")
     const created = await owner.post("/api/study/rooms", { name: "tiny", capacity: 2, requireInvite: false })
     const roomId: string = created.body.room.id
