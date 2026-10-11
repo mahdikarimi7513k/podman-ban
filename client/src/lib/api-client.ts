@@ -32,10 +32,13 @@ export const UPLOAD_TIMEOUT_MS = 120000
 
 function readCsrfCookie(): string | null {
   const raw = document.cookie
+
   for (const part of raw.split(";")) {
     const [k, ...v] = part.trim().split("=")
+
     if (k === "pb_csrf") return decodeURIComponent(v.join("="))
   }
+
   return null
 }
 
@@ -59,6 +62,7 @@ async function doRefresh(): Promise<boolean> {
         method: "POST",
         credentials: "include",
       })
+
       return res.ok
     } catch {
       return false
@@ -66,6 +70,7 @@ async function doRefresh(): Promise<boolean> {
       refreshing = null
     }
   })()
+
   return refreshing
 }
 
@@ -78,6 +83,44 @@ export function refreshSession(): Promise<boolean> {
   return doRefresh()
 }
 
+type SessionDeadHandler = () => void
+
+let deadHandler: SessionDeadHandler | null = null
+
+let lastDeadNotify = 0
+
+/** The app shell registers its sign-out here (avoids a store import cycle). */
+export function onSessionDead(handler: SessionDeadHandler): void {
+  deadHandler = handler
+}
+
+/**
+ * A 401 that survived a refresh means the session itself is gone (deleted
+ * account, password change, 30-day expiry). Verify once with a raw /me
+ * (no retry, no recursion) and notify at most every 30s.
+ */
+async function checkSessionDead(input: string): Promise<void> {
+  if (!deadHandler) return
+
+  if (input.includes("/api/auth/")) return
+
+  if (Date.now() - lastDeadNotify < 30_000) return
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (res.status === 401) {
+      lastDeadNotify = Date.now()
+      deadHandler()
+    }
+  } catch {
+    /* offline — not a dead session */
+  }
+}
+
 export async function apiFetch<T = unknown>(
   input: string,
   init: RequestInit = {},
@@ -86,11 +129,14 @@ export async function apiFetch<T = unknown>(
   const isMutation = method !== "GET" && method !== "HEAD"
 
   const headers = new Headers(init.headers)
+
   if (init.body && !headers.has("content-type")) {
     headers.set("content-type", "application/json")
   }
+
   if (isMutation) {
     const csrf = readCsrfCookie()
+
     if (csrf) headers.set("x-csrf-token", csrf)
   }
 
@@ -119,33 +165,52 @@ export async function apiFetch<T = unknown>(
   }
 
   // Expired access token → try one refresh, then retry.
+  // refreshFailed tracks a dead refresh (deleted user, 30d expiry,
+  // password change): retrying further is pointless, and the session is
+  // over — the owner below sends the user back to login instead of
+  // leaving them in a dead session that 401s forever.
+  let refreshFailed = false
+
   if (res.status === 401 && isMutation === false) {
     // GET 401 → maybe access expired
     const ok = await doRefresh()
+
     if (ok) res = await doFetch()
+    else refreshFailed = true
   } else if (res.status === 401 && isMutation) {
     // For mutations we still try refresh once (CSRF may survive since user id stable).
     const ok = await doRefresh()
+
     if (ok) {
       // re-read csrf (should be unchanged) and retry
       const csrf = readCsrfCookie()
+
       if (csrf) headers.set("x-csrf-token", csrf)
       res = await doFetch()
+    } else {
+      refreshFailed = true
     }
   }
 
   if (!res.ok) {
+    if (res.status === 401 && refreshFailed) void checkSessionDead(input)
+
     let body: unknown = null
+
     try {
       body = await res.json()
     } catch {
       /* ignore */
     }
+
     let message = `خطای ${res.status}`
+
     if (body && typeof body === "object" && "error" in body) {
       const serverError = (body as Record<string, unknown>).error
+
       if (typeof serverError === "string" && serverError) message = serverError
     }
+
     throw new ApiError(message, res.status, body)
   }
 
@@ -204,6 +269,7 @@ function isNativeApp(): boolean {
     androidBridge?: unknown
     webkit?: { messageHandlers?: { bridge?: unknown } }
   }
+
   return !!w.androidBridge || !!w.webkit?.messageHandlers?.bridge
 }
 
@@ -212,8 +278,10 @@ async function fileToBase64(file: File): Promise<string> {
   // Chunked: btoa on one giant string blows the call stack past ~100k chars.
   let bin = ""
   const CHUNK = 0x8000
+
   for (let i = 0; i < bytes.length; i += CHUNK) {
     bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
   }
+
   return btoa(bin)
 }

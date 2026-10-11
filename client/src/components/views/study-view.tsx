@@ -27,12 +27,14 @@ import {
   Flag,
   Footprints,
   CalendarDays,
+  Medal,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { useApp } from "@/lib/store"
 import {
   Dialog,
   DialogContent,
@@ -155,6 +157,7 @@ export function StudyView() {
 // Academic-year window for the journey strip: each of the 12 segments is
 // roughly a month of the road from شروع to کنکور.
 const KONKUR_WINDOW_DAYS = 365
+
 const KONKUR_SEGMENTS = 12
 
 /**
@@ -317,9 +320,21 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">اتاق مطالعه</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">تا کنکور چقدر مانده و امروز چقدر خوندی</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">اتاق مطالعه</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">تا کنکور چقدر مانده و امروز چقدر خوندی</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => useApp.getState().setView("achievements")}
+          className="h-11 shrink-0 cursor-pointer"
+          aria-label="دستاوردها"
+        >
+          <Medal className="size-4" strokeWidth={ICON_STROKE} />
+          دستاوردها
+        </Button>
       </div>
 
       {/* Countdown card — matches the reference design exactly. */}

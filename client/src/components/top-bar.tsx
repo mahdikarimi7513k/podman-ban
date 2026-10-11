@@ -1,8 +1,7 @@
 
-import { Archive, Calculator, GraduationCap, ShieldCheck, Trophy, Award } from "lucide-react"
+import { Archive, Calculator, GraduationCap, ShieldCheck, Trophy } from "lucide-react"
 import { useApp } from "@/lib/store"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { FaNum } from "@/components/fa-utils"
 import { cn, ICON_STROKE, ICON_STROKE_ACTION } from "@/lib/utils";
 
 export function TopBar() {
@@ -35,11 +34,6 @@ export function TopBar() {
         {/* shrink-0 keeps every 36px hit area intact on narrow screens
             while the brand side truncates instead of overflowing. */}
         <div className="flex items-center gap-1 shrink-0">
-          {user && (
-            <span className="hidden xs:inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
-              <FaNum>{user.totalTests}</FaNum>&nbsp;آزمون
-            </span>
-          )}
           <button
             type="button"
             onClick={() => setView("archive")}
@@ -81,20 +75,6 @@ export function TopBar() {
             )}
           >
             <Trophy className="size-4" strokeWidth={ICON_STROKE} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("achievements")}
-            aria-label="دستاوردها"
-            title="دستاوردها"
-            className={cn(
-              "inline-flex size-9 items-center justify-center rounded-md transition-colors cursor-pointer",
-              view === "achievements"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <Award className="size-4" strokeWidth={ICON_STROKE} />
           </button>
           {(user?.role === "ADMIN" || user?.role === "CONTENT_ADMIN") && (
             <button

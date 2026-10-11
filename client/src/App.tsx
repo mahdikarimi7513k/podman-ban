@@ -23,11 +23,34 @@ import { HomeView } from "@/components/views/home-view"
 
 // Views off the critical path load on demand — keeps the initial module
 // graph small in dev and produces per-view chunks in the production build.
+async function reloadOnceOnChunkError(): Promise<void> {
+  // Stale hashed chunk after a host deploy (cached index.html points at
+  // a deleted file): reload once for the fresh index instead of a black
+  // screen. The flag caps it at one reload per session; a second failure
+  // (e.g. offline) falls through to the error boundary.
+  try {
+    if (!window.sessionStorage.getItem("pb_chunk_reloaded")) {
+      window.sessionStorage.setItem("pb_chunk_reloaded", "1")
+      window.location.reload()
+
+      await new Promise(() => {})
+    }
+  } catch {
+    /* storage unavailable — fall through */
+  }
+}
+
 function lazyNamed(loader: () => Promise<Record<string, unknown>>, name: string) {
   return React.lazy(async () => {
-    const mod = await loader()
+    try {
+      const mod = await loader()
 
-    return { default: mod[name] as React.ComponentType }
+      return { default: mod[name] as React.ComponentType }
+    } catch {
+      await reloadOnceOnChunkError()
+
+      throw new Error("chunk load failed")
+    }
   })
 }
 
@@ -57,7 +80,11 @@ const StudyView = lazyNamed(() => import("@/components/views/study-view"), "Stud
 
 // Takes a `message` prop — direct lazy() keeps its real prop types.
 const MaintenanceView = React.lazy(() =>
-  import("@/components/views/maintenance-view").then((m) => ({ default: m.MaintenanceView })),
+  import("@/components/views/maintenance-view").then((m) => ({ default: m.MaintenanceView })).catch(async (err) => {
+    await reloadOnceOnChunkError()
+
+    throw err
+  }),
 )
 
 function ViewFallback() {
