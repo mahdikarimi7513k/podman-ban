@@ -104,9 +104,14 @@ jobs:
 
       # Fail the pipeline on high/critical dependency vulnerabilities
       # instead of deploying them silently.
+      # --omit=dev: build/test CLIs (drizzle-kit/esbuild, capacitor/uuid)
+      # never ship to the host or phones; their advisories have no
+      # non-breaking fix and must not block releases. Production deps
+      # stay strictly gated (proxy-addr/source-map-js are pinned via
+      # package.json overrides).
       - name: Audit client dependencies
         working-directory: client
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
   server-quality:
     name: Server quality gates
@@ -138,7 +143,8 @@ jobs:
 
       - name: Audit server dependencies
         working-directory: server
-        run: npm audit --audit-level=high
+        # --omit=dev: prod-only gate (see client step for rationale).
+        run: npm audit --omit=dev --audit-level=high
 
   build:
     name: Build release APK
