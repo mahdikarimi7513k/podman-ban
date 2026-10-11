@@ -7,7 +7,7 @@
  *  - Navigations: network-first, fall back to the cached shell when offline.
  *  - Static assets (/assets, /fonts, icons): stale-while-revalidate.
  */
-const VERSION = "pb-v3";
+const VERSION = "pb-v4";
 
 const ASSET_CACHE = `${VERSION}-assets`;
 
@@ -17,7 +17,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(PAGE_CACHE)
-      .then((cache) => cache.addAll(["/", "/offline.html"]))
+      .then((cache) => cache.addAll(["/"]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -57,12 +57,7 @@ self.addEventListener("fetch", (event) => {
 
           return res;
         })
-        .catch(() =>
-          caches
-            .match("/")
-            .then((cached) => cached ?? caches.match("/offline.html"))
-            .then((page) => page ?? Response.error()),
-        ),
+        .catch(() => caches.match("/").then((page) => page ?? Response.error())),
     );
 
     return;

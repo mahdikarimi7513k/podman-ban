@@ -150,12 +150,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate api_base is https
+      - name: Validate inputs
+        env:
+          API_BASE: ${{ inputs.api_base }}
+          APP_ID: ${{ inputs.app_id }}
         run: |
-          case "${{ inputs.api_base }}" in
-            https://*) echo "✅ https OK" ;;
-            *) echo "❌ api_base باید با https:// شروع شود (androidScheme=https + allowMixedContent=false)"; exit 1 ;;
+          case "$API_BASE" in
+            https://*) echo "https OK" ;;
+            *) echo "api_base must start with https:// (androidScheme=https + allowMixedContent=false)"; exit 1 ;;
           esac
+          if ! printf '%s' "$APP_ID" | grep -Eq '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'; then
+            echo "app_id must look like com.example.app (used in file paths and URL scheme)"; exit 1
+          fi
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -228,9 +234,9 @@ jobs:
           echo "WEB_DIR=$W" >> $GITHUB_ENV
           echo "webDir = $W"
 
-      # Project-specific bundle gate: the study room, offline page, service
-      # worker and manifest power the headline features — a build that drops
-      # any of them (stale cache, renamed chunk) must fail here, not on a phone.
+      # Project-specific bundle gate: the study room, service worker and
+      # manifest power the headline features — a build that drops any of
+      # them (stale cache, renamed chunk) must fail here, not on a phone.
       - name: Verify release bundle contents
         working-directory: client
         env:
@@ -239,114 +245,11 @@ jobs:
           set -e
           D="${WEB_DIR:-dist}"
           test -f "$D/index.html" || { echo "❌ $D/index.html missing"; exit 1; }
-          test -f "$D/offline.html" || { echo "❌ offline.html missing (offline fallback broken)"; exit 1; }
           test -f "$D/sw.js" || { echo "❌ sw.js missing (offline cache broken)"; exit 1; }
           test -f "$D/manifest.webmanifest" || { echo "❌ manifest missing (install prompt broken)"; exit 1; }
           ls "$D"/assets/study-view-*.js >/dev/null || { echo "❌ study-view chunk missing (study rooms broken)"; exit 1; }
           test -f "$D/icon.svg" || { echo "❌ icon.svg missing"; exit 1; }
-          echo "✅ bundle complete: shell + offline + sw + manifest + study rooms + icon"
-
-      # Branded offline fallback (offline.html ships from client/public via
-      # vite; regenerate here only if somehow missing). Capacitor shows it
-      # through server.errorPath when the remote site is unreachable.
-      - name: Ensure offline fallback page
-        working-directory: client
-        env:
-          WEB_DIR: ${{ env.WEB_DIR }}
-        run: |
-          set -e
-          if [ -f "$WEB_DIR/offline.html" ]; then
-            echo "✅ offline.html already in $WEB_DIR"
-            exit 0
-          fi
-          cat > "$WEB_DIR/offline.html" <<'EOF'
-          <!DOCTYPE html>
-          <html lang="fa" dir="rtl">
-          <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>عدم اتصال به اینترنت</title>
-            <style>
-              * { margin:0; padding:0; box-sizing:border-box; }
-              body {
-                min-height:100vh; display:flex; align-items:center; justify-content:center;
-                font-family:Tahoma, sans-serif; text-align:center; padding:24px;
-                background:linear-gradient(135deg,#18A8FF,#0878F9 50%,#003CCB); color:#fff;
-              }
-              .card { max-width:420px; width:100%; }
-              .icon { width:110px; height:110px; margin:0 auto 24px; background:#fff;
-                      border-radius:28px; display:flex; align-items:center; justify-content:center;
-                      box-shadow:0 10px 30px rgba(0,0,0,.25); }
-              .icon svg { width:70px; height:70px; }
-              h1 { font-size:22px; margin-bottom:12px; }
-              p { font-size:15px; opacity:.92; line-height:2; margin-bottom:28px; }
-              button {
-                border:none; outline:none; cursor:pointer; font-family:inherit; font-size:16px;
-                background:#fff; color:#0878F9; font-weight:bold; padding:14px 44px;
-                border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.2);
-              }
-              button:active { transform:scale(.97); }
-              .status { margin-top:18px; font-size:13px; opacity:.8; min-height:18px; }
-            </style>
-          </head>
-          <body>
-            <div class="card">
-              <div class="icon">
-                <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-                  <g fill="#0878F9">
-                    <path d="M90 220L256 125L422 220L256 315L90 220Z"/>
-                    <path fill-rule="evenodd" d="M150 260V320C150 365 197 390 256 390C315 390 362 365 362 320V260L256 325L150 260Z M175 285V320C175 340 210 355 256 355C302 355 337 340 337 320V285L256 335L175 285Z"/>
-                    <circle cx="390" cy="325" r="18"/>
-                    <path d="M375 345L405 345L414 395C405 410 375 410 366 395L375 345Z"/>
-                  </g>
-                  <path d="M390 210V310" stroke="#0878F9" stroke-width="14" stroke-linecap="round" fill="none"/>
-                </svg>
-              </div>
-              <h1>به اینترنت متصل نیستی!</h1>
-              <p>پودمان‌بان برای کار کردن به اینترنت نیاز دارد.<br>لطفاً اینترنت گوشی را روشن کن و دوباره تلاش کن.</p>
-              <button onclick="retry()">تلاش مجدد</button>
-              <div class="status" id="status"></div>
-            </div>
-            <script>
-              // Same logic as client/public/offline.html (single source).
-              // Retry navigates to the real server URL (injected below) so
-              // the user never leaves the app WebView.
-              var API_BASE = "__API_BASE__";
-              function apiUrl() {
-                return (typeof API_BASE === "string" && API_BASE.indexOf("https://") === 0)
-                  ? API_BASE
-                  : null;
-              }
-              function retry() {
-                var u = apiUrl();
-                if (u) location.href = u;
-                else location.reload();
-              }
-              var s = document.getElementById('status');
-              function upd() {
-                s.textContent = navigator.onLine ? 'اینترنت وصل شد — در حال اتصال...' : 'در انتظار اتصال اینترنت...';
-              }
-              window.addEventListener('online', function(){ upd(); setTimeout(retry, 800); });
-              window.addEventListener('offline', upd);
-              setInterval(function(){ if (navigator.onLine) retry(); }, 5000);
-              upd();
-            </script>
-          </body>
-          </html>
-          EOF
-          echo "✅ offline.html generated in $WEB_DIR"
-
-      # Bake the real server URL into the offline page so "retry" navigates
-      # back inside the app WebView instead of reloading the error page
-      # (which on some setups escapes to an external browser).
-      - name: Inject api_base into offline page
-        working-directory: client
-        env:
-          WEB_DIR: ${{ env.WEB_DIR }}
-          API_BASE: ${{ inputs.api_base }}
-        run: |
-          sed -i "s#__API_BASE__#${API_BASE}#g" "$WEB_DIR/offline.html"
-          grep -c "$API_BASE" "$WEB_DIR/offline.html"
+          echo "✅ bundle complete: shell + sw + manifest + study rooms + icon"
 
       - name: Write Capacitor config (package name + cookies)
         working-directory: client
@@ -381,10 +284,19 @@ jobs:
           }
           # منشأ وب‌ویو اندروید https://localhost می‌شود؛
           # سرور باید COOKIE_SAMESITE=none (+ Secure اجباری) بدهد.
-          # errorPath: صفحه آفلاین برند هنگام unreachable بودن سایت.
-          server = {**(cfg.get('server') or {}), 'androidScheme': 'https',
-                    'errorPath': 'offline.html'}
+          # allowNavigation: وب‌ویو فقط حق ناوبری به دامنهٔ خودمان را دارد —
+          # اگر سایت (حالت remote) هک شود، مهاجم نمی‌تواند کاربر را به
+          # دامنهٔ خارجی ببرد و پلاگین‌های native را سوءاستفاده کند.
+          from urllib.parse import urlparse
+          api_origin = urlparse(os.environ['API_BASE'])
+          api_origin = f"{api_origin.scheme}://{api_origin.netloc}" if api_origin.netloc else ""
+          server = {**(cfg.get('server') or {}), 'androidScheme': 'https'}
+          server.pop('errorPath', None)
           server.pop('cleartext', None)
+          if api_origin:
+              server['allowNavigation'] = [api_origin]
+          else:
+              server.pop('allowNavigation', None)
           if os.environ['LOAD_MODE'] == 'remote':
               server['url'] = os.environ['API_BASE']
           else:
@@ -395,7 +307,7 @@ jobs:
           print('appId =', cfg['appId'], '| mode =', os.environ['LOAD_MODE'])
           print('plugins =', json.dumps(cfg['plugins']))
           print('server.url =', server.get('url', '(local assets)'))
-          print('server.errorPath =', server.get('errorPath'))
+          print('server.allowNavigation =', server.get('allowNavigation'))
           PYEOF
 
       # --- مسیر اشتباه icon.svg را جبران کن ---
@@ -699,9 +611,18 @@ jobs:
             dims=$($MX "$f" -format "%wx%h" info:)
             W=${dims%x*}; H=${dims#*x}
             S=$(( ( W < H ? W : H ) * 45 / 100 ))
-            $MX -size ${W}x${H} xc:black \
+            # Brand backdrop (was plain black): blue gradient + centered icon
+            # + a loading bar, so launch feels like the app itself loading.
+            BW=$(( W * 40 / 100 )); BH=$(( H * 1 / 100 )); BH=$(( BH < 8 ? 8 : BH ))
+            BY=$(( H * 72 / 100 ))
+            $MX -size ${W}x${H} gradient:'#18A8FF-#003CCB' \
               \( /tmp/icon_rounded.png -resize ${S}x${S} \) \
-              -gravity center -compose over -composite "$f"
+              -gravity center -compose over -composite \
+              -fill 'rgba(255,255,255,0.25)' \
+              -draw "roundrectangle $(( (W-BW)/2 )),$BY $(( (W+BW)/2 )),$((BY+BH)) 6,6" \
+              -fill white \
+              -draw "roundrectangle $(( (W-BW)/2 )),$BY $(( (W-BW)/2 + BW*38/100 )),$((BY+BH)) 6,6" \
+              "$f"
             echo "  ✔ $f (${W}x${H})"
           done
 
