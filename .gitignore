@@ -35,3 +35,22 @@ server/dist-server/
 # redundant binaries (git is the source archive) — never commit either
 deploy/prisma/*.db*
 *.zip
+
+# local-only junk — never push: figma tooling+previews, agent workspaces,
+# skill installs, analysis caches, on-disk deploy bundles, screenshots
+.figma-*.mjs
+.figma-*.cjs
+.figma-export/
+.figma-preview/
+.figma-r3/
+.agent/
+.agents/
+.claude/
+.codex/
+.grok/
+.opencode/
+AGENTS.md
+CLAUDE.md
+graphify-out/
+deploy-bundle-no-db/
+v-*.png

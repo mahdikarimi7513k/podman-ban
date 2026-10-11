@@ -94,6 +94,17 @@ export function onSessionDead(handler: SessionDeadHandler): void {
   deadHandler = handler
 }
 
+type SiteLockedHandler = () => void
+
+let lockedHandler: SiteLockedHandler | null = null
+
+let lastLockedNotify = 0
+
+/** The app shell refreshes remote config here so an admin lock lands promptly. */
+export function onSiteLocked(handler: SiteLockedHandler): void {
+  lockedHandler = handler
+}
+
 /**
  * A 401 that survived a refresh means the session itself is gone (deleted
  * account, password change, 30-day expiry). Verify once with a raw /me
@@ -201,6 +212,21 @@ export async function apiFetch<T = unknown>(
       body = await res.json()
     } catch {
       /* ignore */
+    }
+
+    // Admin locked the site mid-session: pull fresh config so the
+    // maintenance screen replaces the app instead of 503-spinning.
+    // Throttled — every poll/fetch would otherwise refetch config.
+    if (
+      res.status === 503 &&
+      lockedHandler &&
+      Date.now() - lastLockedNotify > 5_000 &&
+      body &&
+      typeof body === "object" &&
+      (body as { code?: unknown }).code === "SITE_LOCKED"
+    ) {
+      lastLockedNotify = Date.now()
+      lockedHandler()
     }
 
     let message = `خطای ${res.status}`

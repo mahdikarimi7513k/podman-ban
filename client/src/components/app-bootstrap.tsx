@@ -1,7 +1,7 @@
 
 import * as React from "react"
 import { useApp } from "@/lib/store"
-import { onSessionDead } from "@/lib/api-client"
+import { onSessionDead, onSiteLocked } from "@/lib/api-client"
 import { showBroadcastOnce, startBroadcastWatcher } from "@/lib/notify-inbox"
 import { startDailyGoalReminder } from "@/lib/daily-goal-reminder"
 import { installErrorReporting } from "@/lib/error-report"
@@ -34,15 +34,27 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
       void useApp.getState().signOut()
       toast({ title: "نشست به پایان رسید — دوباره وارد شو" })
     })
+    // Site lock lands on already-logged-in clients two ways: instantly on
+    // the next 503, plus a quiet 60s config poll as a backstop.
+    onSiteLocked(() => {
+      void useApp.getState().refreshConfig()
+    })
     // Latest admin broadcast (web: toast). Exactly-once, failure-silent.
     void showBroadcastOnce()
     // Broadcast watcher + nightly goal reminder (23:00 Tehran).
     const stopWatching = startBroadcastWatcher()
     const stopReminder = startDailyGoalReminder()
 
+    // Quiet config poll so an admin site-lock reaches logged-in clients
+    // within a minute even when they make no API calls.
+    const configPoll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void useApp.getState().refreshConfig()
+    }, 60_000)
+
     return () => {
       stopWatching()
       stopReminder()
+      window.clearInterval(configPoll)
     }
   }, [boot])
 
