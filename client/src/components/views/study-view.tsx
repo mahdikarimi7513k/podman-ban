@@ -24,6 +24,9 @@ import {
   Trophy,
   Target,
   UserMinus,
+  Flag,
+  Footprints,
+  CalendarDays,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -149,65 +152,94 @@ export function StudyView() {
   )
 }
 
-// Academic-year window for the progress wave: the circle travels from
-// شروع to کنکور as the remaining days shrink inside this window.
+// Academic-year window for the journey strip: each of the 12 segments is
+// roughly a month of the road from شروع to کنکور.
 const KONKUR_WINDOW_DAYS = 365
+const KONKUR_SEGMENTS = 12
 
+/**
+ * Konkur journey card — project-specific "road to the exam" style.
+ * Theme-native (card tokens, both themes) instead of a fixed gradient:
+ * hero number, segmented month-strip with a live marker, milestone flags.
+ */
 function KonkurCountdown({ konkur }: { konkur: Overview["konkur"] }) {
-  const W = 400
-  const H = 88
-  const waveY = (x: number) => 46 - Math.sin((x / W) * Math.PI * 2.2) * 14
-
-  const pathD = Array.from({ length: 41 }, (_, i) => {
-    const x = (i / 40) * W
-
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${waveY(x).toFixed(1)}`
-  }).join(" ")
-
   const progress = konkur
-    ? Math.min(1, Math.max(0.03, 1 - konkur.totalDays / KONKUR_WINDOW_DAYS))
-    : 0.03
+    ? Math.min(1, Math.max(0, 1 - konkur.totalDays / KONKUR_WINDOW_DAYS))
+    : 0
 
-  const cx = 18 + progress * (W - 36)
-  const cy = waveY(cx)
-  const ex = W - 12
-  const ey = waveY(ex)
+  const filled = Math.round(progress * KONKUR_SEGMENTS)
+  const elapsedDays = konkur ? Math.max(0, KONKUR_WINDOW_DAYS - konkur.totalDays) : 0
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1B6FF2] via-[#0B93C7] to-[#0FA968] text-white p-5 pb-3">
-      <div className="relative flex justify-end">
-        <span className="text-xs bg-white/20 rounded-full px-4 py-1.5">تا کنکور فنی</span>
+    <section className="rounded-3xl border border-border bg-card p-5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold bg-primary/10 text-primary rounded-full px-4 py-1.5">
+          تا کنکور فنی
+        </span>
+        <span className="ms-auto inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" />
+          مسیر فعال
+        </span>
       </div>
-      <p className="relative mt-5 text-right text-[28px] min-[380px]:text-[32px] leading-tight font-extrabold tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
-        {konkur ? (
-          <>
-            <FaNum>{konkur.months}</FaNum> ماه و <FaNum>{konkur.days}</FaNum> روز
-          </>
-        ) : (
-          "به‌زودی"
-        )}
-      </p>
-      <p className="relative mt-1 text-right text-sm text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)]">
-        {konkur ? (
-          <>
-            <FaNum>{konkur.totalDays}</FaNum> روز فرصت داری
-          </>
-        ) : (
-          "تاریخ کنکور را مدیر تنظیم می‌کند"
-        )}
-      </p>
-      <svg className="relative mt-1 w-full" viewBox={`0 0 ${W} ${H}`} aria-hidden>
-        <path d={pathD} fill="none" stroke="white" strokeOpacity="0.8" strokeWidth="3" strokeLinecap="round" />
-        <circle cx={ex} cy={ey} r="6" fill="white" fillOpacity="0.95" />
-        <text x={cx} y={Math.max(14, cy - 24)} textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">
-          الان
-        </text>
-        <circle cx={cx} cy={cy} r="12" fill="white" />
-        <circle cx={cx} cy={cy} r="5" fill="#0B93C7" />
-      </svg>
-      <div className="relative flex justify-between text-[11px] text-white/85 px-1 pb-1">
-        <span>کنکور</span>
-        <span>شروع</span>
+
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[40px] min-[380px]:text-5xl leading-none font-extrabold tabular-nums">
+            {konkur ? <FaNum>{konkur.totalDays}</FaNum> : "—"}
+          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {konkur ? (
+              <>
+                روز مانده · <FaNum>{konkur.months}</FaNum> ماه و <FaNum>{konkur.days}</FaNum> روز
+              </>
+            ) : (
+              "تاریخ کنکور را مدیر تنظیم می‌کند"
+            )}
+          </p>
+        </div>
+        <div className="flex size-14 min-[380px]:size-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shrink-0">
+          <Flag className="size-7 min-[380px]:size-8" strokeWidth={ICON_STROKE} />
+        </div>
+      </div>
+
+      {/* Month-strip journey: filled from شروع (right in RTL) to کنکور */}
+      <div className="mt-5 flex gap-1.5" role="img" aria-label={`پیشرفت مسیر: ${Math.round(progress * 100)} درصد`}>
+        {Array.from({ length: KONKUR_SEGMENTS }, (_, i) => {
+          const isDone = i < filled
+          const isCurrent = i === filled && filled < KONKUR_SEGMENTS
+
+          return (
+            <span
+              key={i}
+              className={cn(
+                "h-3 flex-1 rounded-full transition-colors",
+                isDone ? "bg-primary" : isCurrent ? "bg-primary/40 motion-safe:animate-pulse" : "bg-secondary",
+              )}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-2 flex justify-between text-[11px] text-muted-foreground px-0.5">
+        <span className="inline-flex items-center gap-1">
+          <Footprints className="size-3.5" strokeWidth={ICON_STROKE} />
+          شروع
+        </span>
+        <span className="tabular-nums">
+          <FaNum>{Math.round(progress * 100)}</FaNum>٪ مسیر
+        </span>
+        <span className="inline-flex items-center gap-1">
+          کنکور
+          <CalendarDays className="size-3.5" strokeWidth={ICON_STROKE} />
+        </span>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-secondary/60 px-3 py-2 text-[11px] text-muted-foreground">
+        <span className="tabular-nums">
+          <FaNum>{elapsedDays}</FaNum> روز رفته
+        </span>
+        <span className="tabular-nums">
+          <FaNum>{konkur?.totalDays ?? "—"}</FaNum> روز فرصت داری
+        </span>
       </div>
     </section>
   )
