@@ -224,12 +224,14 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
     // Prisma enforced FK cascades on every connection — sqlite defaults to
     // OFF, so turn them on for parity.
     client.exec("PRAGMA foreign_keys = ON")
-    // Shared-host disks stall: WAL lets readers proceed during writes and
-    // busy_timeout turns an instant SQLITE_BUSY ("database is locked")
-    // into a 5s wait instead. Same file, same format — in-place upgrade.
-    client.exec("PRAGMA journal_mode = WAL")
+    // Single-file rule: the host keeps ONLY the .db file, so the journal
+    // must live inside it too. WAL would split fresh data into -wal/-shm
+    // sidecars (lost when only .db is kept) — DELETE journal keeps every
+    // byte in the one file. busy_timeout still turns a stalled shared-host
+    // disk from instant SQLITE_BUSY into a 5s wait. Switching back from
+    // WAL also checkpoints and removes any leftover sidecars.
+    client.exec("PRAGMA journal_mode = DELETE")
     client.exec("PRAGMA busy_timeout = 5000")
-    client.exec("PRAGMA synchronous = NORMAL")
     ensureRuntimeTables((stmt) => client.exec(stmt))
     // SAFETY: bun:sqlite's Database is exactly what drizzle-orm/bun-sqlite
     // wraps; the double assertion only bridges the untyped require boundary.
@@ -250,9 +252,8 @@ function openDatabase(): BetterSQLite3Database<typeof schema> {
 
     const client = new Better(path)
     client.exec("PRAGMA foreign_keys = ON")
-    client.exec("PRAGMA journal_mode = WAL")
+    client.exec("PRAGMA journal_mode = DELETE")
     client.exec("PRAGMA busy_timeout = 5000")
-    client.exec("PRAGMA synchronous = NORMAL")
     ensureRuntimeTables((stmt) => client.exec(stmt))
 
     return drizzleBetter(client, { schema, logger })
