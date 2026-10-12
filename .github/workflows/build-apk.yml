@@ -36,6 +36,10 @@ on:
         required: false
         default: false
         type: boolean
+      expected_cert_fp:
+        description: "اثرانگشت SHA256 گواهی نسخه اصلی (بدون : و فاصله) — اگر ست شود و با کلید بیلد نخواند، بیلد fail می‌شود تا امضا بی‌صدا عوض نشود"
+        required: false
+        default: ""
 
 # Least privilege: every job gets read-only contents by default; the
 # security job elevates only what CodeQL needs (see below).
@@ -450,6 +454,7 @@ jobs:
           SEC_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           SEC_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           SEC_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_FP: ${{ inputs.expected_cert_fp }}
         run: |
           set -e
           if [ -n "$KEYSTORE_BASE64" ]; then
@@ -477,6 +482,29 @@ jobs:
             echo "❌ Could not read certificate fingerprint"
             printf '%s\n' "$LIST_OUT" | head -5 || true
             exit 1
+          fi
+
+          # The signature IS this fingerprint: package name + this cert is
+          # the app's entire identity for Play Protect and for updates.
+          # Anything else (notably the ad-hoc key below) is a different app
+          # and WILL trigger a Play Protect scan on install.
+          if [ -n "$EXPECTED_FP" ]; then
+            WANT=$(printf '%s' "$EXPECTED_FP" | tr -d ' :\n\r' | tr '[:lower:]' '[:upper:]')
+            if [ "$FP" != "$WANT" ]; then
+              echo "❌ Signing cert differs from expected_cert_fp — refusing to ship a re-signed app."
+              echo "   used:     $FP"
+              echo "   expected: $WANT"
+              exit 1
+            fi
+            echo "✅ Signing cert matches expected fingerprint"
+          fi
+
+          if [ "${{ inputs.adhoc_sign }}" = "true" ]; then
+            echo "================================================================"
+            echo "⚠️  ADHOC BUILD — temporary certificate."
+            echo "   Play Protect WILL scan on install, and this APK can NEVER"
+            echo "   update your released installs. Never distribute this file."
+            echo "================================================================"
           fi
 
           {
