@@ -84,12 +84,30 @@ export function groupSessionsByBook(sessions: SessionRow[]): Array<{ book: strin
   return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
 }
 
+/** Group module progress rows under their book (same stable order). */
+export function groupModulesByBook(
+  modules: ModuleProgress[],
+): Array<{ book: string; rows: ModuleProgress[] }> {
+  const groups = new Map<string, ModuleProgress[]>()
+
+  for (const m of modules) {
+    const list = groups.get(m.bookTitle) ?? []
+    list.push(m)
+    groups.set(m.bookTitle, list)
+  }
+
+  return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
+}
+
 type Status = "good" | "medium" | "bad" | "none"
 
 function statusFor(score: number | null): Status {
   if (score === null) return "none"
+
   if (score >= 50) return "good"
+
   if (score >= 25) return "medium"
+
   return "bad"
 }
 
@@ -122,22 +140,27 @@ export function ReportView() {
 
   React.useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       // Each widget fails independently — one broken endpoint must not blank
       // the entire report page.
       const safe = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
         p.catch(() => fallback)
+
       const [p, s, st] = await Promise.all([
         safe(apiFetch<{ progress: ModuleProgress[] }>("/api/exam/progress"), { progress: [] }),
         safe(apiFetch<{ sessions: SessionRow[] }>("/api/exam/sessions"), { sessions: [] }),
         safe(apiFetch<{ stats: AnswerStats }>("/api/exam/stats"), { stats: null as AnswerStats | null }),
       ])
+
       if (cancelled) return
       setProgress(p.progress)
       setSessions(s.sessions)
       setStats(st.stats)
+
       if (!cancelled) setLoading(false)
     })()
+
     return () => {
       cancelled = true
     }
@@ -153,6 +176,7 @@ export function ReportView() {
       .catch(() => {
         /* widget fails alone */
       })
+
     return () => {
       cancelled = true
     }
@@ -170,7 +194,9 @@ export function ReportView() {
 
   const totalAttempts =
     progress?.reduce((a, m) => a + m.attempts, 0) ?? 0
+
   const scoredModules = progress?.filter((m) => m.lastScorePercent !== null) ?? []
+
   const avgScore =
     scoredModules.length > 0
       ? Math.round(
@@ -178,6 +204,7 @@ export function ReportView() {
             scoredModules.length,
         )
       : 0
+
   const bestScore = scoredModules.reduce(
     (a, m) => Math.max(a, m.bestScorePercent ?? 0),
     0,
@@ -258,6 +285,7 @@ export function ReportView() {
               {heatmap.days.map((d, i) => {
                 const pct = d.count === 0 ? 0 : Math.max(15, Math.round((d.count / heatmap.max) * 100))
                 const isToday = i === heatmap.days.length - 1
+
                 return (
                   <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
                     <div className="w-full flex-1 flex items-end">
@@ -298,6 +326,7 @@ export function ReportView() {
                       : d.count / heatmap.max > 0.33
                         ? "bg-foreground/60"
                         : "bg-foreground/30"
+
                 return (
                   <motion.div
                     key={d.date}
@@ -453,56 +482,75 @@ export function ReportView() {
         </section>
       )}
 
-      {/* Module progress list */}
+      {/* Module progress list — accordion per book, collapsed by default
+          so long histories don't force scrolling */}
       <section>
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">وضعیت آزمون‌ها</h2>
         </div>
-        <ul className="space-y-2">
-          {progress?.map((m) => {
-            const st = statusFor(m.lastScorePercent)
-            const meta = STATUS_META[st]
-            const Icon = meta.icon
-            return (
-              <li
-                key={m.moduleId}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3.5 transition-colors hover:bg-accent/30"
+        {(progress?.length ?? 0) > 0 ? (
+          <Accordion type="multiple" defaultValue={[]} className="space-y-2">
+            {groupModulesByBook(progress ?? []).map((g) => (
+              <AccordionItem
+                key={g.book}
+                value={g.book}
+                className="rounded-lg border border-border bg-card overflow-hidden"
               >
-                <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{m.moduleTitle}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {m.bookTitle}
-                    {" — "}
-                    <FaNum>{m.attempts}</FaNum> آزمون
-                    {m.bestScorePercent !== null && (
-                      <>{" — "}بهترین: <FaNum>{m.bestScorePercent}</FaNum>٪</>
-                    )}
-                  </p>
-                </div>
-                <div className="text-left shrink-0">
-                  <p className={cn("text-lg font-bold tabular-nums leading-none", meta.className)}>
-                    {m.lastScorePercent !== null ? (
-                      <FaNum>{m.lastScorePercent}</FaNum>
-                    ) : (
-                      "—"
-                    )}
-                    <span className="text-xs">٪</span>
-                  </p>
-                  <p className={cn("text-[10px] mt-0.5", meta.className)}>
-                    {meta.label}
-                  </p>
-                </div>
-              </li>
-            )
-          })}
-          {progress?.length === 0 && (
-            <li className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              هنوز پودمانی برای رشته شما تعریف نشده است.
-            </li>
-          )}
-        </ul>
+                <AccordionTrigger className="px-3.5 py-3 hover:no-underline cursor-pointer">
+                  <span className="text-sm font-semibold truncate">{g.book}</span>
+                  <span className="text-[11px] text-muted-foreground mr-auto pl-1 shrink-0">
+                    <FaNum>{g.rows.length}</FaNum> پودمان
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-2 pb-2">
+                  <ul className="space-y-1.5">
+                    {g.rows.map((m) => {
+                      const st = statusFor(m.lastScorePercent)
+                      const meta = STATUS_META[st]
+                      const Icon = meta.icon
+
+                      return (
+                        <li
+                          key={m.moduleId}
+                          className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-accent/60 transition-colors"
+                        >
+                          <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{m.moduleTitle}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              <FaNum>{m.attempts}</FaNum> آزمون
+                              {m.bestScorePercent !== null && (
+                                <>{" — "}بهترین: <FaNum>{m.bestScorePercent}</FaNum>٪</>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-left shrink-0">
+                            <p className={cn("text-lg font-bold tabular-nums leading-none", meta.className)}>
+                              {m.lastScorePercent !== null ? (
+                                <FaNum>{m.lastScorePercent}</FaNum>
+                              ) : (
+                                "—"
+                              )}
+                              <span className="text-xs">٪</span>
+                            </p>
+                            <p className={cn("text-[10px] mt-0.5", meta.className)}>
+                              {meta.label}
+                            </p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            هنوز پودمانی برای رشته شما تعریف نشده است.
+          </div>
+        )}
       </section>
 
       {/* Recent sessions, grouped under their book */}
@@ -630,6 +678,7 @@ function DistributionRow({
   icon: typeof CheckCircle2
 }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0
+
   return (
     <div className="flex items-center gap-2.5">
       <Icon className="size-4 shrink-0" style={{ color }} strokeWidth={ICON_STROKE} />

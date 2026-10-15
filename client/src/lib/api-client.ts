@@ -16,6 +16,11 @@
  * (e.g. https://azmon.example.ir). Empty means same-origin (web behavior).
  */
 
+// Single source of truth for native detection lives in native-notify
+// (type-only Capacitor import + dynamic plugin loading keep
+// @capacitor/core out of the web bundle).
+import { isNativeApp } from "@/lib/native-notify"
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
 export { API_BASE }
@@ -286,17 +291,6 @@ export async function apiUpload<T = unknown>(input: string, file: File): Promise
       signal,
     },
   )
-}
-
-// Same detection as Capacitor core (androidBridge / webkit.messageHandlers),
-// inlined to keep @capacitor/core out of the web bundle.
-function isNativeApp(): boolean {
-  const w = window as unknown as {
-    androidBridge?: unknown
-    webkit?: { messageHandlers?: { bridge?: unknown } }
-  }
-
-  return !!w.androidBridge || !!w.webkit?.messageHandlers?.bridge
 }
 
 async function fileToBase64(file: File): Promise<string> {

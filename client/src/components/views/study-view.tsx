@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/dialog"
 import { FaNum } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
-import { isNativeApp } from "@/lib/native-notify"
+import { isNativeApp, haptic } from "@/lib/native-notify"
 import {
   showTimerNotification,
   clearTimerNotification,
@@ -143,6 +143,16 @@ export function Avatar({ name, avatar, size = "size-9" }: { name: string; avatar
 
 export function StudyView() {
   const [sub, setSub] = React.useState<SubView>({ name: "overview" })
+  const openRoomId = useApp((s) => s.openRoomId)
+
+  // Notification deep-link: tapping the shade notice jumps straight into
+  // that room's detail instead of the overview. Consumed once.
+  React.useEffect(() => {
+    if (openRoomId) {
+      setSub({ name: "detail", roomId: openRoomId })
+      useApp.setState({ openRoomId: null })
+    }
+  }, [openRoomId])
 
   return (
     <div className="space-y-4">
@@ -435,7 +445,10 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
 
   React.useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(true), 15000)
+
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") void load(true)
+    }, 15000)
 
     return () => window.clearInterval(id)
   }, [load])
@@ -633,6 +646,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
   }, [detail, now])
 
   const act = async (path: "start" | "pause" | "resume" | "stop", body?: { roomId?: string }) => {
+    haptic(path === "stop" ? [25, 50, 25] : 15)
     setBusy(true)
 
     try {
@@ -745,8 +759,10 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       ongoing: true,
     })
 
-    if (session.status !== "ACTIVE") return
+    if (session.status !== "ACTIVE" || !isNativeApp()) return
 
+    // Live shade text, minute-granular: cheap enough (one local schedule)
+    // and only while a session actually runs on a phone.
     const id = window.setInterval(() => {
       const nowMin = Math.max(0, Math.round(elapsedRef.current / 60000))
 

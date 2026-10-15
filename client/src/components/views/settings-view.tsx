@@ -18,6 +18,7 @@ import {
   Pencil,
   Check,
   Trash2,
+  Download,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
 import type { Theme } from "@/lib/theme"
@@ -39,6 +40,7 @@ import { formatTehran } from "@/lib/tehran-time"
 import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
+import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { useToast } from "@/hooks/use-toast"
 import { cn, ICON_STROKE } from "@/lib/utils";
 
@@ -294,6 +296,9 @@ export function SettingsView() {
       {/* Password change */}
       <PasswordChangeSection />
 
+      {/* PWA install — only rendered while the browser offers it */}
+      <InstallAppSection />
+
       {/* Online support */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -326,6 +331,33 @@ export function SettingsView() {
         خروج از حساب
       </Button>
     </div>
+  )
+}
+
+function InstallAppSection() {
+  const { canInstall, installing, install, dismiss } = useInstallPrompt()
+
+  if (!canInstall) return null
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Download className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <h2 className="text-sm font-semibold">نصب برنامه</h2>
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        پودمان‌بان را مثل یک برنامه واقعی روی گوشی نصب کن — بدون نیاز به مرورگر باز.
+      </p>
+      <div className="flex gap-2">
+        <Button onClick={install} disabled={installing} className="cursor-pointer flex-1 h-11">
+          {installing && <Loader2 className="size-4 animate-spin" />}
+          نصب
+        </Button>
+        <Button variant="ghost" onClick={dismiss} className="cursor-pointer h-11">
+          بعداً
+        </Button>
+      </div>
+    </section>
   )
 }
 

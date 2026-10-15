@@ -75,7 +75,9 @@ export function useOnlineStatus(): boolean | null {
     document.addEventListener("visibilitychange", onFocus)
 
     const id = window.setInterval(() => {
-      void check()
+      // No background chatter: hidden tabs neither need fresh data nor
+      // spend radio/battery on it — visibilitychange refetches on return.
+      if (document.visibilityState !== "hidden") void check()
     }, 30000)
 
     return () => {

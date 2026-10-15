@@ -263,8 +263,16 @@ export function ExamView() {
   // question are chained per question (see AnswerQueue): arrival order
   // always matches tap order, so the stored option equals the screen.
   const queueRef = React.useRef<AnswerQueue | null>(null)
+  const queueKeyRef = React.useRef<string | null>(null)
 
-  if (!queueRef.current) queueRef.current = new AnswerQueue()
+  // One durable queue per session: a killed app resumes resending exactly
+  // this session's tapped-but-unsent answers (persisted under its id).
+  if (!queueRef.current || queueKeyRef.current !== examSessionId) {
+    queueRef.current?.stop()
+    queueRef.current = new AnswerQueue(3000, examSessionId ?? undefined)
+    queueKeyRef.current = examSessionId
+  }
+
   const queue = queueRef.current
 
   const postAnswer = React.useCallback(
@@ -294,6 +302,17 @@ export function ExamView() {
 
   // Drop the retry chain on unmount — finish() flushes synchronously instead.
   React.useEffect(() => () => queue.stop(), [queue])
+
+  // Rehydrate: answers tapped before a kill were persisted; resend them now
+  // that the sender exists. Once per session load.
+  const hydratedRef = React.useRef<string | null>(null)
+
+  React.useEffect(() => {
+    if (!data || hydratedRef.current === examSessionId) return
+    hydratedRef.current = examSessionId
+    queue.attach((qid, opt) => postAnswer(qid, opt))
+    void queue.flush((qid, opt) => postAnswer(qid, opt))
+  }, [data, examSessionId, queue, postAnswer])
 
   const select = async (questionId: string, option: number) => {
     setAnswers((a) => ({ ...a, [questionId]: option }))

@@ -24,13 +24,24 @@ export class AnswerQueue {
   private timer: ReturnType<typeof setTimeout> | null = null
   private sender: AnswerSender | null = null
 
-  constructor(private readonly retryMs = 3000) {}
+  constructor(
+    private readonly retryMs = 3000,
+    private readonly storageKey?: string,
+  ) {
+    this.restore()
+  }
 
   /** Latest value wins in the map; delivery for this question is chained. */
   submit(questionId: string, selectedOption: number | null, send: AnswerSender): void {
     this.pending.set(questionId, selectedOption)
     this.sender = send
+    this.persist()
     void this.enqueue(questionId, selectedOption, send)
+  }
+
+  /** Attach the sender without submitting (rehydrate after a remount). */
+  attach(send: AnswerSender): void {
+    this.sender = send
   }
 
   /** Send every pending answer through its question chain. */
@@ -45,6 +56,8 @@ export class AnswerQueue {
 
     if (this.pending.size === 0) this.clearTimer()
 
+    this.persist()
+
     return results.every(Boolean)
   }
 
@@ -57,6 +70,70 @@ export class AnswerQueue {
   /** For tests only — how many answers are still unsent. */
   pendingCount(): number {
     return this.pending.size
+  }
+
+  private storageKeyFor(): string | null {
+    return this.storageKey ? `pb_answers:${this.storageKey}` : null
+  }
+
+  private storage(): Storage | null {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return null
+
+      return window.localStorage
+    } catch {
+      return null
+    }
+  }
+
+  /** Durability: a killed app must not lose tapped-but-unsent answers. */
+  private persist(): void {
+    const key = this.storageKeyFor()
+    const store = key ? this.storage() : null
+
+    if (!key || !store) return
+
+    try {
+      if (this.pending.size === 0) store.removeItem(key)
+      else store.setItem(key, JSON.stringify(Array.from(this.pending.entries())))
+    } catch {
+      /* quota/private mode — memory queue still works this session */
+    }
+  }
+
+  private restore(): void {
+    const key = this.storageKeyFor()
+    const store = key ? this.storage() : null
+
+    if (!key || !store) return
+
+    let raw: unknown
+
+    try {
+      const text = store.getItem(key)
+
+      if (!text) return
+      raw = JSON.parse(text)
+    } catch {
+      return
+    }
+
+    // SAFETY: shape-checked field by field below; only [non-empty string,
+    // null-or-integer-option] pairs enter the live map.
+    if (!Array.isArray(raw)) return
+
+    for (const pair of raw) {
+      if (!Array.isArray(pair) || pair.length !== 2) continue
+      const id = String(pair[0] ?? "")
+
+      if (!id) continue
+      const opt: unknown = pair[1]
+
+      if (opt !== null && !Number.isInteger(opt)) continue
+
+      // SAFETY: null-or-finite-integer proven above; the map holds exactly that.
+      this.pending.set(id, opt as number | null)
+    }
   }
 
   private enqueue(questionId: string, selectedOption: number | null, send: AnswerSender): Promise<boolean> {
@@ -76,6 +153,8 @@ export class AnswerQueue {
       } else {
         this.scheduleRetry()
       }
+
+      this.persist()
 
       return ok
     }
