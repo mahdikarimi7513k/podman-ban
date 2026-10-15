@@ -84,19 +84,6 @@ export function groupSessionsByBook(sessions: SessionRow[]): Array<{ book: strin
   return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
 }
 
-/** Group module progress under their book (same stable order). */
-export function groupProgressByBook(modules: ModuleProgress[]): Array<{ book: string; rows: ModuleProgress[] }> {
-  const groups = new Map<string, ModuleProgress[]>()
-
-  for (const m of modules) {
-    const list = groups.get(m.bookTitle) ?? []
-    list.push(m)
-    groups.set(m.bookTitle, list)
-  }
-
-  return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
-}
-
 type Status = "good" | "medium" | "bad" | "none"
 
 function statusFor(score: number | null): Status {
@@ -480,74 +467,57 @@ export function ReportView() {
         </section>
       )}
 
-      {/* Module progress list — accordion per book so long histories don't scroll forever */}
+      {/* Module progress list */}
       <section>
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">وضعیت آزمون‌ها</h2>
         </div>
-        {!progress || progress.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            هنوز پودمانی برای رشته شما تعریف نشده است.
-          </div>
-        ) : (
-          <Accordion type="multiple" defaultValue={[]} className="space-y-2">
-            {groupProgressByBook(progress).map((g) => (
-              <AccordionItem
-                key={g.book}
-                value={g.book}
-                className="rounded-lg border border-border bg-card overflow-hidden"
-              >
-                <AccordionTrigger className="px-3.5 py-3 hover:no-underline cursor-pointer">
-                  <span className="flex-1 text-right text-sm font-semibold truncate">{g.book}</span>
-                  <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                    <FaNum>{g.rows.reduce((a, m) => a + m.attempts, 0)}</FaNum> آزمون
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="px-2 pb-2">
-                  <ul className="space-y-1.5">
-                    {g.rows.map((m) => {
-                      const st = statusFor(m.lastScorePercent)
-                      const meta = STATUS_META[st]
-                      const Icon = meta.icon
+        <ul className="space-y-2">
+          {progress?.map((m) => {
+            const st = statusFor(m.lastScorePercent)
+            const meta = STATUS_META[st]
+            const Icon = meta.icon
 
-                      return (
-                        <li
-                          key={m.moduleId}
-                          className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-accent/40"
-                        >
-                          <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{m.moduleTitle}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              <FaNum>{m.attempts}</FaNum> آزمون
-                              {m.bestScorePercent !== null && (
-                                <>{" — "}بهترین: <FaNum>{m.bestScorePercent}</FaNum>٪</>
-                              )}
-                            </p>
-                          </div>
-                          <div className="text-left shrink-0">
-                            <p className={cn("text-lg font-bold tabular-nums leading-none", meta.className)}>
-                              {m.lastScorePercent !== null ? (
-                                <FaNum>{m.lastScorePercent}</FaNum>
-                              ) : (
-                                "—"
-                              )}
-                              <span className="text-xs">٪</span>
-                            </p>
-                            <p className={cn("text-[10px] mt-0.5", meta.className)}>
-                              {meta.label}
-                            </p>
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        )}
+            return (
+              <li
+                key={m.moduleId}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3.5 transition-colors hover:bg-accent/30"
+              >
+                <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{m.moduleTitle}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {m.bookTitle}
+                    {" — "}
+                    <FaNum>{m.attempts}</FaNum> آزمون
+                    {m.bestScorePercent !== null && (
+                      <>{" — "}بهترین: <FaNum>{m.bestScorePercent}</FaNum>٪</>
+                    )}
+                  </p>
+                </div>
+                <div className="text-left shrink-0">
+                  <p className={cn("text-lg font-bold tabular-nums leading-none", meta.className)}>
+                    {m.lastScorePercent !== null ? (
+                      <FaNum>{m.lastScorePercent}</FaNum>
+                    ) : (
+                      "—"
+                    )}
+                    <span className="text-xs">٪</span>
+                  </p>
+                  <p className={cn("text-[10px] mt-0.5", meta.className)}>
+                    {meta.label}
+                  </p>
+                </div>
+              </li>
+            )
+          })}
+          {progress?.length === 0 && (
+            <li className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              هنوز پودمانی برای رشته شما تعریف نشده است.
+            </li>
+          )}
+        </ul>
       </section>
 
       {/* Recent sessions, grouped under their book */}
@@ -559,7 +529,7 @@ export function ReportView() {
         {sessions && sessions.length > 0 ? (
           <Accordion
             type="multiple"
-            defaultValue={[groupSessionsByBook(sessions)[0]?.book ?? ""]}
+            defaultValue={[]}
             className="space-y-2"
           >
             {groupSessionsByBook(sessions).map((g) => (

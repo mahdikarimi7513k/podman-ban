@@ -1,7 +1,9 @@
 /**
- * PWA install prompt: captures beforeinstallprompt once per page life and
- * exposes a guided install action. No-ops where the browser never fires
- * the event (iOS, already-installed, native APK).
+ * PWA install prompt (web only — never inside the native APK).
+ *
+ * Captures beforeinstallprompt and exposes a guided install button.
+ * If the event never fires (already installed, ineligible browser),
+ * the hook simply reports unavailable and renders nothing.
  */
 import * as React from "react"
 
@@ -10,27 +12,23 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
-function isInstallPromptEvent(e: Event): e is InstallPromptEvent {
-  return (
-    "prompt" in e &&
-    typeof (e as { prompt?: unknown }).prompt === "function"
-  )
+function isInstallPrompt(e: Event): e is InstallPromptEvent {
+  // SAFETY: only the real beforeinstallprompt event carries a callable
+  // prompt; anything else fails closed (returns false, prompt ignored).
+  const candidate = e as Event & { prompt?: unknown }
+
+  return candidate.prompt instanceof Function
 }
 
-export function useInstallPrompt(): {
-  canInstall: boolean
-  installing: boolean
-  install: () => Promise<void>
-} {
+export function useInstallPrompt() {
   const [deferred, setDeferred] = React.useState<InstallPromptEvent | null>(null)
   const [installing, setInstalling] = React.useState(false)
 
   React.useEffect(() => {
     const onPrompt = (e: Event) => {
-      if (!isInstallPromptEvent(e)) return
-
       e.preventDefault()
-      setDeferred(e)
+
+      if (isInstallPrompt(e)) setDeferred(e)
     }
 
     window.addEventListener("beforeinstallprompt", onPrompt)
@@ -38,21 +36,19 @@ export function useInstallPrompt(): {
     return () => window.removeEventListener("beforeinstallprompt", onPrompt)
   }, [])
 
-  const install = React.useCallback(async () => {
-    if (!deferred || installing) return
+  const install = React.useCallback(() => {
+    if (!deferred) return
 
     setInstalling(true)
 
-    try {
-      await deferred.prompt()
-      await deferred.userChoice
-    } catch {
-      /* dismissed or failed — stay put */
-    } finally {
-      setDeferred(null)
-      setInstalling(false)
-    }
-  }, [deferred, installing])
+    void deferred
+      .prompt()
+      .catch(() => {})
+      .finally(() => {
+        setInstalling(false)
+        setDeferred(null)
+      })
+  }, [deferred])
 
-  return { canInstall: deferred !== null, installing, install }
+  return { available: deferred !== null, installing, install }
 }

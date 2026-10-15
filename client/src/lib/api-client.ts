@@ -16,11 +16,9 @@
  * (e.g. https://azmon.example.ir). Empty means same-origin (web behavior).
  */
 
-import { isNativeApp } from "@/lib/native-notify"
-
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
-export { API_BASE, isNativeApp }
+export { API_BASE }
 
 /**
  * Default network timeout. On flaky networks a request can hang forever
@@ -289,6 +287,8 @@ export async function apiUpload<T = unknown>(input: string, file: File): Promise
     },
   )
 }
+
+import { isNativeApp } from "@/lib/native-notify"
 
 async function fileToBase64(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer())

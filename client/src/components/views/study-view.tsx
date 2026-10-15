@@ -28,13 +28,22 @@ import {
   Footprints,
   CalendarDays,
   Medal,
-  Zap,
+  Megaphone,
+  Pencil,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select"
 import { useApp } from "@/lib/store"
 import {
   Dialog,
@@ -106,8 +115,8 @@ interface RoomDetail {
   }
   leaderboard: LeaderRow[]
   mySession: { id: string; status: "ACTIVE" | "PAUSED"; elapsedMs: number; startedAt: string; serverNow: string } | null
+  dailyChallenge: { text: string; goalMin: number; date: string | null; isToday: boolean; roomTodayMin: number } | null
   challenge: { weekMin: number; goalMin: number }
-  dailyChallenge: { goalMin: number; todayMin: number } | null
   serverNow: string
 }
 
@@ -438,9 +447,9 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
   React.useEffect(() => {
     void load()
 
-    // Paused while hidden — the socket/focus paths catch up on return.
+    // Visibility-gated: backgrounded tabs/APK views don't burn radio.
     const id = window.setInterval(() => {
-      if (!document.hidden) void load(true)
+      if (document.visibilityState === "visible") void load(true)
     }, 15000)
 
     return () => window.clearInterval(id)
@@ -598,9 +607,8 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     setLoading(true)
     void load()
 
-    // Paused while hidden — visibility resync covers the return.
     const poll = window.setInterval(() => {
-      if (!document.hidden) void load()
+      if (document.visibilityState === "visible") void load()
     }, 10000)
 
     const tick = window.setInterval(() => setNow((t) => t + 1000), 1000)
@@ -759,7 +767,6 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     if (session.status !== "ACTIVE") return
 
     const id = window.setInterval(() => {
-      if (document.hidden) return
       const nowMin = Math.max(0, Math.round(elapsedRef.current / 60000))
 
       void showTimerNotification({
@@ -973,8 +980,8 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
 
       <DailyChallengeCard
         roomId={detail.room.id}
+        challenge={detail.dailyChallenge}
         isOwner={detail.room.isOwner}
-        daily={detail.dailyChallenge}
         onChanged={() => void load()}
       />
 
@@ -1097,44 +1104,49 @@ function MemberRoster({
 }
 
 /**
- * Daily room challenge: the owner sets today's minutes target for the whole
- * room; everyone sees live progress. Off when the owner clears it.
+ * Daily challenge posted by the room owner: text + minutes goal for the
+ * day, with the room's live today-total as progress. Everyone sees it;
+ * only the owner gets the edit button.
  */
 function DailyChallengeCard({
   roomId,
+  challenge,
   isOwner,
-  daily,
   onChanged,
 }: {
   roomId: string
+  challenge: RoomDetail["dailyChallenge"]
   isOwner: boolean
-  daily: { goalMin: number; todayMin: number } | null
   onChanged: () => void
 }) {
   const { toast } = useToast()
-  const [minutes, setMinutes] = React.useState(daily?.goalMin ? String(daily.goalMin) : "120")
+  const [open, setOpen] = React.useState(false)
+  const [text, setText] = React.useState("")
+  const [goal, setGoal] = React.useState(120)
   const [saving, setSaving] = React.useState(false)
 
-  React.useEffect(() => {
-    if (daily) setMinutes(String(daily.goalMin))
-  }, [daily?.goalMin])
+  const pct =
+    challenge && challenge.goalMin > 0
+      ? Math.min(100, Math.round((challenge.roomTodayMin / challenge.goalMin) * 100))
+      : 0
 
-  const pct = daily && daily.goalMin > 0 ? Math.min(100, Math.round((daily.todayMin / daily.goalMin) * 100)) : 0
+  const save = async () => {
+    if (text.trim().length < 2 || saving) return
 
-  const save = async (value: number | null) => {
     setSaving(true)
 
     try {
       await apiFetch(`/api/study/rooms/${roomId}/challenge`, {
         method: "POST",
-        body: JSON.stringify({ minutes: value }),
+        body: JSON.stringify({ text: text.trim(), goalMin: goal }),
       })
-      toast({ title: value === null ? "چالش روزانه برداشته شد" : "چالش روزانه ثبت شد" })
+      setOpen(false)
+      toast({ title: "چالش امروز ثبت شد" })
       onChanged()
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "ناموفق بود",
+        title: "ثبت چالش ناموفق بود",
         description: err instanceof ApiError ? err.message : undefined,
       })
     } finally {
@@ -1142,71 +1154,93 @@ function DailyChallengeCard({
     }
   }
 
-  const submit = () => {
-    const n = Number(minutes)
-
-    if (!Number.isInteger(n) || n < 15 || n > 960) {
-      toast({ variant: "destructive", title: "عدد معتبر نیست", description: "بین ۱۵ تا ۹۶۰ دقیقه." })
-
-      return
-    }
-
-    void save(n)
-  }
-
   return (
     <section className="rounded-2xl border border-border bg-card p-4 space-y-2">
       <div className="flex items-center gap-2">
-        <Zap className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <Megaphone className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <h2 className="text-sm font-semibold">چالش امروز اتاق</h2>
+        {challenge && !challenge.isToday && (
+          <span className="text-[10px] rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
+            مال قبل
+          </span>
+        )}
+        {isOwner && (
+          <button
+            type="button"
+            onClick={() => {
+              setText(challenge?.text ?? "")
+              setGoal(challenge?.goalMin && challenge.goalMin >= 15 ? challenge.goalMin : 120)
+              setOpen(true)
+            }}
+            aria-label={challenge ? "ویرایش چالش امروز" : "ثبت چالش امروز"}
+            className="ms-auto min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+          >
+            <Pencil className="size-4" />
+          </button>
+        )}
       </div>
-      {daily ? (
+      {challenge ? (
         <>
-          <p className="text-[11px] text-muted-foreground">
-            <FaNum>{formatDur(daily.todayMin)}</FaNum> از <FaNum>{formatDur(daily.goalMin)}</FaNum> امروز
+          <p dir="auto" className="text-sm font-medium leading-7 whitespace-pre-wrap">{challenge.text}</p>
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            مجموع امروز اتاق: <FaNum>{formatDur(challenge.roomTodayMin)}</FaNum> از <FaNum>{formatDur(challenge.goalMin)}</FaNum>
           </p>
           <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
-            <div
-              className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-gradient-to-r from-[#F59E0B] to-[#F97316]")}
-              style={{ width: `${pct}%` }}
-            />
+            <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
           </div>
-          {pct >= 100 && (
-            <p className="text-[11px] font-semibold text-success">چالش امروز فتح شد! 🎉</p>
-          )}
         </>
       ) : (
-        <p className="text-[11px] text-muted-foreground">
-          {isOwner ? "هنوز چالشی نگذاشته‌ای — از پایین تعیین کن." : "سازنده اتاق هنوز چالشی نگذاشته است."}
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {isOwner ? "هنوز چالشی نگذاشتی — با مداد بالا چالش امروز را بنویس." : "سازنده اتاق هنوز چالش امروز را نگذاشته است."}
         </p>
       )}
-      {isOwner && (
-        <div className="flex items-center gap-2 pt-1">
-          <Input
-            value={minutes}
-            onChange={(e) => setMinutes(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
-            placeholder="دقیقه"
-            inputMode="numeric"
-            dir="ltr"
-            className="h-11 flex-1 min-w-0 text-center"
-            aria-label="هدف چالش به دقیقه"
-          />
-          <Button onClick={submit} disabled={saving} className="h-11 cursor-pointer shrink-0">
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            ثبت چالش
-          </Button>
-          {daily && (
-            <Button
-              variant="ghost"
-              onClick={() => void save(null)}
-              disabled={saving}
-              className="h-11 cursor-pointer text-destructive hover:text-destructive shrink-0"
-            >
-              برداشتن
+
+      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>چالش امروز اتاق</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="challenge-text" className="text-xs">متن چالش</Label>
+              <Textarea
+                id="challenge-text"
+                dir="auto"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={2}
+                maxLength={200}
+                placeholder="مثلاً: امروز هر نفر ۲ ساعت بخواند"
+                className="resize-y min-h-[56px]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="challenge-goal" className="text-xs">هدف (دقیقه برای کل اتاق)</Label>
+              <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
+                <SelectTrigger id="challenge-goal" className="h-11 cursor-pointer" dir="ltr">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[30, 60, 120, 180, 240, 360, 480].map((m) => (
+                    <SelectItem key={m} value={String(m)} className="cursor-pointer">
+                      <FaNum>{m}</FaNum> دقیقه
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} className="cursor-pointer">
+              انصراف
             </Button>
-          )}
-        </div>
-      )}
+            <Button onClick={() => void save()} disabled={text.trim().length < 2 || saving} className="cursor-pointer">
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              ثبت چالش
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

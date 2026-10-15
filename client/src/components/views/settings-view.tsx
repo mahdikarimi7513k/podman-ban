@@ -18,7 +18,6 @@ import {
   Pencil,
   Check,
   Trash2,
-  Smartphone,
   Download,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
@@ -41,8 +40,9 @@ import { formatTehran } from "@/lib/tehran-time"
 import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
-import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { useToast } from "@/hooks/use-toast"
+import { useInstallPrompt } from "@/hooks/use-install-prompt"
+import { isNativeApp } from "@/lib/native-notify"
 import { cn, ICON_STROKE } from "@/lib/utils";
 
 export function SettingsView() {
@@ -123,6 +123,8 @@ export function SettingsView() {
           پروفایل، ترجیحات و تم نمایش.
         </p>
       </div>
+
+      <InstallAppSection />
 
       {/* Profile */}
       <ProfileCard />
@@ -297,9 +299,6 @@ export function SettingsView() {
       {/* Password change */}
       <PasswordChangeSection />
 
-      {/* Install app */}
-      <InstallAppSection />
-
       {/* Online support */}
       <section className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -335,34 +334,6 @@ export function SettingsView() {
   )
 }
 
-function InstallAppSection() {
-  const { canInstall, installing, install } = useInstallPrompt()
-
-  if (!canInstall) return null
-
-  return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-2">
-      <div className="flex items-center gap-2">
-        <Smartphone className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
-        <h2 className="text-sm font-semibold">نصب برنامه</h2>
-      </div>
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
-        پودمان‌بان را مثل یک برنامه روی گوشی نصب کن — بدون نیاز به بازار.
-      </p>
-      <Button
-        type="button"
-        onClick={() => void install()}
-        disabled={installing}
-        className="cursor-pointer w-full sm:w-auto h-11"
-      >
-        {installing && <Loader2 className="size-4 animate-spin" />}
-        <Download className="size-4" />
-        نصب روی گوشی
-      </Button>
-    </section>
-  )
-}
-
 function ProfileRow({
   icon: Icon,
   label,
@@ -386,6 +357,36 @@ function ProfileRow({
 }
 
 const AVATAR_MAX_BYTES = 500 * 1024
+
+/** PWA install (web only): guided button, hidden in the APK and when ineligible. */
+function InstallAppSection() {
+  const prompt = useInstallPrompt()
+
+  if (isNativeApp() || !prompt.available) return null
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">نصب برنامه</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            پودمان‌بان را مثل یک برنامه روی گوشی نصب کن — بدون نیاز به کافه‌بازار.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={prompt.install}
+          disabled={prompt.installing}
+          className="cursor-pointer h-11 shrink-0"
+        >
+          {prompt.installing ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          نصب
+        </Button>
+      </div>
+    </section>
+  )
+}
 
 interface ProfileSaveBody {
   name?: string
@@ -610,7 +611,8 @@ function formatDate(iso: string): string {
   })
 }
 
-function PasswordChangeSection() {  const { toast } = useToast()
+function PasswordChangeSection() {
+  const { toast } = useToast()
   const setUser = useApp((s) => s.setUser)
   const [current, setCurrent] = React.useState("")
   const [next, setNext] = React.useState("")

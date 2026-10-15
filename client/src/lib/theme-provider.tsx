@@ -54,8 +54,8 @@ function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle("dark", resolved === "dark")
   document.documentElement.style.colorScheme = resolved
 
-  // Theme-color follows the mode so the OS chrome (status bar, task
-  // switcher) matches instead of staying light-only.
+  // Theme-color follows the theme (was fixed light-only): PWA status bar
+  // and browser chrome match dark mode too.
   const meta = document.querySelector('meta[name="theme-color"]')
 
   if (meta) meta.setAttribute("content", resolved === "dark" ? "#0A0A0A" : "#FAFAFA")
@@ -94,9 +94,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (theme !== "system") return
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)")
+
     const onChange = (): void => {
       applyTheme("system")
     }
+
     mq.addEventListener("change", onChange)
 
     return () => {
@@ -110,6 +112,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
       setThemeState(parseTheme(e.newValue))
     }
+
     window.addEventListener("storage", onStorage)
 
     return () => {

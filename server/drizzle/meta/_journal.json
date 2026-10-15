@@ -61,8 +61,8 @@
     {
       "idx": 8,
       "version": "6",
-      "when": 1792090720166,
-      "tag": "0008_add-room-daily-challenge",
+      "when": 1792093609702,
+      "tag": "0008_add-room-challenge",
       "breakpoints": true
     }
   ]

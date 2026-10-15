@@ -248,12 +248,12 @@ export const studyJoinSchema = z.object({
     .optional(),
 }).refine((v) => v.roomId || v.inviteCode, { message: "roomId یا inviteCode لازم است" })
 
+export const studyChallengeSchema = z.object({
+  text: z.string().trim().min(2, "متن چالش حداقل ۲ نویسه باشد").max(200, "متن چالش حداکثر ۲۰۰ نویسه باشد"),
+  goalMin: z.number().int().min(15, "هدف حداقل ۱۵ دقیقه است").max(960, "هدف حداکثر ۹۶۰ دقیقه است"),
+})
+
 export const studySessionStartSchema = z.object({
   roomId: z.string().min(1),
   subject: z.string().trim().max(80).optional().nullable(),
-})
-
-export const studyChallengeSchema = z.object({
-  // Daily room challenge in minutes; null turns it off. Owner-only.
-  minutes: z.number().int().min(15).max(960).nullable(),
 })

@@ -205,7 +205,7 @@ export type StudyRoomType = (typeof StudyRoomType)[keyof typeof StudyRoomType]
 export const StudySessionStatus = { ACTIVE: "ACTIVE", PAUSED: "PAUSED", ENDED: "ENDED" } as const
 export type StudySessionStatus = (typeof StudySessionStatus)[keyof typeof StudySessionStatus]
 
-// Study rooms (اتاق مطالعه): small group focus rooms, max 20 members.
+// Study rooms (اتاق مطالعه): small group focus rooms, max 30 members.
 export const studyRooms = sqliteTable("StudyRoom", {
   id: id("id"),
   name: text("name").notNull(),
@@ -214,9 +214,11 @@ export const studyRooms = sqliteTable("StudyRoom", {
   // 6-digit invite code, unique. Required when requireInvite is true.
   inviteCode: text("inviteCode").notNull().unique(),
   requireInvite: integer("requireInvite", { mode: "boolean" }).notNull().default(true),
-  // Owner-set daily challenge (minutes for the whole room today). Null = off.
-  dailyChallengeMin: integer("dailyChallengeMin"),
   ownerId: text("ownerId").references(() => users.id, { onDelete: "set null" }),
+  // Daily challenge posted by the owner (text + minutes goal for the day).
+  challengeText: text("challengeText"),
+  challengeGoalMin: integer("challengeGoalMin"),
+  challengeDate: text("challengeDate"),
   createdAt: createdAt("createdAt"),
 }, (t) => [index("StudyRoom_createdAt_idx").on(t.createdAt)])
 
