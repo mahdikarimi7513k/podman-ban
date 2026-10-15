@@ -35,22 +35,6 @@ describe("user profile", () => {
     expect(res.body.user.avatarBase64).toBeNull()
   })
 
-  it("deletes its own account with password + DELETE confirm", async () => {
-    await ensureUser("prof_bye", "STUDENT", "FANI_HERFEI")
-    const s = await login("prof_bye", PASSWORD)
-
-    expect((await s.delete("/api/user/account", { password: "wrong", confirm: "DELETE" })).status).toBe(422)
-    expect((await s.delete("/api/user/account", { password: PASSWORD })).status).toBe(422)
-
-    const res = await s.delete("/api/user/account", { password: PASSWORD, confirm: "DELETE" })
-
-    expect(res.status).toBe(200)
-
-    const me = await s.get("/api/auth/me")
-
-    expect(me.status).toBe(401)
-  })
-
   it("validates name and avatar", async () => {
     await ensureUser("prof_bad", "STUDENT", "FANI_HERFEI")
     const s = await login("prof_bad", PASSWORD)

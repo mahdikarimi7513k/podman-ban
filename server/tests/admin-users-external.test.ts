@@ -25,10 +25,12 @@ describe("registration gate", () => {
     const u = uniq("gateuser")
 
     await admin.put("/api/admin/config").send({ registrationOpen: false })
+
     try {
       const blocked = await http
         .post("/api/auth/register")
         .send({ name: "گیت", username: u, password: "Gate-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
+
       expect(blocked.status).toBe(403)
       expect(blocked.body.code).toBe("REGISTRATION_CLOSED")
 
@@ -36,6 +38,7 @@ describe("registration gate", () => {
       const created = await admin
         .post("/api/admin/users")
         .send({ name: "گیت", username: u, password: "Gate-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
+
       expect(created.status).toBe(201)
 
       // …and those credentials log in normally.
@@ -50,6 +53,7 @@ describe("registration gate", () => {
     const open = await http
       .post("/api/auth/register")
       .send({ name: "باز", username: uniq("openuser"), password: "Open-Pass-123", email: uniqEmail(), field: "KARDANESH" })
+
     expect(open.status).toBe(201)
   })
 })
@@ -57,9 +61,11 @@ describe("registration gate", () => {
 describe("registration closed message", () => {
   it("persists the admin's custom message and exposes it publicly", async () => {
     const admin = await login("sec_admin", PASSWORD)
+
     const put = await admin
       .put("/api/admin/config")
       .send({ registrationMessage: "ثبت‌نام از اول مهر" })
+
     expect(put.status).toBe(200)
 
     const pub = await http.get("/api/config")
@@ -82,6 +88,7 @@ describe("admin user creation", () => {
     const res = await admin
       .post("/api/admin/users")
       .send({ name: "ساخته‌شده", username: u, password: "Mk-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
+
     expect(res.status).toBe(201)
     expect(res.body.user.role).toBe("STUDENT")
     expect(res.body.user).not.toHaveProperty("passwordHash")
@@ -89,12 +96,15 @@ describe("admin user creation", () => {
     const dup = await admin
       .post("/api/admin/users")
       .send({ name: "تکراری", username: u, password: "Mk-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
+
     expect(dup.status).toBe(409)
 
     const stu = await login("sec_student", PASSWORD)
+
     const forbidden = await stu
       .post("/api/admin/users")
       .send({ name: "x", username: uniq("nope"), password: "Nope-Pass-123", field: "FANI_HERFEI" })
+
     expect([401, 403]).toContain(forbidden.status)
   })
 })
@@ -108,6 +118,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", "pbx_dummy")
       .send({ username: "sec_student", password: PASSWORD })
+
     expect([401, 503]).toContain(off.status)
 
     const issued = await admin.post("/api/admin/external-api/key")
@@ -119,6 +130,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: PASSWORD })
+
     expect(ok.status).toBe(200)
     expect(ok.body.ok).toBe(true)
     expect(ok.body.user.username).toBe("sec_student")
@@ -128,6 +140,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: "wrong-pass-1" })
+
     expect(badPass.status).toBe(401)
     expect(badPass.body.ok).toBe(false)
 
@@ -135,6 +148,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", "pbx_wrong")
       .send({ username: "sec_student", password: PASSWORD })
+
     expect(badKey.status).toBe(401)
     expect(badKey.body.code).toBe("INVALID_API_KEY")
 
@@ -143,6 +157,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: PASSWORD, field: "FANI_HERFEI" })
+
     expect(withField.status).toBe(200)
     expect(withField.body.user.field).toBe("FANI_HERFEI")
 
@@ -150,6 +165,7 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: PASSWORD, field: "KARDANESH" })
+
     expect(wrongField.status).toBe(401)
     expect(wrongField.body.code).toBe("FIELD_MISMATCH")
 
@@ -157,15 +173,18 @@ describe("external verify API", () => {
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: PASSWORD, field: "NOPE" })
+
     expect(badField.status).toBe(422)
 
     // Revoke → service off again.
     const revoked = await admin.delete("/api/admin/external-api/key")
     expect(revoked.status).toBe(200)
+
     const after = await http
       .post("/api/external/verify")
       .set("x-api-key", key)
       .send({ username: "sec_student", password: PASSWORD })
+
     expect(after.status).toBe(503)
   })
 })
@@ -178,18 +197,21 @@ describe("external register API", () => {
     const u = uniq("extreg")
 
     await admin.put("/api/admin/config").send({ registrationOpen: false })
+
     try {
       // Missing field → 422 (all of name/username/password/field required).
       const missing = await http
         .post("/api/external/register")
         .set("x-api-key", key)
         .send({ username: u, password: "Ext-Reg-123" })
+
       expect(missing.status).toBe(422)
 
       const created = await http
         .post("/api/external/register")
         .set("x-api-key", key)
         .send({ name: "ثبت خارجی", username: u, password: "Ext-Reg-123", email: uniqEmail(), field: "KARDANESH" })
+
       expect(created.status).toBe(201)
       expect(created.body.ok).toBe(true)
       expect(created.body.user.role).toBe("STUDENT")
@@ -201,15 +223,18 @@ describe("external register API", () => {
         .post("/api/external/register")
         .set("x-api-key", key)
         .send({ name: "تکراری", username: u, password: "Ext-Reg-123", email: uniqEmail(), field: "KARDANESH" })
+
       expect(dup.status).toBe(409)
       expect(dup.body.code).toBe("USERNAME_TAKEN")
 
       // The new credentials work for normal login AND external verify.
       await login(u, "Ext-Reg-123")
+
       const v = await http
         .post("/api/external/verify")
         .set("x-api-key", key)
         .send({ username: u, password: "Ext-Reg-123", field: "KARDANESH" })
+
       expect(v.status).toBe(200)
       expect(v.body.ok).toBe(true)
 
@@ -218,10 +243,37 @@ describe("external register API", () => {
         .post("/api/external/register")
         .set("x-api-key", "pbx_wrong")
         .send({ name: "x", username: uniq("nope"), password: "Nope-Pass-123", field: "FANI_HERFEI" })
+
       expect(badKey.status).toBe(401)
     } finally {
       await admin.put("/api/admin/config").send({ registrationOpen: true })
       await admin.delete("/api/admin/external-api/key")
     }
+  })
+})
+
+describe("user deletion is main-admin only", () => {
+  it("lets ADMIN delete but blocks CONTENT_ADMIN and students", async () => {
+    const admin = await login("sec_admin", PASSWORD)
+    const content = await login("sec_content", PASSWORD)
+    const stu = await login("sec_student", PASSWORD)
+    const u = uniq("deluser")
+
+    const created = await admin
+      .post("/api/admin/users")
+      .send({ name: "حذف‌شونده", username: u, password: "Mk-Pass-123", email: uniqEmail(), field: "FANI_HERFEI" })
+
+    expect(created.status).toBe(201)
+
+    // SAFETY: creation contract returns the new row id; a shape change
+    // fails here instead of passing silently.
+    const victim = created.body.user.id as string
+
+    expect((await stu.delete(`/api/admin/users/${victim}`)).status).toBe(403)
+    expect((await content.delete(`/api/admin/users/${victim}`)).status).toBe(403)
+
+    const gone = await admin.delete(`/api/admin/users/${victim}`)
+
+    expect(gone.status).toBe(200)
   })
 })
