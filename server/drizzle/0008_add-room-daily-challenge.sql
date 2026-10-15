@@ -1,0 +1,1 @@
+ALTER TABLE `StudyRoom` ADD `dailyChallengeMin` integer;

@@ -53,6 +53,12 @@ function applyTheme(theme: Theme): void {
 
   document.documentElement.classList.toggle("dark", resolved === "dark")
   document.documentElement.style.colorScheme = resolved
+
+  // Theme-color follows the mode so the OS chrome (status bar, task
+  // switcher) matches instead of staying light-only.
+  const meta = document.querySelector('meta[name="theme-color"]')
+
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0A0A0A" : "#FAFAFA")
 }
 
 /** Momentarily kill transitions so the switch is instant, not animated. */

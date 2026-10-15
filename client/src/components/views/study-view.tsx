@@ -28,6 +28,7 @@ import {
   Footprints,
   CalendarDays,
   Medal,
+  Zap,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/dialog"
 import { FaNum } from "@/components/fa-utils"
 import { useToast } from "@/hooks/use-toast"
-import { isNativeApp, haptic } from "@/lib/native-notify"
+import { isNativeApp } from "@/lib/native-notify"
 import {
   showTimerNotification,
   clearTimerNotification,
@@ -106,6 +107,7 @@ interface RoomDetail {
   leaderboard: LeaderRow[]
   mySession: { id: string; status: "ACTIVE" | "PAUSED"; elapsedMs: number; startedAt: string; serverNow: string } | null
   challenge: { weekMin: number; goalMin: number }
+  dailyChallenge: { goalMin: number; todayMin: number } | null
   serverNow: string
 }
 
@@ -143,16 +145,6 @@ export function Avatar({ name, avatar, size = "size-9" }: { name: string; avatar
 
 export function StudyView() {
   const [sub, setSub] = React.useState<SubView>({ name: "overview" })
-  const openRoomId = useApp((s) => s.openRoomId)
-
-  // Notification deep-link: tapping the shade notice jumps straight into
-  // that room's detail instead of the overview. Consumed once.
-  React.useEffect(() => {
-    if (openRoomId) {
-      setSub({ name: "detail", roomId: openRoomId })
-      useApp.setState({ openRoomId: null })
-    }
-  }, [openRoomId])
 
   return (
     <div className="space-y-4">
@@ -446,8 +438,9 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
   React.useEffect(() => {
     void load()
 
+    // Paused while hidden — the socket/focus paths catch up on return.
     const id = window.setInterval(() => {
-      if (document.visibilityState !== "hidden") void load(true)
+      if (!document.hidden) void load(true)
     }, 15000)
 
     return () => window.clearInterval(id)
@@ -604,7 +597,12 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
   React.useEffect(() => {
     setLoading(true)
     void load()
-    const poll = window.setInterval(() => void load(), 10000)
+
+    // Paused while hidden — visibility resync covers the return.
+    const poll = window.setInterval(() => {
+      if (!document.hidden) void load()
+    }, 10000)
+
     const tick = window.setInterval(() => setNow((t) => t + 1000), 1000)
 
     // Backgrounded tabs throttle intervals: resync wall-clock on return.
@@ -646,7 +644,6 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
   }, [detail, now])
 
   const act = async (path: "start" | "pause" | "resume" | "stop", body?: { roomId?: string }) => {
-    haptic(path === "stop" ? [25, 50, 25] : 15)
     setBusy(true)
 
     try {
@@ -759,11 +756,10 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
       ongoing: true,
     })
 
-    if (session.status !== "ACTIVE" || !isNativeApp()) return
+    if (session.status !== "ACTIVE") return
 
-    // Live shade text, minute-granular: cheap enough (one local schedule)
-    // and only while a session actually runs on a phone.
     const id = window.setInterval(() => {
+      if (document.hidden) return
       const nowMin = Math.max(0, Math.round(elapsedRef.current / 60000))
 
       void showTimerNotification({
@@ -975,6 +971,13 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
         </div>
       </section>
 
+      <DailyChallengeCard
+        roomId={detail.room.id}
+        isOwner={detail.room.isOwner}
+        daily={detail.dailyChallenge}
+        onChanged={() => void load()}
+      />
+
       <Button variant="ghost" onClick={() => void leave()} className="w-full cursor-pointer text-destructive hover:text-destructive">
         <LogOut className="size-4" />
         خروج از اتاق
@@ -1089,6 +1092,121 @@ function MemberRoster({
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+/**
+ * Daily room challenge: the owner sets today's minutes target for the whole
+ * room; everyone sees live progress. Off when the owner clears it.
+ */
+function DailyChallengeCard({
+  roomId,
+  isOwner,
+  daily,
+  onChanged,
+}: {
+  roomId: string
+  isOwner: boolean
+  daily: { goalMin: number; todayMin: number } | null
+  onChanged: () => void
+}) {
+  const { toast } = useToast()
+  const [minutes, setMinutes] = React.useState(daily?.goalMin ? String(daily.goalMin) : "120")
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    if (daily) setMinutes(String(daily.goalMin))
+  }, [daily?.goalMin])
+
+  const pct = daily && daily.goalMin > 0 ? Math.min(100, Math.round((daily.todayMin / daily.goalMin) * 100)) : 0
+
+  const save = async (value: number | null) => {
+    setSaving(true)
+
+    try {
+      await apiFetch(`/api/study/rooms/${roomId}/challenge`, {
+        method: "POST",
+        body: JSON.stringify({ minutes: value }),
+      })
+      toast({ title: value === null ? "چالش روزانه برداشته شد" : "چالش روزانه ثبت شد" })
+      onChanged()
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submit = () => {
+    const n = Number(minutes)
+
+    if (!Number.isInteger(n) || n < 15 || n > 960) {
+      toast({ variant: "destructive", title: "عدد معتبر نیست", description: "بین ۱۵ تا ۹۶۰ دقیقه." })
+
+      return
+    }
+
+    void save(n)
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <Zap className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <h2 className="text-sm font-semibold">چالش امروز اتاق</h2>
+      </div>
+      {daily ? (
+        <>
+          <p className="text-[11px] text-muted-foreground">
+            <FaNum>{formatDur(daily.todayMin)}</FaNum> از <FaNum>{formatDur(daily.goalMin)}</FaNum> امروز
+          </p>
+          <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
+            <div
+              className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-gradient-to-r from-[#F59E0B] to-[#F97316]")}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {pct >= 100 && (
+            <p className="text-[11px] font-semibold text-success">چالش امروز فتح شد! 🎉</p>
+          )}
+        </>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          {isOwner ? "هنوز چالشی نگذاشته‌ای — از پایین تعیین کن." : "سازنده اتاق هنوز چالشی نگذاشته است."}
+        </p>
+      )}
+      {isOwner && (
+        <div className="flex items-center gap-2 pt-1">
+          <Input
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+            placeholder="دقیقه"
+            inputMode="numeric"
+            dir="ltr"
+            className="h-11 flex-1 min-w-0 text-center"
+            aria-label="هدف چالش به دقیقه"
+          />
+          <Button onClick={submit} disabled={saving} className="h-11 cursor-pointer shrink-0">
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            ثبت چالش
+          </Button>
+          {daily && (
+            <Button
+              variant="ghost"
+              onClick={() => void save(null)}
+              disabled={saving}
+              className="h-11 cursor-pointer text-destructive hover:text-destructive shrink-0"
+            >
+              برداشتن
+            </Button>
+          )}
+        </div>
+      )}
     </section>
   )
 }

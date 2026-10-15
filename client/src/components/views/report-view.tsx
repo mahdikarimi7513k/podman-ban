@@ -84,10 +84,8 @@ export function groupSessionsByBook(sessions: SessionRow[]): Array<{ book: strin
   return Array.from(groups.entries()).map(([book, rows]) => ({ book, rows }))
 }
 
-/** Group module progress rows under their book (same stable order). */
-export function groupModulesByBook(
-  modules: ModuleProgress[],
-): Array<{ book: string; rows: ModuleProgress[] }> {
+/** Group module progress under their book (same stable order). */
+export function groupProgressByBook(modules: ModuleProgress[]): Array<{ book: string; rows: ModuleProgress[] }> {
   const groups = new Map<string, ModuleProgress[]>()
 
   for (const m of modules) {
@@ -482,25 +480,28 @@ export function ReportView() {
         </section>
       )}
 
-      {/* Module progress list — accordion per book, collapsed by default
-          so long histories don't force scrolling */}
+      {/* Module progress list — accordion per book so long histories don't scroll forever */}
       <section>
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
           <h2 className="text-sm font-semibold">وضعیت آزمون‌ها</h2>
         </div>
-        {(progress?.length ?? 0) > 0 ? (
+        {!progress || progress.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            هنوز پودمانی برای رشته شما تعریف نشده است.
+          </div>
+        ) : (
           <Accordion type="multiple" defaultValue={[]} className="space-y-2">
-            {groupModulesByBook(progress ?? []).map((g) => (
+            {groupProgressByBook(progress).map((g) => (
               <AccordionItem
                 key={g.book}
                 value={g.book}
                 className="rounded-lg border border-border bg-card overflow-hidden"
               >
                 <AccordionTrigger className="px-3.5 py-3 hover:no-underline cursor-pointer">
-                  <span className="text-sm font-semibold truncate">{g.book}</span>
-                  <span className="text-[11px] text-muted-foreground mr-auto pl-1 shrink-0">
-                    <FaNum>{g.rows.length}</FaNum> پودمان
+                  <span className="flex-1 text-right text-sm font-semibold truncate">{g.book}</span>
+                  <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    <FaNum>{g.rows.reduce((a, m) => a + m.attempts, 0)}</FaNum> آزمون
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-2 pb-2">
@@ -513,7 +514,7 @@ export function ReportView() {
                       return (
                         <li
                           key={m.moduleId}
-                          className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-accent/60 transition-colors"
+                          className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-accent/40"
                         >
                           <Icon className={cn("size-5 shrink-0", meta.className)} strokeWidth={ICON_STROKE} />
                           <div className="flex-1 min-w-0">
@@ -546,10 +547,6 @@ export function ReportView() {
               </AccordionItem>
             ))}
           </Accordion>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            هنوز پودمانی برای رشته شما تعریف نشده است.
-          </div>
         )}
       </section>
 

@@ -114,6 +114,7 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `RemoteConfig` ADD `konkurDate` text",
   "ALTER TABLE `RemoteConfig` ADD `studyDailyGoalMin` integer DEFAULT 180 NOT NULL",
   "ALTER TABLE `Question` ADD `explanationImageBase64` text",
+  "ALTER TABLE `StudyRoom` ADD `dailyChallengeMin` integer",
 ]
 
 // Study rooms (host-safe: shared hosts can't run drizzle-kit migrate).
@@ -167,6 +168,20 @@ export function ensureRuntimeTables(exec: (sql: string) => void): void {
   // ALTERs must land first. On an old production database (pre-email
   // columns) running the indexes first crashed the boot with
   // "no such column" and took the whole site down with a 503.
+  runAlters(exec)
+
+  for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
+
+  for (const stmt of RUNTIME_DDL_STUDY) exec(stmt)
+
+  // Second ALTER pass: tables created above (fresh host DBs) never saw the
+  // first pass ("no such table" was tolerated), so backfill them now.
+  // Fully idempotent — duplicate columns are tolerated, like migrate reruns.
+  runAlters(exec)
+}
+
+/** Tolerant ALTER runner: duplicate columns and missing tables are expected. */
+function runAlters(exec: (sql: string) => void): void {
   for (const stmt of RUNTIME_ALTERS) {
     try {
       exec(stmt)
@@ -178,10 +193,6 @@ export function ensureRuntimeTables(exec: (sql: string) => void): void {
       }
     }
   }
-
-  for (const stmt of RUNTIME_DDL_OAUTH) exec(stmt)
-
-  for (const stmt of RUNTIME_DDL_STUDY) exec(stmt)
 }
 
 function openDatabase(): BetterSQLite3Database<typeof schema> {

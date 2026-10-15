@@ -57,6 +57,13 @@
       "when": 1791653294707,
       "tag": "0007_add-explanation-image",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792090720166,
+      "tag": "0008_add-room-daily-challenge",
+      "breakpoints": true
     }
   ]
 }

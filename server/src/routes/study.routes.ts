@@ -28,6 +28,7 @@ import {
   studyJoinSchema,
   studyRoomCreateSchema,
   studySessionStartSchema,
+  studyChallengeSchema,
 } from "../lib/validations.js"
 
 export const studyRouter = Router()
@@ -636,6 +637,56 @@ studyRouter.post("/study/rooms/:id/members/:userId/remove", async (req, res) => 
   res.json({ ok: true })
 })
 
+// ---- POST /study/rooms/:id/challenge (owner only, CSRF) ----
+// The room owner sets a daily minutes challenge for the whole room.
+// Shown to every member next to the weekly challenge.
+
+studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
+  const user = await getSession(req)
+
+  if (!user) {
+    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
+
+    return
+  }
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
+
+    return
+  }
+
+  const roomId = req.params.id
+  const room = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
+
+  if (!room) {
+    res.status(404).json({ error: "اتاق یافت نشد" })
+
+    return
+  }
+
+  const isSiteAdmin = user.role === "ADMIN"
+
+  if (room.ownerId !== user.id && !isSiteAdmin) {
+    res.status(403).json({ error: "فقط سازنده اتاق می‌تواند چالش بگذارد" })
+
+    return
+  }
+
+  const data = parseBody(studyChallengeSchema, req.body, res)
+
+  if (!data) return
+
+  const updated = await db
+    .update(studyRooms)
+    .set({ dailyChallengeMin: data.minutes })
+    .where(eq(studyRooms.id, roomId))
+    .returning({ dailyChallengeMin: studyRooms.dailyChallengeMin })
+    .get()
+
+  res.json({ dailyChallengeMin: updated?.dailyChallengeMin ?? null })
+})
+
 // ---- GET /study/rooms/:id ----
 studyRouter.get("/study/rooms/:id", async (req, res) => {
   const user = await getSession(req)
@@ -739,6 +790,7 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
   }
 
   const roomWeekMin = leaderboard.reduce((a, m) => a + m.weekMin, 0)
+  const roomTodayMin = leaderboard.reduce((a, m) => a + m.todayMin, 0)
 
   res.json({
     room: {
@@ -764,6 +816,9 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
       }
       : null,
     challenge: { weekMin: roomWeekMin, goalMin: weekGoalMin },
+    dailyChallenge: room.dailyChallengeMin != null
+      ? { goalMin: room.dailyChallengeMin, todayMin: roomTodayMin }
+      : null,
     serverNow: new Date(nowMs).toISOString(),
   })
 })

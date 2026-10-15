@@ -9,7 +9,7 @@
 import * as React from "react"
 import { BellRing, Loader2 } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
-import { isNativeApp, ensureNotificationPermission } from "@/lib/native-notify"
+import { isNativeApp, scheduleNativeNotification } from "@/lib/native-notify"
 import { parseExamPrefs } from "@/lib/exam-prefs"
 import { useApp } from "@/lib/store"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,6 @@ export function BackgroundPermissionPrompt() {
   const [open, setOpen] = React.useState(false)
   const [liveTimer, setLiveTimer] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
-  const [denied, setDenied] = React.useState(false)
 
   React.useEffect(() => {
     if (!isNativeApp()) return
@@ -51,36 +50,6 @@ export function BackgroundPermissionPrompt() {
   }, [prefs])
 
   const done = (granted: boolean) => {
-    if (!granted) {
-      markAsked()
-      setOpen(false)
-
-      return
-    }
-
-    setBusy(true)
-
-    void ensureNotificationPermission().then((status) => {
-      setBusy(false)
-
-      if (status !== "granted") {
-        // Blocked at OS level: the only way back is manual. Keep the
-        // dialog open on the guidance instead of failing silently.
-        markAsked()
-        setDenied(true)
-
-        return
-      }
-
-      markAsked()
-      setOpen(false)
-      setDenied(false)
-
-      void scheduleActivePing()
-    })
-  }
-
-  const markAsked = () => {
     try {
       window.localStorage.setItem(FLAG, "1")
     } catch {
@@ -98,19 +67,21 @@ export function BackgroundPermissionPrompt() {
     void apiFetch<{ user: { prefs: string } }>("/api/auth/me")
       .then((r) => useApp.getState().patchUser({ prefs: r.user.prefs }))
       .catch(() => {})
-  }
 
-  const scheduleActivePing = async () => {
-    const { scheduleNativeNotification } = await import("@/lib/native-notify")
+    setOpen(false)
 
-    await scheduleNativeNotification(undefined, {
-      id: 10,
-      title: "اعلان مطالعه فعال شد",
-      body: liveTimer
-        ? "تایمرت در پس‌زمینه هم حساب می‌شود — با خیال راحت ادامه بده."
-        : "از این به بعد شروع و پایان مطالعه را خبرت می‌کنم.",
-      delayMs: 1000,
-    })
+    if (granted) {
+      setBusy(true)
+
+      void scheduleNativeNotification(undefined, {
+        id: 10,
+        title: "اعلان مطالعه فعال شد",
+        body: liveTimer
+          ? "تایمرت در پس‌زمینه هم حساب می‌شود — با خیال راحت ادامه بده."
+          : "از این به بعد شروع و پایان مطالعه را خبرت می‌کنم.",
+        delayMs: 1000,
+      }).finally(() => setBusy(false))
+    }
   }
 
   if (!open) return null
@@ -135,38 +106,20 @@ export function BackgroundPermissionPrompt() {
             </p>
           )}
           <p>برای این خبررسانی، اجازه اعلان لازم است.</p>
-          {denied ? (
-            <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-[12px] leading-6">
-              اعلان‌ها در تنظیمات گوشی بسته است. برای فعال‌سازی دستی:
-              <br />
-              تنظیمات گوشی ← برنامه‌ها ← پودمان‌بان ← اعلان‌ها را روشن کن.
-              <br />
-              و برای باتری: برنامه‌ها ← پودمان‌بان ← باتری ← «بدون محدودیت».
-            </div>
-          ) : (
-            <p className="text-[12px]">
-              نکته گوشی‌های اندرویدی: اگر گوشی اعلان را دیر نشان داد، در تنظیمات گوشی مسیر
-              برنامه‌ها ← پودمان‌بان ← باتری را روی «بدون محدودیت» بگذار تا اندروید
-              برنامه را در پس‌زمینه نبندد.
-            </p>
-          )}
+          <p className="text-[12px]">
+            نکته گوشی‌های اندرویدی: اگر گوشی اعلان را دیر نشان داد، در تنظیمات گوشی مسیر
+            برنامه‌ها ← پودمان‌بان ← باتری را روی «بدون محدودیت» بگذار تا اندروید
+            برنامه را در پس‌زمینه نبندد.
+          </p>
         </div>
         <DialogFooter>
-          {denied ? (
-            <Button onClick={() => setOpen(false)} className="cursor-pointer">
-              فهمیدم
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => done(false)} className="cursor-pointer">
-                بعداً
-              </Button>
-              <Button onClick={() => done(true)} disabled={busy} className="cursor-pointer">
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                فعال‌سازی
-              </Button>
-            </>
-          )}
+          <Button variant="outline" onClick={() => done(false)} className="cursor-pointer">
+            بعداً
+          </Button>
+          <Button onClick={() => done(true)} disabled={busy} className="cursor-pointer">
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            فعال‌سازی
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

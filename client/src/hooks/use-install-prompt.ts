@@ -1,10 +1,7 @@
 /**
- * PWA install prompt (beforeinstallprompt).
- *
- * The browser fires this once per session when the app is installable and
- * not yet installed. We stash the deferred event and expose a guided
- * install button; dismissal remembers for this device. No-ops everywhere
- * the event never fires (iOS, already-installed, APK WebView).
+ * PWA install prompt: captures beforeinstallprompt once per page life and
+ * exposes a guided install action. No-ops where the browser never fires
+ * the event (iOS, already-installed, native APK).
  */
 import * as React from "react"
 
@@ -13,66 +10,49 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
-const DISMISSED_KEY = "pb_install_dismissed"
-
-export interface InstallPromptApi {
-  canInstall: boolean
-  installing: boolean
-  install: () => void
-  dismiss: () => void
+function isInstallPromptEvent(e: Event): e is InstallPromptEvent {
+  return (
+    "prompt" in e &&
+    typeof (e as { prompt?: unknown }).prompt === "function"
+  )
 }
 
-export function useInstallPrompt(): InstallPromptApi {
+export function useInstallPrompt(): {
+  canInstall: boolean
+  installing: boolean
+  install: () => Promise<void>
+} {
   const [deferred, setDeferred] = React.useState<InstallPromptEvent | null>(null)
   const [installing, setInstalling] = React.useState(false)
 
-  const dismissed = React.useCallback((): boolean => {
-    try {
-      return window.localStorage.getItem(DISMISSED_KEY) === "1"
-    } catch {
-      return false
-    }
-  }, [])
-
   React.useEffect(() => {
-    if (dismissed()) return
-
     const onPrompt = (e: Event) => {
-      e.preventDefault()
+      if (!isInstallPromptEvent(e)) return
 
-      // SAFETY: this listener only fires for BeforeInstallPromptEvent, which
-      // carries prompt()/userChoice — the interface below names that contract.
-      setDeferred(e as InstallPromptEvent)
+      e.preventDefault()
+      setDeferred(e)
     }
 
     window.addEventListener("beforeinstallprompt", onPrompt)
 
     return () => window.removeEventListener("beforeinstallprompt", onPrompt)
-  }, [dismissed])
-
-  const install = React.useCallback(() => {
-    if (!deferred) return
-    setInstalling(true)
-
-    void deferred
-      .prompt()
-      .then(() => deferred.userChoice)
-      .catch(() => undefined)
-      .then(() => {
-        setInstalling(false)
-        setDeferred(null)
-      })
-  }, [deferred])
-
-  const dismiss = React.useCallback(() => {
-    try {
-      window.localStorage.setItem(DISMISSED_KEY, "1")
-    } catch {
-      /* ignore */
-    }
-
-    setDeferred(null)
   }, [])
 
-  return { canInstall: deferred !== null, installing, install, dismiss }
+  const install = React.useCallback(async () => {
+    if (!deferred || installing) return
+
+    setInstalling(true)
+
+    try {
+      await deferred.prompt()
+      await deferred.userChoice
+    } catch {
+      /* dismissed or failed — stay put */
+    } finally {
+      setDeferred(null)
+      setInstalling(false)
+    }
+  }, [deferred, installing])
+
+  return { canInstall: deferred !== null, installing, install }
 }

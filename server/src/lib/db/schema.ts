@@ -214,6 +214,8 @@ export const studyRooms = sqliteTable("StudyRoom", {
   // 6-digit invite code, unique. Required when requireInvite is true.
   inviteCode: text("inviteCode").notNull().unique(),
   requireInvite: integer("requireInvite", { mode: "boolean" }).notNull().default(true),
+  // Owner-set daily challenge (minutes for the whole room today). Null = off.
+  dailyChallengeMin: integer("dailyChallengeMin"),
   ownerId: text("ownerId").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt("createdAt"),
 }, (t) => [index("StudyRoom_createdAt_idx").on(t.createdAt)])

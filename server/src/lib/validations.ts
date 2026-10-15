@@ -252,3 +252,8 @@ export const studySessionStartSchema = z.object({
   roomId: z.string().min(1),
   subject: z.string().trim().max(80).optional().nullable(),
 })
+
+export const studyChallengeSchema = z.object({
+  // Daily room challenge in minutes; null turns it off. Owner-only.
+  minutes: z.number().int().min(15).max(960).nullable(),
+})

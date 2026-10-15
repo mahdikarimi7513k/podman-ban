@@ -175,15 +175,7 @@ export function installStudyTimerActions(): void {
               }
             })()
           } else {
-            // Body/action tap: land exactly in that room (StudyView
-            // consumes openRoomId once). Fall back to the overview.
-            // SAFETY: extra is plugin JSON of our own making (see
-            // showTimerNotification); garbage degrades to overview.
-            const extra = event.notification?.extra as { roomId?: unknown } | undefined
-            const roomId = String(extra?.roomId ?? "")
-
-            if (roomId) useApp.getState().openStudyRoom(roomId)
-            else useApp.getState().setView("study")
+            useApp.getState().setView("study")
           }
         },
       )

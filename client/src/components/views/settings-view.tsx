@@ -18,6 +18,7 @@ import {
   Pencil,
   Check,
   Trash2,
+  Smartphone,
   Download,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
@@ -296,7 +297,7 @@ export function SettingsView() {
       {/* Password change */}
       <PasswordChangeSection />
 
-      {/* PWA install — only rendered while the browser offers it */}
+      {/* Install app */}
       <InstallAppSection />
 
       {/* Online support */}
@@ -330,33 +331,37 @@ export function SettingsView() {
         <LogOut className="size-4" />
         خروج از حساب
       </Button>
+
+      {/* Delete account */}
+      <DeleteAccountSection />
     </div>
   )
 }
 
 function InstallAppSection() {
-  const { canInstall, installing, install, dismiss } = useInstallPrompt()
+  const { canInstall, installing, install } = useInstallPrompt()
 
   if (!canInstall) return null
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+    <section className="rounded-xl border border-border bg-card p-4 space-y-2">
       <div className="flex items-center gap-2">
-        <Download className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <Smartphone className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <h2 className="text-sm font-semibold">نصب برنامه</h2>
       </div>
       <p className="text-[11px] text-muted-foreground leading-relaxed">
-        پودمان‌بان را مثل یک برنامه واقعی روی گوشی نصب کن — بدون نیاز به مرورگر باز.
+        پودمان‌بان را مثل یک برنامه روی گوشی نصب کن — بدون نیاز به بازار.
       </p>
-      <div className="flex gap-2">
-        <Button onClick={install} disabled={installing} className="cursor-pointer flex-1 h-11">
-          {installing && <Loader2 className="size-4 animate-spin" />}
-          نصب
-        </Button>
-        <Button variant="ghost" onClick={dismiss} className="cursor-pointer h-11">
-          بعداً
-        </Button>
-      </div>
+      <Button
+        type="button"
+        onClick={() => void install()}
+        disabled={installing}
+        className="cursor-pointer w-full sm:w-auto h-11"
+      >
+        {installing && <Loader2 className="size-4 animate-spin" />}
+        <Download className="size-4" />
+        نصب روی گوشی
+      </Button>
     </section>
   )
 }
@@ -608,8 +613,124 @@ function formatDate(iso: string): string {
   })
 }
 
-function PasswordChangeSection() {
+/**
+ * Danger zone: self-service account + data deletion. Password
+ * re-confirmation plus typing DELETE guards fat-finger and stolen
+ * sessions; the server cascades everything off the user row.
+ */
+function DeleteAccountSection() {
   const { toast } = useToast()
+  const setUser = useApp((s) => s.setUser)
+  const [open, setOpen] = React.useState(false)
+  const [password, setPassword] = React.useState("")
+  const [confirm, setConfirm] = React.useState("")
+  const [saving, setSaving] = React.useState(false)
+
+  const canSubmit = password.length >= 1 && confirm.trim() === "DELETE" && !saving
+
+  const submit = async () => {
+    if (!canSubmit) return
+
+    setSaving(true)
+
+    try {
+      await apiFetch("/api/user/account", {
+        method: "DELETE",
+        body: JSON.stringify({ password, confirm: "DELETE" }),
+      })
+      toast({ title: "حساب شما حذف شد" })
+      setUser(null)
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "حذف ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-destructive/30 bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Trash2 className="size-4 text-destructive" strokeWidth={ICON_STROKE} />
+        <h2 className="text-sm font-semibold text-destructive">حذف حساب کاربری</h2>
+      </div>
+      {!open ? (
+        <>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            حساب و همه‌ی داده‌هایت (آزمون‌ها، پیام‌ها، اتاق‌ها) برای همیشه پاک می‌شود.
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setOpen(true)}
+            className="cursor-pointer text-destructive hover:text-destructive w-full sm:w-auto h-11"
+          >
+            حذف حسابم…
+          </Button>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="del-pw" className="text-xs">رمز عبور (تأیید هویت)</Label>
+            <Input
+              id="del-pw"
+              type="password"
+              dir="ltr"
+              className="h-11 text-left"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="••••••••"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="del-confirm" className="text-xs">
+              برای تأیید، کلمه <span dir="ltr" className="font-mono">DELETE</span> را بنویس
+            </Label>
+            <Input
+              id="del-confirm"
+              dir="ltr"
+              className="h-11 text-left font-mono"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="DELETE"
+              maxLength={6}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setPassword("")
+                setConfirm("")
+              }}
+              className="cursor-pointer flex-1 h-11"
+            >
+              انصراف
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void submit()}
+              disabled={!canSubmit}
+              className="cursor-pointer flex-1 h-11"
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              حذف قطعی
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function PasswordChangeSection() {  const { toast } = useToast()
   const setUser = useApp((s) => s.setUser)
   const [current, setCurrent] = React.useState("")
   const [next, setNext] = React.useState("")

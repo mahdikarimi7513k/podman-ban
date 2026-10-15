@@ -215,6 +215,36 @@ export function AdminContent() {
   } | null>(null)
 
   // ---- question editor ----
+  // Rapid entry: saving a NEW question neither closes the dialog nor
+  // reloads the page — the list refreshes silently and the form clears.
+  const [editorResetKey, setEditorResetKey] = React.useState(0)
+  const [qTicks, setQTicks] = React.useState<Record<string, number>>({})
+
+  const bumpTick = (moduleId: string) =>
+    setQTicks((p) => ({ ...p, [moduleId]: (p[moduleId] ?? 0) + 1 }))
+
+  const bumpCount = (moduleId: string, delta: number) =>
+    setBooks((prev) =>
+      prev?.map((b) => ({
+        ...b,
+        modules: b.modules.map((m) =>
+          m.id === moduleId ? { ...m, questionCount: Math.max(0, m.questionCount + delta) } : m,
+        ),
+      })) ?? null,
+    )
+
+  const handleQuestionSaved = (mode: "next" | "close", moduleId: string, isNew: boolean) => {
+    bumpTick(moduleId)
+
+    if (isNew) bumpCount(moduleId, 1)
+
+    if (mode === "next") {
+      setEditorResetKey((k) => k + 1)
+    } else {
+      setEditingQuestion(null)
+    }
+  }
+
   const openNewQuestion = (moduleId: string) => {
     setEditingQuestion({
       moduleId,
@@ -242,12 +272,13 @@ export function AdminContent() {
     }
   }
 
-  const deleteQuestion = async (qid: string) => {
+  const deleteQuestion = async (moduleId: string, qid: string) => {
     if (!confirm("حذف این سوال؟")) return
 
     try {
       await apiFetch(`/api/admin/questions/${qid}`, { method: "DELETE" })
-      await load()
+      bumpTick(moduleId)
+      bumpCount(moduleId, -1)
       setEditingQuestion(null)
     } catch {
       toast({ variant: "destructive", title: "حذف ناموفق بود" })
@@ -414,8 +445,9 @@ export function AdminContent() {
                       />
                       <ModuleQuestions
                         moduleId={m.id}
+                        refreshTick={qTicks[m.id] ?? 0}
                         onEditQuestion={(qid) => openEditQuestion(m.id, qid)}
-                        onDeleteQuestion={deleteQuestion}
+                        onDeleteQuestion={(qid) => deleteQuestion(m.id, qid)}
                       />
                     </li>
                   ))}
@@ -470,13 +502,14 @@ export function AdminContent() {
       {/* Question editor dialog */}
       {editingQuestion && (
         <QuestionEditor
+          key={`${editingQuestion.moduleId}:${editingQuestion.question?.id || "new"}`}
           moduleId={editingQuestion.moduleId}
           question={editingQuestion.question}
+          resetKey={editorResetKey}
           onClose={() => setEditingQuestion(null)}
-          onSaved={async () => {
-            setEditingQuestion(null)
-            await load()
-          }}
+          onSaved={(mode) =>
+            handleQuestionSaved(mode, editingQuestion.moduleId, !editingQuestion.question?.id)
+          }
         />
       )}
 
@@ -842,10 +875,12 @@ function ModuleEditDialog({
 /** List of questions in a module (fetched on demand when expanded). */
 function ModuleQuestions({
   moduleId,
+  refreshTick,
   onEditQuestion,
   onDeleteQuestion,
 }: {
   moduleId: string
+  refreshTick: number
   onEditQuestion: (qid: string) => void
   onDeleteQuestion: (qid: string) => void
 }) {
@@ -856,8 +891,8 @@ function ModuleQuestions({
   const [loading, setLoading] = React.useState(false)
   const [open, setOpen] = React.useState(false)
 
-  const load = React.useCallback(async () => {
-    setLoading(true)
+  const load = React.useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
 
     try {
       const res = await apiFetch<{
@@ -875,6 +910,19 @@ function ModuleQuestions({
   React.useEffect(() => {
     if (open && questions === null) void load()
   }, [open, questions, load])
+
+  // Silent refresh after save/delete: no spinner, no collapse, no scroll jump.
+  const firstTick = React.useRef(true)
+
+  React.useEffect(() => {
+    if (firstTick.current) {
+      firstTick.current = false
+
+      return
+    }
+
+    if (open && questions !== null) void load(true)
+  }, [refreshTick])
 
   return (
     <div className="mt-2">
@@ -935,13 +983,15 @@ function ModuleQuestions({
 function QuestionEditor({
   moduleId,
   question,
+  resetKey,
   onClose,
   onSaved,
 }: {
   moduleId: string
   question: QuestionDetail | null
+  resetKey: number
   onClose: () => void
-  onSaved: () => void
+  onSaved: (mode: "next" | "close") => void
 }) {
   const { toast } = useToast()
   const isEdit = !!question?.id
@@ -964,6 +1014,25 @@ function QuestionEditor({
   const [explanationImageBase64, setExplanationImageBase64] = React.useState<string | null>(
     question?.explanationImageBase64 ?? null,
   )
+
+  // Rapid entry: after each save the parent bumps resetKey — clear the form
+  // for the next question while the dialog stays open in place.
+  const firstReset = React.useRef(true)
+
+  React.useEffect(() => {
+    if (firstReset.current) {
+      firstReset.current = false
+
+      return
+    }
+
+    setText("")
+    setOptions(["", "", "", ""])
+    setCorrectOption(0)
+    setExplanation("")
+    setImageBase64(null)
+    setExplanationImageBase64(null)
+  }, [resetKey])
 
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
@@ -1071,8 +1140,8 @@ function QuestionEditor({
         })
       }
 
-      toast({ title: isEdit ? "سوال به‌روزرسانی شد" : "سوال افزوده شد" })
-      onSaved()
+      toast({ title: isEdit ? "سوال به‌روزرسانی شد" : "سوال افزوده شد — سوال بعدی" })
+      onSaved(isEdit ? "close" : "next")
     } catch (err) {
       toast({
         variant: "destructive",
@@ -1282,11 +1351,11 @@ function QuestionEditor({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} className="cursor-pointer">
-            انصراف
+            {isEdit ? "انصراف" : "بستن"}
           </Button>
           <Button onClick={save} disabled={saving} className="cursor-pointer">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            ذخیره
+            {isEdit ? "ذخیره" : "ذخیره و سوال بعدی"}
           </Button>
         </DialogFooter>
       </DialogContent>

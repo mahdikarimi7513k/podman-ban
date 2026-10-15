@@ -263,16 +263,8 @@ export function ExamView() {
   // question are chained per question (see AnswerQueue): arrival order
   // always matches tap order, so the stored option equals the screen.
   const queueRef = React.useRef<AnswerQueue | null>(null)
-  const queueKeyRef = React.useRef<string | null>(null)
 
-  // One durable queue per session: a killed app resumes resending exactly
-  // this session's tapped-but-unsent answers (persisted under its id).
-  if (!queueRef.current || queueKeyRef.current !== examSessionId) {
-    queueRef.current?.stop()
-    queueRef.current = new AnswerQueue(3000, examSessionId ?? undefined)
-    queueKeyRef.current = examSessionId
-  }
-
+  if (!queueRef.current) queueRef.current = new AnswerQueue()
   const queue = queueRef.current
 
   const postAnswer = React.useCallback(
@@ -302,17 +294,6 @@ export function ExamView() {
 
   // Drop the retry chain on unmount — finish() flushes synchronously instead.
   React.useEffect(() => () => queue.stop(), [queue])
-
-  // Rehydrate: answers tapped before a kill were persisted; resend them now
-  // that the sender exists. Once per session load.
-  const hydratedRef = React.useRef<string | null>(null)
-
-  React.useEffect(() => {
-    if (!data || hydratedRef.current === examSessionId) return
-    hydratedRef.current = examSessionId
-    queue.attach((qid, opt) => postAnswer(qid, opt))
-    void queue.flush((qid, opt) => postAnswer(qid, opt))
-  }, [data, examSessionId, queue, postAnswer])
 
   const select = async (questionId: string, option: number) => {
     setAnswers((a) => ({ ...a, [questionId]: option }))
@@ -723,7 +704,7 @@ export function ExamView() {
                             LETTERS[i]
                           )}
                         </span>
-                        <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words">{opt}</span>
+                        <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words whitespace-pre-wrap">{opt}</span>
                         {isCorrect && (
                           <span className="text-[10px] font-medium text-success shrink-0">صحیح</span>
                         )}
@@ -747,7 +728,7 @@ export function ExamView() {
                   <div className="mt-4 rounded-lg bg-secondary/50 border border-border p-3">
                     <p className="text-[11px] font-medium text-muted-foreground mb-1">توضیح</p>
                     {revealed[question.id].explanation && (
-                      <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
+                      <p dir="auto" className="text-xs leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
                         {revealed[question.id].explanation}
                       </p>
                     )}
@@ -1302,7 +1283,7 @@ function ExamReview({
                                 LETTERS[i]
                               )}
                             </span>
-                            <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words">{opt}</span>
+                            <span dir="auto" className="text-sm leading-relaxed flex-1 min-w-0 break-words break-words whitespace-pre-wrap">{opt}</span>
                             {isCorrect && (
                               <span className="text-[10px] font-medium text-success shrink-0">صحیح</span>
                             )}
@@ -1320,7 +1301,7 @@ function ExamReview({
                     <div className="mt-3 rounded-lg bg-secondary/50 border border-border p-2.5">
                       <p className="text-[11px] font-medium text-muted-foreground mb-0.5">توضیح</p>
                       {question.explanation && (
-                        <p dir="auto" className="text-xs leading-relaxed text-foreground/80">
+                        <p dir="auto" className="text-xs leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
                           {question.explanation}
                         </p>
                       )}

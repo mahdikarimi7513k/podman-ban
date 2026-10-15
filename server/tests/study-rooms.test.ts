@@ -115,8 +115,7 @@ describe("study rooms", () => {
     expect((await owner.post(`/api/study/rooms/${roomId}/members/${ownerRow.id}/remove`, {})).status).toBe(400)
   })
 
-  it("transfers ownership to the earliest member when the owner leaves", async () => {
-    const owner = await studentSession("owner10")
+  it("transfers ownership to the earliest member when the owner leaves", async () => {    const owner = await studentSession("owner10")
     const created = await owner.post("/api/study/rooms", { name: "managed3", capacity: 5, requireInvite: false })
     const roomId: string = created.body.room.id
     const guest = await studentSession("guest10")
@@ -216,5 +215,29 @@ describe("study rooms", () => {
     await db.delete(studyRooms).where(eq(studyRooms.id, roomId)).run()
     const rows = await db.select().from(studyMembers).where(eq(studyMembers.roomId, roomId)).all()
     expect(rows).toHaveLength(0)
+  })
+
+  it("lets the owner set and clear a daily challenge", async () => {
+    const owner = await studentSession("owner11")
+    const created = await owner.post("/api/study/rooms", { name: "challenge", capacity: 5, requireInvite: false })
+    const roomId: string = created.body.room.id
+    const guest = await studentSession("guest11")
+
+    await guest.post("/api/study/rooms/join", { roomId })
+
+    expect((await guest.post(`/api/study/rooms/${roomId}/challenge`, { minutes: 120 })).status).toBe(403)
+    expect((await owner.post(`/api/study/rooms/${roomId}/challenge`, { minutes: 5 })).status).toBe(422)
+    expect((await owner.post(`/api/study/rooms/${roomId}/challenge`, { minutes: 120 })).status).toBe(200)
+
+    const detail = await guest.get(`/api/study/rooms/${roomId}`)
+
+    expect(detail.body.dailyChallenge.goalMin).toBe(120)
+    expect(Number.isFinite(detail.body.dailyChallenge.todayMin)).toBe(true)
+
+    expect((await owner.post(`/api/study/rooms/${roomId}/challenge`, { minutes: null })).status).toBe(200)
+
+    const cleared = await guest.get(`/api/study/rooms/${roomId}`)
+
+    expect(cleared.body.dailyChallenge).toBeNull()
   })
 })

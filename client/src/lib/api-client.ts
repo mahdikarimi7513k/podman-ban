@@ -16,14 +16,11 @@
  * (e.g. https://azmon.example.ir). Empty means same-origin (web behavior).
  */
 
-// Single source of truth for native detection lives in native-notify
-// (type-only Capacitor import + dynamic plugin loading keep
-// @capacitor/core out of the web bundle).
 import { isNativeApp } from "@/lib/native-notify"
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
 
-export { API_BASE }
+export { API_BASE, isNativeApp }
 
 /**
  * Default network timeout. On flaky networks a request can hang forever
