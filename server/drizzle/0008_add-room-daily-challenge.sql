@@ -1,1 +1,2 @@
-ALTER TABLE `StudyRoom` ADD `dailyChallengeMin` integer;
+ALTER TABLE `StudyRoom` ADD `dailyTitle` text;--> statement-breakpoint
+ALTER TABLE `StudyRoom` ADD `dailyGoalMin` integer;

@@ -50,7 +50,7 @@ describe("oauth DDL parity", () => {
       "0005_add-exam-pausedat.sql",
       "0006_add-study-rooms-avatar.sql",
       "0007_add-explanation-image.sql",
-      "0008_add-room-challenge.sql",
+      "0008_add-room-daily-challenge.sql",
     ].flatMap((f) =>
       readFileSync(resolve(here, "..", "drizzle", f), "utf8")
         .split("--> statement-breakpoint")

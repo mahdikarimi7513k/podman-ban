@@ -126,14 +126,10 @@ interface AppState {
   view: View
   examSessionId: string | null
   startExamModuleId: string | null
-  // Notification deep-link target: when set, StudyView opens that room's
-  // detail directly (then clears it). Set by the shade-tap handler.
-  openRoomId: string | null
 
   // actions
   boot: () => Promise<void>
   setView: (v: View) => void
-  openStudyRoom: (roomId: string) => void
   setUser: (u: AppUser | null) => void
   enterExam: (sessionId: string, moduleId: string) => void
   exitExam: () => void
@@ -154,7 +150,6 @@ export const useApp = create<AppState>((set, get) => ({
   view: "auth",
   examSessionId: null,
   startExamModuleId: null,
-  openRoomId: null,
   exitConfirmOpen: false,
 
   // Module-level memo so React StrictMode's double effect (and any remount)
@@ -173,10 +168,6 @@ export const useApp = create<AppState>((set, get) => ({
 
   setView(v) {
     set({ view: v })
-  },
-
-  openStudyRoom(roomId) {
-    set({ openRoomId: roomId, view: "study" })
   },
 
   setUser(u) {

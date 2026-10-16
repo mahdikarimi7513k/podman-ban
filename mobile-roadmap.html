@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Roadmap موبایل - Podman Ban</title>
+  <style>
+    :root{--bg:#0b1020;--bg2:#111831;--card:#17203b;--text:#f4f7ff;--muted:#a7b4d6;--accent:#4ea1ff;--accent2:#5ee3a1;--danger:#ff6b7a;--warn:#ffd166;--ok:#5ee3a1;--border:#2a355a;--shadow:0 18px 50px rgba(0,0,0,.35)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:linear-gradient(180deg,var(--bg),var(--bg2));color:var(--text);line-height:1.8}
+    .wrap{max-width:1100px;margin:0 auto;padding:22px}
+    .hero{background:radial-gradient(circle at top right,#20306a,transparent 50%),linear-gradient(135deg,#162147,#0f1733);border:1px solid var(--border);border-radius:22px;padding:24px;margin-bottom:18px;box-shadow:var(--shadow)}
+    h1{margin:0;font-size:27px;line-height:1.4}
+    h2{margin:22px 0 10px;font-size:21px;border-bottom:1px solid var(--border);padding-bottom:6px}
+    h3{margin:15px 0 7px;font-size:17px;color:var(--accent)}
+    p{margin:8px 0}
+    .muted{color:var(--muted)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+    .journey{background:#101a33;border:1px dashed #3a4a7a;border-radius:13px;padding:13px;margin:10px 0}
+    .before{background:#30161d;border:1px solid #6b2634;border-radius:11px;padding:12px;margin-top:8px}
+    .after{background:#123124;border:1px solid #2a6b4a;border-radius:11px;padding:12px;margin-top:8px}
+    .label{font-weight:700;font-size:13px;margin-bottom:5px}
+    .label.before{color:#ff9aa4}
+    .label.after{color:#9af0c6}
+    .phase{border-inline-start:4px solid var(--accent);padding-inline-start:14px;margin:15px 0}
+    .metric span{display:inline-block;background:#202b4f;border:1px solid #33427a;border-radius:999px;padding:4px 10px;font-size:12px;margin:4px}
+    .step{margin:6px 0;padding:6px 10px;background:#15213f;border-radius:8px}
+    small{color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<section class="hero">
+  <h1>Roadmap موبایل — Podman Ban</h1>
+  <p class="muted">نقشهٔ کار برای اینکه پروژهٔ فعلی روی گوشی «استاندارد و حرفه‌ای» شود، بدون تغییر کد.</p>
+  <p class="muted">توضیحات به زبان ساده نوشته شده‌اند تا کسی که برنامه‌نویس نیست هم بفهمد.</p>
+</section>
+
+<section>
+  <h2>۱. مقایسهٔ YPT و پروژهٔ ما</h2>
+  <p>YPT یک اپلیکیشن تایمر مطالعه است. کاربر تایمر را روشن می‌کند و تا داخل اپ بماند زمان جمع می‌شود؛ نوتیف ساده دارد و بیشتر روی «تجربهٔ موبایل» تمرکز دارد.</p>
+  <p>پروژهٔ ما قابلیت‌های بیشتر دارد (اتاق مطالعه، آزمون، رتبه‌بندی، اعلان ادمین)، ولی باید روی **رفتار موبایل** (پس‌زمینه، نوتیف، دکمهٔ برگشت، صفحه‌کلید) بهتر شود.</p>
+</section>
+
+<section>
+  <h2>۲. ایرادات با مثال ساده (قبل/بعد از رفع)</h2>
+
+  <h3>۲.۱ دکمهٔ «برگشت» روی گوشی</h3>
+  <div class="journey">
+    <div class="step">کاربر در امتحان است. انگشت تصادفی swipe/back می‌کند.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>امتحان ممکن است بسته شود یا وضعیت گم شود. مثل «پروندهٔ نیم‌کاره» بدون پرسش saves.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>گوشی می‌پرسد: «آیا می‌خواهید آزمون را ببندید؟» با انتخاب «خیر»، جلوگیری می‌شود. پیشرفت کاربر محفوظ می‌ماند.</div>
+  </div>
+
+  <h3>۲.۲ یادآوری ساعت ۲۳:۰۰</h3>
+  <div class="journey">
+    <div class="step">کاربر هر روز سوال پاسخ می‌دهد. app بسته است.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>پیام ۲۳:۰۰ نمی‌آید، چون تایمر داخل JavaScript فقط وقتی app باز است کار می‌کند.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>گوشی خودش one scheduled reminder دارد (مثل alarm app). حتی اگر پروژهٔ ما app بسته باشد، پیام_reminder می‌آید.</div>
+  </div>
+
+  <h3>۲.۳ نوتیف تایمر freeze می‌شود</h3>
+  <div class="journey">
+    <div class="step">کاربر تایمر را روشن می‌کند و ۴۰ دقیقه app بسته است.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>notification شاید بگوید «۲۵ دقیقه» ولی time واقعی است ۶۵ دقیقه. وقتی reopen, timer «jump» می‌کند.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>notification هر دقیقه به‌روز می‌شود (مثل stopwatch system). روی return هم همان زمان را نشان می‌دهد.</div>
+  </div>
+
+  <h3>۲.۴ تشخیص «موبایل واقعی» ضعیف است</h3>
+  <div class="journey">
+    <div class="step">کاربر نسخهٔ APK روی گوشی Samsung نصب می‌کند، ولی بعضی قابلیت‌ها کار نمی‌کنند.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>app گاهی نمی‌فهمد که روی Android است → نوتیف‌ها ساخته نمی‌شوند / یادگیری‌شتن permission رو ظاهر نمی‌شود / uploadها corrupted می‌شوند.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>تشخیص قابل‌اعتماد → همهٔ قابلیت‌های موبایل روی همهٔ گوشی‌ها فعال می‌شوند.</div>
+  </div>
+
+  <h3>۲.۵ پاسخ‌های آزمون در شبکهٔ ضعیف از بین می‌روند</h3>
+  <div class="journey">
+    <div class="step">کاربر در subway مترو ۲۰ سوال tap می‌کند؛ سپس app killed می‌شود.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>پاسخ‌های نیمه‌ارسال in-memoryند → از بین می‌روند → نمرهٔ نهایی با UI ممکن است mismatch بسازد.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>پاسخ‌ها در یک queue ذخیره شده (draft) و پس از reconnect retry می‌شوند. نمره با چیزی که کاربر دید هم‌راستا می‌ماند.</div>
+  </div>
+
+  <h3>۲.۶ مصرف باتری و دادهٔ زیاد</h3>
+  <div class="journey">
+    <div class="step">300 user همزمان app باز دارند → ثانیه‌ای همیشه server check.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>ترافیک عظیم → سرور کندتر → network error بیشتر → کارفر باتری drain می‌کند.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>گوشی only when needed/preferences سرور를 check می‌کند یا WebSocket updates → smoother و کمتر charging.</div>
+  </div>
+
+  <h3>۲.۷ صفحه‌کلید forms را می‌پوشاند</h3>
+  <div class="journey">
+    <div class="step">کاربر روی گوشی کوچک login می‌کند.</div>
+    <div class="before"><div class="label before">قبل از رفع</div>input پشت keyboard می‌ماند، دکمهٔ submit نمایان نیست → mis-tap.</div>
+    <div class="after"><div class="label after">بعد از رفع</div>فرم auto scroll/resize می‌کند → همه inputs و buttons قابل دسترسی.</div>
+  </div>
+
+</section>
+
+<section>
+  <h2>۳. Roadmap ساده (مثل یک به‌روزرسانی مرحله‌ای)</h2>
+
+  <div class="phase">
+    <h3>Phase 0 — بررسی (Audit)</h3>
+    <p>مثل «چک آپ» قبل از تعمیر: همهٔ گوشی‌ها/شبکه‌ها را test می‌کنیم تا ببینیم قبل/بعد چه تفاوتی دارد.</p>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 1 — کارهای حیاتی (P0)</h3>
+    <p>۱) back button fix، ۲) timer notification real-time، ۳) reminder alarm native، ۴) permission deep-link.</p>
+    <div class="step">نتیجه: کمتر accidental loss و بهتر reliability.</div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 2 — ذخیرهٔ قوی + Offline (P1)</h3>
+    <p>پاسخ‌ها ذخیره شده، offline overview cache، polling adaptive.</p>
+    <div class="step">نتیجه: subway/bus robust.</div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 3 — polish Native (P2)</h3>
+    <p>haptics, keyboard plugin, notification deep link, widgets, adaptive icons.</p>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 4 — Store readiness</h3>
+    <p>AAB signing, permissions docs, crash analytics, pre-launch testing.</p>
+  </div>
+</section>
+
+<section>
+  <h2>۴. مثال «قبل/بعد» در یک جمله (خیلی ساده)</h2>
+  <ul>
+    <li><b>Exit confirm:</b> قبل: swipe تصادفی exam می‌بندد. بعد: «آیا ببندم؟».</li>
+    <li><b>Reminder:</b> قبل: ۲۳:۰۰ هرگز نمی‌آید. بعد: هر روز می‌آید.</li>
+    <li><b>Timer notification:</b> قبل: زمان frozen. بعد: زمان live.</li>
+    <li><b>Weak network answers:</b> قبل: پاسخ lost. بعد: resend safe.</li>
+    <li><b>Battery:</b> قبل: app همیشه poll. بعد: only needed.</li>
+    <li><b>Keyboard:</b> قبل: input پشت keyboard. بعد: auto-scroll.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>۵. Metrics ساده برای تأیید موفقیت</h2>
+  <div class="metric">
+    <span>No back-swipe accidental exit</span>
+    <span>Reminder fires daily</span>
+    <span>Notification never stale > 1 min</span>
+    <span>Answers survive kill</span>
+    <span>Lower battery usage</span>
+    <span>Faster first load</span>
+  </div>
+  <p class="muted">تمام این موارد پیشنهادی‌اند. کد تغییر داده نشده و فقط plan/document است.</p>
+</section>
+
+<section>
+  <h2>۶. بقیهٔ ایرادات (پنهان ولی مهم)</h2>
+  <p class="muted">اینها را هم در بررسی‌ها دیدیم. بعضی‌ها کوچک ولی روی گوشی‌ها اذیت‌کننده می‌شوند.</p>
+
+  <div class="journey">
+    <div class="label before">Service Worker دیر ثبت می‌شود</div>
+    <p>ثبت SW تا پس از بارگذاری کامل صفحه صبر می‌کند؛ در صورت کندی، قابلیت «app مثل app» شدن دیر فعال می‌شود. <small>sw-register.tsx</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">PWA install prompt ندارد</div>
+    <p>هیچ «Add to Home Screen» button/helper در UI دیده نشد. کاربران گوشی web-to-app install flow دستی دارند. <small>manifest.webmanifest + sw-register</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Deep navigation recovery در offline شکننده است</div>
+    <p>Service Worker فقط صفحهٔ اصلی («/») را برای fallback کش می‌کند. اگر کاربر در nested route (مثلاً study detail) offline شود و reload کند، به صفحهٔ اصلی برمی‌گردد. <small>sw.js</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">OAuth cold-start برگشت ممکن است drop شود</div>
+    <p>listener فقط `appUrlOpen` را گوش می‌دهد. اگر app کاملاً kill شده و via deep link باز شود، ticket در callback ممکن است نادیده گرفته شود. <small>social-buttons.tsx</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Theme-color ثابت و light-only</div>
+    <p>`theme-color` = #FAFAFA است ولی dark mode ندارد. روی موبایل، status bar/header در dark بی‌هماهنگی به نظر می‌رسد. <small>index.html</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Portrait lock ممکن است UX tablet ها را محدود کند</div>
+    <p>Manifest `orientation: portrait-primary`. روی tablet/landscape user، app rotate نمی‌شود. <small>manifest.webmanifest</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">ادمین broadcast بدون push</div>
+    <p>تنها poll every 60s. اگر app fully closed باشد، broadcast تا open خوانده نمی‌شود. <small>notify-inbox.ts</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Pollingهای چندگانه باتری را مصرف می‌کنند</div>
+    <p>online status هر 30s probe می‌کند + study rooms every 10s + config/broadcast 60s. روی 3G battery/data ضربه می‌زند. <small>use-online-status.ts, study-view.tsx</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Permission denied بدون Settings deep-link</div>
+    <p>اگر user “Don’t allow” انتخاب کند، هیچ راه guided برای re-enable وجود ندارد. <small>background-permission.tsx</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Duplicate source-of-truth for native flags</div>
+    <p>`isNativeApp()` دوبار duplicate شده؛ behavior drift risk بین api-client و native-notify. <small>api-client.ts + native-notify.ts</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Auth refresh edge cases trên mobile network</div>
+    <p>doRefresh + socket reconnect loops روی weak network ممکن است repeated retries ایجاد کند. <small>api-client.ts + chat socket</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Account deletion / Data safety not evident</div>
+    <p>هیچ auth endpoint/UI clear “delete my account” دیده نشد. برای Play Store data safety الزامات دارد. <small>auth routes/store</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Anti-tamper signature guard can break updates</div>
+    <p>زمانی که keystore/signing path تغییر کند، app die می‌شود تا fingerprint match شود. برای standard release workflow risk است. <small>build-apk.yml injects MainActivity</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">Base64 upload memory overhead</div>
+    <p>فایلٔ بزرگ در base64 (در RAM) برای phoneٔ کم مموری heavy است. <small>api-client.ts upload</small></p>
+  </div>
+
+  <div class="journey">
+    <div class="label before">No native crash analytics end-to-end visible</div>
+    <p>client error reporting exists، ولی تأیید نشد که mobile crashes را با contextual session/timer data capture کند. <small>error-report.ts</small></p>
+  </div>
+</section>
+
+<section>
+  <h2>۷. Checklist اولویت‌دار (Phase 0/1/2/3/4)</h2>
+  <p class="muted">این چک‌لیست برای دنبال کردن پیشرفت بدون بار کردن خاطر کاربر نهایی طراحی شده است. خودِ تیم فنی موارد را tick کند.</p>
+
+  <h3>Phase 0 — Audit (بدون تغییر کد)</h3>
+  <ul>
+    <li>☐ روی 3 گوشی مختلف (Samsung / Xiaomi / Pixel) on-device audit `isNativeApp`</li>
+    <li>☐ جدول قبل/بعد نوتیف تایمر بساز (freeze issue)</li>
+    <li>☐ جدول battery probe 24h baseline</li>
+    <li>☐ سنجیدن permission flow (allow/deny/settings)</li>
+    <li>☐ سنجیدن offline fallback deep routes</li>
+    <li>☐ capture crash baseline + load p95</li>
+  </ul>
+
+  <h3>Phase 1 — Reliability هسته (P0)</h3>
+  <ul>
+    <li>☐ Back button handler + exam exit confirm consumption</li>
+    <li>☐ Study timer Foreground Service + notification channels</li>
+    <li>☐ Daily reminder native alarm / FCM scheduled</li>
+    <li>☐ Permission denied → settings deep-link</li>
+    <li>☐ normalized native detection (one source) + safety audit</li>
+  </ul>
+
+  <h3>Phase 2 — Durable Data & Offline (P1)</h3>
+  <ul>
+    <li>☐ durable sync queue (answers, study act events)</li>
+    <li>☐ offline cache for overview/leaderboard snapshots</li>
+    <li>☐ visibility-gated polling + adaptive intervals</li>
+    <li>☐ online status probe consolidation (one interval)</li>
+    <li>☐ OAuth cold-start deep-link ticket handler</li>
+  </ul>
+
+  <h3>Phase 3 — Native Polish (P2)</h3>
+  <ul>
+    <li>☐ keyboard plugin + resize policy</li>
+    <li>☐ haptics on timer thresholds</li>
+    <li>☐ notification deep-link to exact view</li>
+    <li>☐ widgets daily goal</li>
+    <li>☐ adaptive icons raster + splash</li>
+  </ul>
+
+  <h3>Phase 4 — Store readiness & Observability</h3>
+  <ul>
+    <li>☐ AAB + Play App Signing + targetSdk review</li>
+    <li>☐ permission/data safety docs + privacy/account deletion</li>
+    <li>☐ crash analytics end-to-end verified</li>
+    <li>☐ pre-launch test matrix (Android 12-15)</li>
+    <li>☐ performance profiling low-end devices</li>
+  </ul>
+</section>
+
+<section>
+  <h2>۸. فایل markdown (mobile-defects.md)</h2>
+  <p class="muted">همان checklist و لیست را به صورت MD نیز به صورت `mobile-defects.md` در root ایجاد کردم تا می‌توانید در گیت/دیسکورد به اشتراک بگذارید.</p>
+</section>
+
+<footer class="muted" style="margin-top:20px;text-align:center;">
+  این roadmap برای فهم ساختار و اولویت mobile-first تنظیم شده است.
+</footer>
+</div>
+</body>
+</html>

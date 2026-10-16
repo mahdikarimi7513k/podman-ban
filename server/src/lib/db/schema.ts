@@ -215,10 +215,9 @@ export const studyRooms = sqliteTable("StudyRoom", {
   inviteCode: text("inviteCode").notNull().unique(),
   requireInvite: integer("requireInvite", { mode: "boolean" }).notNull().default(true),
   ownerId: text("ownerId").references(() => users.id, { onDelete: "set null" }),
-  // Daily challenge posted by the owner (text + minutes goal for the day).
-  challengeText: text("challengeText"),
-  challengeGoalMin: integer("challengeGoalMin"),
-  challengeDate: text("challengeDate"),
+  // Daily challenge set by the owner (or the main admin): shown to members.
+  dailyTitle: text("dailyTitle"),
+  dailyGoalMin: integer("dailyGoalMin"),
   createdAt: createdAt("createdAt"),
 }, (t) => [index("StudyRoom_createdAt_idx").on(t.createdAt)])
 

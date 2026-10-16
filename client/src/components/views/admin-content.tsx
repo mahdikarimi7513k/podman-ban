@@ -79,22 +79,28 @@ export function AdminContent() {
     question: QuestionDetail | null
   } | null>(null)
 
-  // Bumps after any question mutation so open ModuleQuestions lists refresh
-  // in place — the book/module tree never unmounts, no scroll jump.
-  const [qRefresh, setQRefresh] = React.useState(0)
+  // Open books survive every reload (controlled accordion) — the admin
+  // never re-finds their place after a save.
+  const [openBooks, setOpenBooks] = React.useState<string[]>([])
+  // Per-module question-list refresh stamps (bumped on save, no remount).
+  const [qBump, setQBump] = React.useState<Record<string, number>>({})
 
   const load = React.useCallback(async (quiet = false) => {
+    // Quiet reloads only refresh counts in place — no full-page spinner,
+    // no collapsed accordions, no scroll jump.
     if (!quiet) setLoading(true)
 
     try {
       const res = await apiFetch<{ books: Book[] }>("/api/admin/books")
       setBooks(res.books)
     } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "بارگذاری محتوا ناموفق بود",
-        description: err instanceof ApiError ? err.message : undefined,
-      })
+      if (!quiet) {
+        toast({
+          variant: "destructive",
+          title: "بارگذاری محتوا ناموفق بود",
+          description: err instanceof ApiError ? err.message : undefined,
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -230,6 +236,7 @@ export function AdminContent() {
         options: ["", "", "", ""],
         correctOption: 0,
         explanation: "",
+        explanationImageBase64: null,
       },
     })
   }
@@ -251,8 +258,7 @@ export function AdminContent() {
 
     try {
       await apiFetch(`/api/admin/questions/${qid}`, { method: "DELETE" })
-      await load(true)
-      setQRefresh((k) => k + 1)
+      await load()
       setEditingQuestion(null)
     } catch {
       toast({ variant: "destructive", title: "حذف ناموفق بود" })
@@ -310,7 +316,7 @@ export function AdminContent() {
           هنوز کتابی ثبت نشده است.
         </div>
       ) : (
-        <Accordion type="multiple" className="space-y-3">
+        <Accordion type="multiple" value={openBooks} onValueChange={setOpenBooks} className="space-y-3">
           {books.map((book) => (
             <AccordionItem
               key={book.id}
@@ -419,7 +425,7 @@ export function AdminContent() {
                       />
                       <ModuleQuestions
                         moduleId={m.id}
-                        refreshKey={qRefresh}
+                        refreshKey={qBump[m.id] ?? 0}
                         onEditQuestion={(qid) => openEditQuestion(m.id, qid)}
                         onDeleteQuestion={deleteQuestion}
                       />
@@ -479,10 +485,14 @@ export function AdminContent() {
           moduleId={editingQuestion.moduleId}
           question={editingQuestion.question}
           onClose={() => setEditingQuestion(null)}
-          onSaved={async () => {
-            setEditingQuestion(null)
+          onSaved={async (created) => {
+            // Stay exactly where the admin is: quiet count refresh + bump
+            // the module's question list. Creates keep the dialog open with
+            // a fresh form for rapid entry; edits close it.
             await load(true)
-            setQRefresh((k) => k + 1)
+            setQBump((b) => ({ ...b, [editingQuestion.moduleId]: (b[editingQuestion.moduleId] ?? 0) + 1 }))
+
+            if (!created) setEditingQuestion(null)
           }}
         />
       )}
@@ -882,8 +892,20 @@ function ModuleQuestions({
   }, [moduleId])
 
   React.useEffect(() => {
-    if (open) void load()
-  }, [open, refreshKey, load])
+    if (open && questions === null) void load()
+  }, [open, questions, load])
+
+  // Parent bumps refreshKey after a save — reload the open list in place.
+  const keyRef = React.useRef(refreshKey)
+
+  React.useEffect(() => {
+    if (refreshKey !== keyRef.current) {
+      keyRef.current = refreshKey
+
+      if (open) void load()
+      else setQuestions(null)
+    }
+  }, [refreshKey, open, load])
 
   return (
     <div className="mt-2">
@@ -950,7 +972,7 @@ function QuestionEditor({
   moduleId: string
   question: QuestionDetail | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (created: boolean) => void
 }) {
   const { toast } = useToast()
   const isEdit = !!question?.id
@@ -1080,8 +1102,21 @@ function QuestionEditor({
         })
       }
 
-      toast({ title: isEdit ? "سوال به‌روزرسانی شد" : "سوال افزوده شد" })
-      onSaved()
+      if (isEdit) {
+        toast({ title: "سوال به‌روزرسانی شد" })
+        onSaved(false)
+      } else {
+        // Rapid entry: clear the form for the next question, keep the
+        // dialog open exactly where the admin is.
+        setText("")
+        setOptions(["", "", "", ""])
+        setCorrectOption(0)
+        setExplanation("")
+        setImageBase64(null)
+        setExplanationImageBase64(null)
+        toast({ title: "سوال افزوده شد — بعدی را بنویس" })
+        onSaved(true)
+      }
     } catch (err) {
       toast({
         variant: "destructive",
@@ -1185,14 +1220,15 @@ function QuestionEditor({
                 >
                   {correctOption === i ? "✓" : LETTERS[i]}
                 </button>
-                <Input
+                <Textarea
                   value={opt}
                   dir="auto"
                   onChange={(e) =>
                     setOptions((o) => o.map((x, idx) => (idx === i ? e.target.value : x)))
                   }
-                  placeholder={`گزینه ${LETTERS[i]}`}
-                  className="flex-1 h-10"
+                  placeholder={`گزینه ${LETTERS[i]} (اینتر برای چندخطی)`}
+                  rows={2}
+                  className="flex-1 min-h-[44px] resize-y whitespace-pre-wrap"
                 />
                 {options.length > 2 && (
                   <button
