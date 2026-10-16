@@ -29,7 +29,6 @@ import {
   CalendarDays,
   Medal,
   Zap,
-  Pencil,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
@@ -115,7 +114,7 @@ interface RoomDetail {
   leaderboard: LeaderRow[]
   mySession: { id: string; status: "ACTIVE" | "PAUSED"; elapsedMs: number; startedAt: string; serverNow: string } | null
   challenge: { weekMin: number; goalMin: number }
-  daily: { title: string | null; goalMin: number | null; todayMin: number; canEdit: boolean }
+  dailyChallenge: { title: string; goalMin: number; todayMin: number } | null
   serverNow: string
 }
 
@@ -265,14 +264,37 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
   const [data, setData] = React.useState<Overview | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [entering, setEntering] = React.useState(false)
+  const [stale, setStale] = React.useState(false)
   const { toast } = useToast()
 
   const load = React.useCallback(async () => {
+    const key = `study:cache:overview:${range}`
+
     try {
       const res = await apiFetch<Overview>(`/api/study/overview?range=${range}`)
+
       setData(res)
+      setStale(false)
+
+      try {
+        window.localStorage.setItem(key, JSON.stringify(res))
+      } catch {
+        /* private mode */
+      }
     } catch {
-      /* offline — keep previous */
+      // Offline: show the last snapshot instead of an empty screen.
+      try {
+        const raw = window.localStorage.getItem(key)
+
+        if (raw) {
+          // SAFETY: this snapshot was JSON-stringified from an Overview
+          // response by the success branch above — same shape by construction.
+          setData(JSON.parse(raw) as Overview)
+          setStale(true)
+        }
+      } catch {
+        /* keep previous */
+      }
     } finally {
       setLoading(false)
     }
@@ -346,6 +368,11 @@ function OverviewScreen({ go }: { go: (s: SubView) => void }) {
           دستاوردها
         </Button>
       </div>
+      {stale && (
+        <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-muted-foreground text-center">
+          آفلاین هستی — آخرین آمار ذخیره‌شده نمایش داده می‌شود.
+        </p>
+      )}
 
       {/* Countdown card — matches the reference design exactly. */}
       <KonkurCountdown konkur={data?.konkur ?? null} />
@@ -427,6 +454,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
   const { toast } = useToast()
   const [rooms, setRooms] = React.useState<RoomItem[] | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [stale, setStale] = React.useState(false)
   const [code, setCode] = React.useState("")
   const [joining, setJoining] = React.useState(false)
 
@@ -435,9 +463,32 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
 
     try {
       const res = await apiFetch<{ rooms: RoomItem[] }>("/api/study/rooms")
+
       setRooms(res.rooms)
+      setStale(false)
+
+      try {
+        window.localStorage.setItem("study:cache:rooms", JSON.stringify(res.rooms))
+      } catch {
+        /* private mode */
+      }
     } catch {
-      if (!quiet) setRooms([])
+      if (!quiet) {
+        // Offline: last snapshot instead of an empty screen.
+        try {
+          const raw = window.localStorage.getItem("study:cache:rooms")
+
+          if (raw) {
+            // SAFETY: snapshot written from RoomItem[] by the branch above.
+            setRooms(JSON.parse(raw) as RoomItem[])
+            setStale(true)
+          } else {
+            setRooms([])
+          }
+        } catch {
+          setRooms([])
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -446,9 +497,10 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
   React.useEffect(() => {
     void load()
 
-    // No background drain: refresh only while the tab is visible.
+    // Hidden tabs don't poll: saves battery/data and stops the
+    // background-traffic the audit flagged.
     const id = window.setInterval(() => {
-      if (!document.hidden) void load(true)
+      if (document.visibilityState === "visible") void load(true)
     }, 15000)
 
     return () => window.clearInterval(id)
@@ -518,6 +570,11 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
       </section>
 
       <h2 className="text-sm font-semibold">اتاق‌های فعال</h2>
+      {stale && (
+        <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-muted-foreground text-center">
+          آفلاین هستی — آخرین لیست ذخیره‌شده نمایش داده می‌شود.
+        </p>
+      )}
       {loading ? (
         <div className="flex justify-center py-10">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -575,6 +632,7 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
 
 function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void }) {
   const { toast } = useToast()
+  const isAdmin = useApp((s) => s.user?.role === "ADMIN" || s.user?.role === "CONTENT_ADMIN")
   const [detail, setDetail] = React.useState<RoomDetail | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [now, setNow] = React.useState(() => Date.now())
@@ -606,14 +664,11 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     setLoading(true)
     void load()
 
-    // Gated polling: paused while hidden, resyncs on return instead.
     const poll = window.setInterval(() => {
-      if (!document.hidden) void load()
+      if (document.visibilityState === "visible") void load()
     }, 10000)
 
-    const tick = window.setInterval(() => {
-      if (!document.hidden) setNow((t) => t + 1000)
-    }, 1000)
+    const tick = window.setInterval(() => setNow((t) => t + 1000), 1000)
 
     // Backgrounded tabs throttle intervals: resync wall-clock on return.
     const onVisible = () => {
@@ -966,6 +1021,13 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
         </ul>
       </section>
 
+      <DailyChallenge
+        roomId={detail.room.id}
+        challenge={detail.dailyChallenge}
+        isAdmin={isAdmin}
+        onChanged={() => void load()}
+      />
+
       {/* Weekly challenge */}
       <section className="rounded-2xl border border-border bg-card p-4 space-y-2">
         <div className="flex items-center gap-2">
@@ -979,12 +1041,6 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
           <div className="h-full rounded-full bg-gradient-to-r from-[#18A8FF] to-[#0878F9]" style={{ width: `${challengePct}%` }} />
         </div>
       </section>
-
-      <DailyChallengeCard
-        roomId={detail.room.id}
-        daily={detail.daily}
-        onChanged={() => void load()}
-      />
 
       <Button variant="ghost" onClick={() => void leave()} className="w-full cursor-pointer text-destructive hover:text-destructive">
         <LogOut className="size-4" />
@@ -1105,43 +1161,70 @@ function MemberRoster({
 }
 
 /**
- * Daily challenge: every member sees today's title + room progress;
- * the owner (or the main admin) sets it.
+ * Daily challenge: set by an admin for one day, raced by the whole room.
+ * Everyone sees title + live room progress; admins get the set/clear form.
  */
-function DailyChallengeCard({
+function DailyChallenge({
   roomId,
-  daily,
+  challenge,
+  isAdmin,
   onChanged,
 }: {
   roomId: string
-  daily: RoomDetail["daily"]
+  challenge: RoomDetail["dailyChallenge"]
+  isAdmin: boolean
   onChanged: () => void
 }) {
   const { toast } = useToast()
-  const [editing, setEditing] = React.useState(false)
-  const [title, setTitle] = React.useState(daily.title ?? "")
-  const [goal, setGoal] = React.useState(daily.goalMin ?? 180)
+  const [title, setTitle] = React.useState(challenge?.title ?? "")
+  const [goal, setGoal] = React.useState(challenge?.goalMin ?? 180)
   const [saving, setSaving] = React.useState(false)
+  const [editing, setEditing] = React.useState(false)
 
-  const pct = daily.goalMin && daily.goalMin > 0
-    ? Math.min(100, Math.round((daily.todayMin / daily.goalMin) * 100))
+  React.useEffect(() => {
+    setTitle(challenge?.title ?? "")
+    setGoal(challenge?.goalMin ?? 180)
+  }, [challenge?.title, challenge?.goalMin])
+
+  const pct = challenge && challenge.goalMin > 0
+    ? Math.min(100, Math.round((challenge.todayMin / challenge.goalMin) * 100))
     : 0
 
-  const save = async (clear = false) => {
+  const save = async () => {
+    if (title.trim().length < 2 || saving) return
+
     setSaving(true)
 
     try {
       await apiFetch(`/api/study/rooms/${roomId}/challenge`, {
-        method: "POST",
-        body: JSON.stringify(clear ? { title: null, goalMin: null } : { title: title.trim() || null, goalMin: goal }),
+        method: "PUT",
+        body: JSON.stringify({ title: title.trim(), goalMin: goal }),
       })
       setEditing(false)
-      toast({ title: clear ? "چالش روزانه حذف شد" : "چالش روزانه ثبت شد" })
+      toast({ title: "چالش امروز ثبت شد" })
       onChanged()
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "ذخیره ناموفق بود",
+        title: "ثبت چالش ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const clear = async () => {
+    setSaving(true)
+
+    try {
+      await apiFetch(`/api/study/rooms/${roomId}/challenge`, { method: "DELETE" })
+      setEditing(false)
+      onChanged()
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "حذف ناموفق بود",
         description: err instanceof ApiError ? err.message : undefined,
       })
     } finally {
@@ -1154,38 +1237,58 @@ function DailyChallengeCard({
       <div className="flex items-center gap-2">
         <Zap className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <h2 className="text-sm font-semibold">چالش امروز اتاق</h2>
-        {daily.canEdit && !editing && (
-          <button
-            type="button"
-            onClick={() => {
-              setTitle(daily.title ?? "")
-              setGoal(daily.goalMin ?? 180)
-              setEditing(true)
-            }}
-            className="ms-auto inline-flex items-center gap-1 min-h-[44px] px-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        {isAdmin && !editing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEditing(true)}
+            className="ms-auto h-9 cursor-pointer text-xs"
           >
-            <Pencil className="size-3.5" />
-            {daily.title || daily.goalMin ? "ویرایش" : "ثبت چالش"}
-          </button>
+            {challenge ? "ویرایش" : "ثبت چالش"}
+          </Button>
         )}
       </div>
-      {editing ? (
-        <div className="space-y-2">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="مثلاً: امروز همه ۳ ساعت می‌خوانیم"
-            maxLength={120}
-            className="h-11"
-          />
-          <div className="flex items-center gap-2">
-            <Label htmlFor="daily-goal" className="text-xs text-muted-foreground shrink-0">هدف (دقیقه)</Label>
+      {challenge && !editing ? (
+        <>
+          <p className="text-sm font-medium">{challenge.title}</p>
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            مجموع امروز اتاق: <FaNum>{formatDur(challenge.todayMin)}</FaNum> از <FaNum>{formatDur(challenge.goalMin)}</FaNum>
+          </p>
+          <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#18A8FF] to-[#0878F9] transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            <FaNum>{pct}</FaNum>٪ کامل شده
+          </p>
+        </>
+      ) : null}
+      {(!challenge && !isAdmin) && (
+        <p className="text-[11px] text-muted-foreground">امروز چالشی ثبت نشده است.</p>
+      )}
+      {isAdmin && (editing || !challenge) && (
+        <div className="space-y-2 pt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="challenge-title" className="text-xs">عنوان چالش امروز</Label>
+            <Input
+              id="challenge-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="مثلاً: ۵ ساعت مطالعه گروهی"
+              maxLength={80}
+              className="h-11"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="challenge-goal" className="text-xs">هدف گروهی (دقیقه)</Label>
             <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
-              <SelectTrigger id="daily-goal" className="h-10 flex-1 cursor-pointer" dir="ltr">
+              <SelectTrigger id="challenge-goal" className="h-11 cursor-pointer" dir="ltr">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[30, 60, 120, 180, 240, 300, 360, 480].map((m) => (
+                {[60, 120, 180, 240, 300, 420, 600].map((m) => (
                   <SelectItem key={m} value={String(m)} className="cursor-pointer">
                     <FaNum>{m}</FaNum> دقیقه
                   </SelectItem>
@@ -1194,42 +1297,22 @@ function DailyChallengeCard({
             </Select>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => void save(false)} disabled={saving} className="cursor-pointer flex-1 h-11">
+            <Button size="sm" onClick={() => void save()} disabled={title.trim().length < 2 || saving} className="cursor-pointer">
               {saving && <Loader2 className="size-4 animate-spin" />}
-              ذخیره
+              ثبت برای امروز
             </Button>
-            {(daily.title || daily.goalMin) && (
-              <Button size="sm" variant="ghost" onClick={() => void save(true)} disabled={saving} className="cursor-pointer text-destructive hover:text-destructive h-11">
+            {challenge && (
+              <Button size="sm" variant="ghost" onClick={() => void clear()} disabled={saving} className="cursor-pointer text-destructive hover:text-destructive">
                 حذف
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={() => setEditing(false)} className="cursor-pointer h-11">
-              انصراف
-            </Button>
+            {editing && (
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)} className="cursor-pointer">
+                انصراف
+              </Button>
+            )}
           </div>
         </div>
-      ) : daily.title || daily.goalMin ? (
-        <>
-          {daily.title && <p className="text-sm font-medium leading-7">{daily.title}</p>}
-          {daily.goalMin ? (
-            <>
-              <p className="text-[11px] text-muted-foreground">
-                مجموع امروز اتاق: <FaNum>{formatDur(daily.todayMin)}</FaNum> از <FaNum>{formatDur(daily.goalMin)}</FaNum>
-              </p>
-              <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#18A8FF] to-[#0878F9]" style={{ width: `${pct}%` }} />
-              </div>
-            </>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">
-              مجموع امروز اتاق: <FaNum>{formatDur(daily.todayMin)}</FaNum>
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="text-[11px] text-muted-foreground">
-          {daily.canEdit ? "هنوز چالشی ثبت نشده — با «ثبت چالش» امروز را بساز." : "هنوز چالشی برای امروز ثبت نشده است."}
-        </p>
       )}
     </section>
   )

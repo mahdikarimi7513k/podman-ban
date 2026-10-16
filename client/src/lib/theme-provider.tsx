@@ -53,21 +53,12 @@ function applyTheme(theme: Theme): void {
 
   document.documentElement.classList.toggle("dark", resolved === "dark")
   document.documentElement.style.colorScheme = resolved
-  syncThemeColorMeta(resolved)
-}
 
-/** Keep the browser chrome (status bar, task switcher) in the theme. */
-function syncThemeColorMeta(resolved: "light" | "dark"): void {
-  const color = resolved === "dark" ? "#0A0A0A" : "#FAFAFA"
-  let meta = document.querySelector('meta[name="theme-color"]')
+  // Keep the browser chrome (status bar, task switcher) in sync — the
+  // static manifest/index meta only knows the light color.
+  const meta = document.querySelector('meta[name="theme-color"]')
 
-  if (!meta) {
-    meta = document.createElement("meta")
-    meta.setAttribute("name", "theme-color")
-    document.head.appendChild(meta)
-  }
-
-  meta.setAttribute("content", color)
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0A0A0A" : "#FAFAFA")
 }
 
 /** Momentarily kill transitions so the switch is instant, not animated. */

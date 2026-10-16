@@ -18,7 +18,6 @@ import {
   Pencil,
   Check,
   Trash2,
-  Download,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme-provider"
 import type { Theme } from "@/lib/theme"
@@ -40,8 +39,8 @@ import { formatTehran } from "@/lib/tehran-time"
 import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
+import { InstallPrompt } from "@/components/install-prompt"
 import { useToast } from "@/hooks/use-toast"
-import { usePwaInstall } from "@/hooks/use-pwa-install"
 import { cn, ICON_STROKE } from "@/lib/utils";
 
 export function SettingsView() {
@@ -173,10 +172,8 @@ export function SettingsView() {
             )
           })}
         </div>
+        <InstallPrompt />
       </section>
-
-      {/* PWA install (web only, only when the browser offers it) */}
-      <PwaInstallSection />
 
       {/* Preferences */}
       <section className="rounded-xl border border-border bg-card divide-y divide-border">
@@ -367,40 +364,6 @@ interface ProfileSaveBody {
  * Social-style profile card: tap the avatar to set/change the photo
  * (pencil badge), pencil button next to the name for inline rename.
  */
-function PwaInstallSection() {
-  const { canInstall, install } = usePwaInstall()
-  const [busy, setBusy] = React.useState(false)
-
-  if (!canInstall) return null
-
-  return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
-          <Download className="size-5" strokeWidth={ICON_STROKE} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">نصب برنامه روی گوشی</p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            بدون نیاز به بازار — مستقیم از مرورگر نصب می‌شود.
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            setBusy(true)
-            void install().finally(() => setBusy(false))
-          }}
-          disabled={busy}
-          className="h-11 cursor-pointer shrink-0"
-        >
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          نصب
-        </Button>
-      </div>
-    </section>
-  )
-}
-
 function ProfileCard() {
   const user = useApp((s) => s.user)
   const { toast } = useToast()

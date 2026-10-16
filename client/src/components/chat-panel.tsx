@@ -133,6 +133,16 @@ export function ChatPanel({
           value={text}
           onChange={(e) => setText(sanitizeMessageText(e.target.value))}
           onKeyDown={onKeyDown}
+          onFocus={(e) => {
+            // Mobile keyboards cover the composer: bring it into view.
+            window.setTimeout(() => {
+              try {
+                e.target.scrollIntoView({ block: "nearest", behavior: "smooth" })
+              } catch {
+                /* old webviews */
+              }
+            }, 300)
+          }}
           placeholder={isAdmin ? "پاسخ به کاربر…" : "پیام خود را بنویسید…"}
           rows={1}
           maxLength={2000}

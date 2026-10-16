@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "82456d08-a9f6-46e9-8e26-8ddce87f6a3d",
+  "id": "a9df64b1-3a93-473c-b369-e1e0793aa158",
   "prevId": "5eb592d5-1a48-485f-b34e-41f95770cac6",
   "tables": {
     "Answer": {
@@ -1360,16 +1360,23 @@
           "notNull": false,
           "autoincrement": false
         },
-        "dailyTitle": {
-          "name": "dailyTitle",
+        "challengeTitle": {
+          "name": "challengeTitle",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "dailyGoalMin": {
-          "name": "dailyGoalMin",
+        "challengeGoalMin": {
+          "name": "challengeGoalMin",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "challengeDate": {
+          "name": "challengeDate",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

@@ -79,28 +79,18 @@ export function AdminContent() {
     question: QuestionDetail | null
   } | null>(null)
 
-  // Open books survive every reload (controlled accordion) — the admin
-  // never re-finds their place after a save.
-  const [openBooks, setOpenBooks] = React.useState<string[]>([])
-  // Per-module question-list refresh stamps (bumped on save, no remount).
-  const [qBump, setQBump] = React.useState<Record<string, number>>({})
-
-  const load = React.useCallback(async (quiet = false) => {
-    // Quiet reloads only refresh counts in place — no full-page spinner,
-    // no collapsed accordions, no scroll jump.
-    if (!quiet) setLoading(true)
+  const load = React.useCallback(async () => {
+    setLoading(true)
 
     try {
       const res = await apiFetch<{ books: Book[] }>("/api/admin/books")
       setBooks(res.books)
     } catch (err) {
-      if (!quiet) {
-        toast({
-          variant: "destructive",
-          title: "بارگذاری محتوا ناموفق بود",
-          description: err instanceof ApiError ? err.message : undefined,
-        })
-      }
+      toast({
+        variant: "destructive",
+        title: "بارگذاری محتوا ناموفق بود",
+        description: err instanceof ApiError ? err.message : undefined,
+      })
     } finally {
       setLoading(false)
     }
@@ -109,6 +99,24 @@ export function AdminContent() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // Silent question-list refresh: after adding a question we must NOT
+  // reload the whole book tree (accordion collapses, scroll jumps — feels
+  // like a refresh). Instead the open ModuleQuestions list reloads itself
+  // quietly and the module counter patches locally.
+  const [qListTick, setQListTick] = React.useState(0)
+
+  const bumpQuestions = React.useCallback((moduleId: string, delta: number) => {
+    setQListTick((t) => t + 1)
+    setBooks((prev) =>
+      prev?.map((b) => ({
+        ...b,
+        modules: b.modules.map((m) =>
+          m.id === moduleId ? { ...m, questionCount: Math.max(0, m.questionCount + delta) } : m,
+        ),
+      })) ?? prev,
+    )
+  }, [])
 
   // ---- book CRUD ----
   const [newBook, setNewBook] = React.useState({
@@ -236,7 +244,6 @@ export function AdminContent() {
         options: ["", "", "", ""],
         correctOption: 0,
         explanation: "",
-        explanationImageBase64: null,
       },
     })
   }
@@ -316,7 +323,7 @@ export function AdminContent() {
           هنوز کتابی ثبت نشده است.
         </div>
       ) : (
-        <Accordion type="multiple" value={openBooks} onValueChange={setOpenBooks} className="space-y-3">
+        <Accordion type="multiple" className="space-y-3">
           {books.map((book) => (
             <AccordionItem
               key={book.id}
@@ -425,7 +432,7 @@ export function AdminContent() {
                       />
                       <ModuleQuestions
                         moduleId={m.id}
-                        refreshKey={qBump[m.id] ?? 0}
+                        refreshTick={qListTick}
                         onEditQuestion={(qid) => openEditQuestion(m.id, qid)}
                         onDeleteQuestion={deleteQuestion}
                       />
@@ -485,14 +492,9 @@ export function AdminContent() {
           moduleId={editingQuestion.moduleId}
           question={editingQuestion.question}
           onClose={() => setEditingQuestion(null)}
-          onSaved={async (created) => {
-            // Stay exactly where the admin is: quiet count refresh + bump
-            // the module's question list. Creates keep the dialog open with
-            // a fresh form for rapid entry; edits close it.
-            await load(true)
-            setQBump((b) => ({ ...b, [editingQuestion.moduleId]: (b[editingQuestion.moduleId] ?? 0) + 1 }))
-
-            if (!created) setEditingQuestion(null)
+          onSaved={(isNew) => {
+            if (!isNew) setEditingQuestion(null)
+            bumpQuestions(editingQuestion.moduleId, isNew ? 1 : 0)
           }}
         />
       )}
@@ -859,12 +861,12 @@ function ModuleEditDialog({
 /** List of questions in a module (fetched on demand when expanded). */
 function ModuleQuestions({
   moduleId,
-  refreshKey,
+  refreshTick,
   onEditQuestion,
   onDeleteQuestion,
 }: {
   moduleId: string
-  refreshKey: number
+  refreshTick: number
   onEditQuestion: (qid: string) => void
   onDeleteQuestion: (qid: string) => void
 }) {
@@ -875,8 +877,10 @@ function ModuleQuestions({
   const [loading, setLoading] = React.useState(false)
   const [open, setOpen] = React.useState(false)
 
-  const load = React.useCallback(async () => {
-    setLoading(true)
+  const load = React.useCallback(async (quiet: boolean) => {
+    // Quiet refresh (after add/edit) keeps the rendered list and never
+    // flashes a spinner — no refresh feeling.
+    if (!quiet) setLoading(true)
 
     try {
       const res = await apiFetch<{
@@ -885,27 +889,27 @@ function ModuleQuestions({
 
       setQuestions(res.questions)
     } catch {
-      setQuestions([])
+      if (!quiet) setQuestions([])
     } finally {
       setLoading(false)
     }
   }, [moduleId])
 
   React.useEffect(() => {
-    if (open && questions === null) void load()
+    if (open && questions === null) void load(false)
   }, [open, questions, load])
 
-  // Parent bumps refreshKey after a save — reload the open list in place.
-  const keyRef = React.useRef(refreshKey)
+  // A question was added/edited: refresh silently when open,
+  // or invalidate so the next open fetches fresh. Skips the very first
+  // render (tick starts at 0) to avoid a duplicate fetch on mount.
+  const mountedTick = React.useRef(refreshTick)
 
   React.useEffect(() => {
-    if (refreshKey !== keyRef.current) {
-      keyRef.current = refreshKey
+    if (refreshTick === mountedTick.current) return
 
-      if (open) void load()
-      else setQuestions(null)
-    }
-  }, [refreshKey, open, load])
+    if (open) void load(true)
+    else setQuestions(null)
+  }, [refreshTick, open, load])
 
   return (
     <div className="mt-2">
@@ -972,7 +976,7 @@ function QuestionEditor({
   moduleId: string
   question: QuestionDetail | null
   onClose: () => void
-  onSaved: (created: boolean) => void
+  onSaved: (isNew: boolean) => void
 }) {
   const { toast } = useToast()
   const isEdit = !!question?.id
@@ -1102,21 +1106,20 @@ function QuestionEditor({
         })
       }
 
-      if (isEdit) {
-        toast({ title: "سوال به‌روزرسانی شد" })
-        onSaved(false)
-      } else {
-        // Rapid entry: clear the form for the next question, keep the
-        // dialog open exactly where the admin is.
+      toast({ title: isEdit ? "سوال به‌روزرسانی شد" : "سوال افزوده شد" })
+
+      if (!isEdit) {
+        // Rapid entry: stay in the same module dialog with a cleared form —
+        // no close, no list reload flash, no re-finding the book.
         setText("")
         setOptions(["", "", "", ""])
         setCorrectOption(0)
         setExplanation("")
         setImageBase64(null)
         setExplanationImageBase64(null)
-        toast({ title: "سوال افزوده شد — بعدی را بنویس" })
-        onSaved(true)
       }
+
+      onSaved(!isEdit)
     } catch (err) {
       toast({
         variant: "destructive",
@@ -1223,12 +1226,12 @@ function QuestionEditor({
                 <Textarea
                   value={opt}
                   dir="auto"
+                  rows={2}
                   onChange={(e) =>
                     setOptions((o) => o.map((x, idx) => (idx === i ? e.target.value : x)))
                   }
-                  placeholder={`گزینه ${LETTERS[i]} (اینتر برای چندخطی)`}
-                  rows={2}
-                  className="flex-1 min-h-[44px] resize-y whitespace-pre-wrap"
+                  placeholder={`گزینه ${LETTERS[i]} (Enter برای خط بعد)`}
+                  className="flex-1 min-h-[44px] resize-y"
                 />
                 {options.length > 2 && (
                   <button

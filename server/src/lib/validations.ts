@@ -253,8 +253,8 @@ export const studySessionStartSchema = z.object({
   subject: z.string().trim().max(80).optional().nullable(),
 })
 
-// Daily room challenge (owner or main admin): optional title + minutes goal.
-export const studyDailyChallengeSchema = z.object({
-  title: z.string().trim().max(120).optional().nullable(),
-  goalMin: z.number().int().min(10).max(960).optional().nullable(),
+// Daily room challenge (admin-set): a titled minutes goal for one day.
+export const studyChallengeSchema = z.object({
+  title: z.string().trim().min(2, "عنوان چالش حداقل ۲ نویسه باشد").max(80, "عنوان حداکثر ۸۰ نویسه باشد"),
+  goalMin: z.number().int().min(30, "هدف حداقل ۳۰ دقیقه است").max(960, "هدف حداکثر ۹۶۰ دقیقه است"),
 })

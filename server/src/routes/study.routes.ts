@@ -20,12 +20,12 @@ import { z } from "zod"
 import { and, desc, eq, gte, inArray } from "drizzle-orm"
 import { db } from "../lib/db.js"
 import { studyMembers, studyRooms, studySessions, users } from "../lib/db/schema.js"
-import { getSession, requireCsrf, rateLimit, clientIp, socketIp } from "../lib/auth/index.js"
+import { getSession, requireAdmin, requireCsrf, rateLimit, clientIp, socketIp } from "../lib/auth/index.js"
 import { getAppState } from "../lib/remote-config.js"
 import { logClient, logInfo, logWarn } from "../lib/logger.js"
 import {
   parseBody,
-  studyDailyChallengeSchema,
+  studyChallengeSchema,
   studyJoinSchema,
   studyRoomCreateSchema,
   studySessionStartSchema,
@@ -637,18 +637,14 @@ studyRouter.post("/study/rooms/:id/members/:userId/remove", async (req, res) => 
   res.json({ ok: true })
 })
 
-// ---- POST /study/rooms/:id/challenge (owner or main ADMIN, CSRF) ----
-// Daily challenge: an optional title + minutes goal every member sees.
-// Clearing (both null) removes it.
+// ---- PUT /study/rooms/:id/challenge (admin-only, CSRF) ----
+// Daily challenge for the room (title + minutes goal, valid today).
+// DELETE clears it. Visible to every member in the room detail.
 
-studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
-  const user = await getSession(req)
+studyRouter.put("/study/rooms/:id/challenge", async (req, res) => {
+  const user = await requireAdmin(req, res)
 
-  if (!user) {
-    res.status(401).json({ error: "برای ادامه باید وارد شوید" })
-
-    return
-  }
+  if (!user) return
 
   if (!(await requireCsrf(user, req))) {
     res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
@@ -656,8 +652,11 @@ studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
     return
   }
 
-  const roomId = req.params.id
-  const room = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
+  const data = parseBody(studyChallengeSchema, req.body, res)
+
+  if (!data) return
+
+  const room = await db.select({ id: studyRooms.id }).from(studyRooms).where(eq(studyRooms.id, req.params.id)).get()
 
   if (!room) {
     res.status(404).json({ error: "اتاق یافت نشد" })
@@ -665,32 +664,37 @@ studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
     return
   }
 
-  const isOwner = room.ownerId === user.id
-  const isMainAdmin = user.role === "ADMIN"
+  const today = tehranDayKey(new Date())
 
-  if (!isOwner && !isMainAdmin) {
-    res.status(403).json({ error: "فقط سازنده اتاق یا مدیر اصلی" })
+  await db
+    .update(studyRooms)
+    .set({ challengeTitle: data.title.trim(), challengeGoalMin: data.goalMin, challengeDate: today })
+    .where(eq(studyRooms.id, req.params.id))
+    .run()
+
+  logInfo("[study] challenge set", { roomId: req.params.id, by: user.id })
+
+  res.json({ ok: true })
+})
+
+studyRouter.delete("/study/rooms/:id/challenge", async (req, res) => {
+  const user = await requireAdmin(req, res)
+
+  if (!user) return
+
+  if (!(await requireCsrf(user, req))) {
+    res.status(403).json({ error: "توکن امنیتی نامعتبر است" })
 
     return
   }
 
-  const data = parseBody(studyDailyChallengeSchema, req.body, res)
-
-  if (!data) return
-
-  const updated = await db
+  await db
     .update(studyRooms)
-    .set({
-      dailyTitle: data.title?.trim() ? data.title.trim() : null,
-      dailyGoalMin: data.goalMin ?? null,
-    })
-    .where(eq(studyRooms.id, roomId))
-    .returning({ dailyTitle: studyRooms.dailyTitle, dailyGoalMin: studyRooms.dailyGoalMin })
-    .get()
+    .set({ challengeTitle: null, challengeGoalMin: null, challengeDate: null })
+    .where(eq(studyRooms.id, req.params.id))
+    .run()
 
-  logInfo("[study] daily challenge set", { roomId, by: user.id })
-
-  res.json({ challenge: updated })
+  res.json({ ok: true })
 })
 
 // ---- GET /study/rooms/:id ----
@@ -796,6 +800,12 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
   }
 
   const roomWeekMin = leaderboard.reduce((a, m) => a + m.weekMin, 0)
+  const roomTodayMin = leaderboard.reduce((a, m) => a + m.todayMin, 0)
+  // A challenge only lives on its own Tehran day — yesterday's goal
+  // never leaks into today.
+  const isChallengeDay = room.challengeDate === tehranDayKey(new Date(nowMs))
+  const dailyTitle = isChallengeDay ? room.challengeTitle : null
+  const dailyGoal = isChallengeDay ? room.challengeGoalMin : null
 
   res.json({
     room: {
@@ -821,12 +831,13 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
       }
       : null,
     challenge: { weekMin: roomWeekMin, goalMin: weekGoalMin },
-    daily: {
-      title: room.dailyTitle,
-      goalMin: room.dailyGoalMin,
-      todayMin: leaderboard.reduce((a, m) => a + m.todayMin, 0),
-      canEdit: room.ownerId === user.id || user.role === "ADMIN",
-    },
+    dailyChallenge: dailyTitle && dailyGoal !== null
+      ? {
+        title: dailyTitle,
+        goalMin: dailyGoal,
+        todayMin: roomTodayMin,
+      }
+      : null,
     serverNow: new Date(nowMs).toISOString(),
   })
 })

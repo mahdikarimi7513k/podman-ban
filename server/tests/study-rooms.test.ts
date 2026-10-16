@@ -115,6 +115,32 @@ describe("study rooms", () => {
     expect((await owner.post(`/api/study/rooms/${roomId}/members/${ownerRow.id}/remove`, {})).status).toBe(400)
   })
 
+  it("lets an admin set a daily challenge raced by the room", async () => {
+    await ensureUser("chall_admin", "ADMIN", "FANI_HERFEI")
+    const admin = await login("chall_admin", PASSWORD)
+    const owner = await studentSession("challowner")
+    const created = await owner.post("/api/study/rooms", { name: "race", capacity: 5, requireInvite: false })
+    const roomId: string = created.body.room.id
+
+    const student = await studentSession("challenger")
+
+    expect((await student.post("/api/study/rooms/join", { roomId })).status).toBe(200)
+    expect((await student.post("/api/study/session/start", { roomId })).status).toBe(201)
+
+    // Non-admins cannot set challenges.
+    expect((await student.put(`/api/study/rooms/${roomId}/challenge`, { title: "x", goalMin: 60 })).status).toBe(403)
+
+    const set = await admin.put(`/api/study/rooms/${roomId}/challenge`, { title: "یک ساعت تمرکز", goalMin: 60 })
+
+    expect(set.status).toBe(200)
+
+    const detail = await student.get(`/api/study/rooms/${roomId}`)
+
+    expect(detail.body.dailyChallenge.title).toBe("یک ساعت تمرکز")
+    expect(detail.body.dailyChallenge.goalMin).toBe(60)
+    expect(Number.isFinite(detail.body.dailyChallenge.todayMin)).toBe(true)
+  })
+
   it("transfers ownership to the earliest member when the owner leaves", async () => {
     const owner = await studentSession("owner10")
     const created = await owner.post("/api/study/rooms", { name: "managed3", capacity: 5, requireInvite: false })

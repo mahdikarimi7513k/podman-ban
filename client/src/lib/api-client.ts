@@ -15,6 +15,7 @@
  * Capacitor/APK: VITE_API_BASE points at the real API origin
  * (e.g. https://azmon.example.ir). Empty means same-origin (web behavior).
  */
+
 import { isNativeApp } from "@/lib/native-notify"
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "")
@@ -289,9 +290,9 @@ export async function apiUpload<T = unknown>(input: string, file: File): Promise
   )
 }
 
-// Same bridge detection lives in exactly one place (native-notify) so web
-// and native behavior can never drift apart; the dynamic plugin import
-// there keeps @capacitor/core out of the web bundle.
+// (isNativeApp lives in @/lib/native-notify — single source; the inline
+// copy that used to be here was removed to stop the two drifting apart.)
+
 async function fileToBase64(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   // Chunked: btoa on one giant string blows the call stack past ~100k chars.
