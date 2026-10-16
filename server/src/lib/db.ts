@@ -114,9 +114,8 @@ export const RUNTIME_ALTERS = [
   "ALTER TABLE `RemoteConfig` ADD `konkurDate` text",
   "ALTER TABLE `RemoteConfig` ADD `studyDailyGoalMin` integer DEFAULT 180 NOT NULL",
   "ALTER TABLE `Question` ADD `explanationImageBase64` text",
-  "ALTER TABLE `StudyRoom` ADD `challengeText` text",
-  "ALTER TABLE `StudyRoom` ADD `challengeGoalMin` integer",
-  "ALTER TABLE `StudyRoom` ADD `challengeDate` text",
+  "ALTER TABLE `StudyRoom` ADD `dailyTitle` text",
+  "ALTER TABLE `StudyRoom` ADD `dailyGoalMin` integer",
 ]
 
 // Study rooms (host-safe: shared hosts can't run drizzle-kit migrate).

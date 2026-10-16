@@ -527,6 +527,7 @@ export function ReportView() {
           <h2 className="text-sm font-semibold">آخرین آزمون‌ها</h2>
         </div>
         {sessions && sessions.length > 0 ? (
+          // Collapsed by default: with many exams the user should not scroll.
           <Accordion
             type="multiple"
             defaultValue={[]}

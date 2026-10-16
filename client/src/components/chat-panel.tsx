@@ -29,6 +29,7 @@ export function ChatPanel({
     userId,
     isAdmin,
   })
+
   const [text, setText] = React.useState("")
   const scrollRef = React.useRef<HTMLDivElement>(null)
   // Snap to bottom on new messages only while the user is already reading
@@ -37,6 +38,7 @@ export function ChatPanel({
 
   const onScroll = () => {
     const el = scrollRef.current
+
     if (!el) return
     nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64
   }
@@ -44,6 +46,7 @@ export function ChatPanel({
   // auto-scroll to bottom on new message (when already near bottom)
   React.useEffect(() => {
     const el = scrollRef.current
+
     if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
 
@@ -67,6 +70,7 @@ export function ChatPanel({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!text.trim() || sending) return
     nearBottomRef.current = true // my own message → follow to bottom
     void send(sanitizeMessageText(text))
@@ -156,6 +160,7 @@ export function ChatPanel({
 
 function MessageBubble({ msg, isAdmin }: { msg: ChatMessage; isAdmin: boolean }) {
   const mine = isAdmin ? msg.sender === "ADMIN" : msg.sender === "STUDENT"
+
   const time = formatTehran(msg.createdAt, {
     hour: "2-digit",
     minute: "2-digit",

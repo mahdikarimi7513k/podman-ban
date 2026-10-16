@@ -28,7 +28,7 @@ import {
   Footprints,
   CalendarDays,
   Medal,
-  Megaphone,
+  Zap,
   Pencil,
 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api-client"
@@ -36,7 +36,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectTrigger,
@@ -115,8 +114,8 @@ interface RoomDetail {
   }
   leaderboard: LeaderRow[]
   mySession: { id: string; status: "ACTIVE" | "PAUSED"; elapsedMs: number; startedAt: string; serverNow: string } | null
-  dailyChallenge: { text: string; goalMin: number; date: string | null; isToday: boolean; roomTodayMin: number } | null
   challenge: { weekMin: number; goalMin: number }
+  daily: { title: string | null; goalMin: number | null; todayMin: number; canEdit: boolean }
   serverNow: string
 }
 
@@ -447,9 +446,9 @@ function RoomsScreen({ go }: { go: (s: SubView) => void }) {
   React.useEffect(() => {
     void load()
 
-    // Visibility-gated: backgrounded tabs/APK views don't burn radio.
+    // No background drain: refresh only while the tab is visible.
     const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load(true)
+      if (!document.hidden) void load(true)
     }, 15000)
 
     return () => window.clearInterval(id)
@@ -607,11 +606,14 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
     setLoading(true)
     void load()
 
+    // Gated polling: paused while hidden, resyncs on return instead.
     const poll = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load()
+      if (!document.hidden) void load()
     }, 10000)
 
-    const tick = window.setInterval(() => setNow((t) => t + 1000), 1000)
+    const tick = window.setInterval(() => {
+      if (!document.hidden) setNow((t) => t + 1000)
+    }, 1000)
 
     // Backgrounded tabs throttle intervals: resync wall-clock on return.
     const onVisible = () => {
@@ -980,8 +982,7 @@ function DetailScreen({ roomId, go }: { roomId: string; go: (s: SubView) => void
 
       <DailyChallengeCard
         roomId={detail.room.id}
-        challenge={detail.dailyChallenge}
-        isOwner={detail.room.isOwner}
+        daily={detail.daily}
         onChanged={() => void load()}
       />
 
@@ -1104,49 +1105,43 @@ function MemberRoster({
 }
 
 /**
- * Daily challenge posted by the room owner: text + minutes goal for the
- * day, with the room's live today-total as progress. Everyone sees it;
- * only the owner gets the edit button.
+ * Daily challenge: every member sees today's title + room progress;
+ * the owner (or the main admin) sets it.
  */
 function DailyChallengeCard({
   roomId,
-  challenge,
-  isOwner,
+  daily,
   onChanged,
 }: {
   roomId: string
-  challenge: RoomDetail["dailyChallenge"]
-  isOwner: boolean
+  daily: RoomDetail["daily"]
   onChanged: () => void
 }) {
   const { toast } = useToast()
-  const [open, setOpen] = React.useState(false)
-  const [text, setText] = React.useState("")
-  const [goal, setGoal] = React.useState(120)
+  const [editing, setEditing] = React.useState(false)
+  const [title, setTitle] = React.useState(daily.title ?? "")
+  const [goal, setGoal] = React.useState(daily.goalMin ?? 180)
   const [saving, setSaving] = React.useState(false)
 
-  const pct =
-    challenge && challenge.goalMin > 0
-      ? Math.min(100, Math.round((challenge.roomTodayMin / challenge.goalMin) * 100))
-      : 0
+  const pct = daily.goalMin && daily.goalMin > 0
+    ? Math.min(100, Math.round((daily.todayMin / daily.goalMin) * 100))
+    : 0
 
-  const save = async () => {
-    if (text.trim().length < 2 || saving) return
-
+  const save = async (clear = false) => {
     setSaving(true)
 
     try {
       await apiFetch(`/api/study/rooms/${roomId}/challenge`, {
         method: "POST",
-        body: JSON.stringify({ text: text.trim(), goalMin: goal }),
+        body: JSON.stringify(clear ? { title: null, goalMin: null } : { title: title.trim() || null, goalMin: goal }),
       })
-      setOpen(false)
-      toast({ title: "چالش امروز ثبت شد" })
+      setEditing(false)
+      toast({ title: clear ? "چالش روزانه حذف شد" : "چالش روزانه ثبت شد" })
       onChanged()
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "ثبت چالش ناموفق بود",
+        title: "ذخیره ناموفق بود",
         description: err instanceof ApiError ? err.message : undefined,
       })
     } finally {
@@ -1157,90 +1152,85 @@ function DailyChallengeCard({
   return (
     <section className="rounded-2xl border border-border bg-card p-4 space-y-2">
       <div className="flex items-center gap-2">
-        <Megaphone className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
+        <Zap className="size-4 text-muted-foreground" strokeWidth={ICON_STROKE} />
         <h2 className="text-sm font-semibold">چالش امروز اتاق</h2>
-        {challenge && !challenge.isToday && (
-          <span className="text-[10px] rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
-            مال قبل
-          </span>
-        )}
-        {isOwner && (
+        {daily.canEdit && !editing && (
           <button
             type="button"
             onClick={() => {
-              setText(challenge?.text ?? "")
-              setGoal(challenge?.goalMin && challenge.goalMin >= 15 ? challenge.goalMin : 120)
-              setOpen(true)
+              setTitle(daily.title ?? "")
+              setGoal(daily.goalMin ?? 180)
+              setEditing(true)
             }}
-            aria-label={challenge ? "ویرایش چالش امروز" : "ثبت چالش امروز"}
-            className="ms-auto min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+            className="ms-auto inline-flex items-center gap-1 min-h-[44px] px-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            <Pencil className="size-4" />
+            <Pencil className="size-3.5" />
+            {daily.title || daily.goalMin ? "ویرایش" : "ثبت چالش"}
           </button>
         )}
       </div>
-      {challenge ? (
-        <>
-          <p dir="auto" className="text-sm font-medium leading-7 whitespace-pre-wrap">{challenge.text}</p>
-          <p className="text-[11px] text-muted-foreground tabular-nums">
-            مجموع امروز اتاق: <FaNum>{formatDur(challenge.roomTodayMin)}</FaNum> از <FaNum>{formatDur(challenge.goalMin)}</FaNum>
-          </p>
-          <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
-            <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+      {editing ? (
+        <div className="space-y-2">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="مثلاً: امروز همه ۳ ساعت می‌خوانیم"
+            maxLength={120}
+            className="h-11"
+          />
+          <div className="flex items-center gap-2">
+            <Label htmlFor="daily-goal" className="text-xs text-muted-foreground shrink-0">هدف (دقیقه)</Label>
+            <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
+              <SelectTrigger id="daily-goal" className="h-10 flex-1 cursor-pointer" dir="ltr">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[30, 60, 120, 180, 240, 300, 360, 480].map((m) => (
+                  <SelectItem key={m} value={String(m)} className="cursor-pointer">
+                    <FaNum>{m}</FaNum> دقیقه
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {isOwner ? "هنوز چالشی نگذاشتی — با مداد بالا چالش امروز را بنویس." : "سازنده اتاق هنوز چالش امروز را نگذاشته است."}
-        </p>
-      )}
-
-      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>چالش امروز اتاق</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="challenge-text" className="text-xs">متن چالش</Label>
-              <Textarea
-                id="challenge-text"
-                dir="auto"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={2}
-                maxLength={200}
-                placeholder="مثلاً: امروز هر نفر ۲ ساعت بخواند"
-                className="resize-y min-h-[56px]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="challenge-goal" className="text-xs">هدف (دقیقه برای کل اتاق)</Label>
-              <Select value={String(goal)} onValueChange={(v) => setGoal(Number(v))}>
-                <SelectTrigger id="challenge-goal" className="h-11 cursor-pointer" dir="ltr">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[30, 60, 120, 180, 240, 360, 480].map((m) => (
-                    <SelectItem key={m} value={String(m)} className="cursor-pointer">
-                      <FaNum>{m}</FaNum> دقیقه
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} className="cursor-pointer">
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void save(false)} disabled={saving} className="cursor-pointer flex-1 h-11">
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              ذخیره
+            </Button>
+            {(daily.title || daily.goalMin) && (
+              <Button size="sm" variant="ghost" onClick={() => void save(true)} disabled={saving} className="cursor-pointer text-destructive hover:text-destructive h-11">
+                حذف
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)} className="cursor-pointer h-11">
               انصراف
             </Button>
-            <Button onClick={() => void save()} disabled={text.trim().length < 2 || saving} className="cursor-pointer">
-              {saving && <Loader2 className="size-4 animate-spin" />}
-              ثبت چالش
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      ) : daily.title || daily.goalMin ? (
+        <>
+          {daily.title && <p className="text-sm font-medium leading-7">{daily.title}</p>}
+          {daily.goalMin ? (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                مجموع امروز اتاق: <FaNum>{formatDur(daily.todayMin)}</FaNum> از <FaNum>{formatDur(daily.goalMin)}</FaNum>
+              </p>
+              <div className="h-2.5 rounded-full bg-secondary overflow-hidden" dir="ltr">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#18A8FF] to-[#0878F9]" style={{ width: `${pct}%` }} />
+              </div>
+            </>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              مجموع امروز اتاق: <FaNum>{formatDur(daily.todayMin)}</FaNum>
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          {daily.canEdit ? "هنوز چالشی ثبت نشده — با «ثبت چالش» امروز را بساز." : "هنوز چالشی برای امروز ثبت نشده است."}
+        </p>
+      )}
     </section>
   )
 }

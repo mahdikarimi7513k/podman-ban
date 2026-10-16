@@ -53,12 +53,21 @@ function applyTheme(theme: Theme): void {
 
   document.documentElement.classList.toggle("dark", resolved === "dark")
   document.documentElement.style.colorScheme = resolved
+  syncThemeColorMeta(resolved)
+}
 
-  // Theme-color follows the theme (was fixed light-only): PWA status bar
-  // and browser chrome match dark mode too.
-  const meta = document.querySelector('meta[name="theme-color"]')
+/** Keep the browser chrome (status bar, task switcher) in the theme. */
+function syncThemeColorMeta(resolved: "light" | "dark"): void {
+  const color = resolved === "dark" ? "#0A0A0A" : "#FAFAFA"
+  let meta = document.querySelector('meta[name="theme-color"]')
 
-  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0A0A0A" : "#FAFAFA")
+  if (!meta) {
+    meta = document.createElement("meta")
+    meta.setAttribute("name", "theme-color")
+    document.head.appendChild(meta)
+  }
+
+  meta.setAttribute("content", color)
 }
 
 /** Momentarily kill transitions so the switch is instant, not animated. */

@@ -8,8 +8,8 @@ import type { LocalNotificationsPlugin } from "@capacitor/local-notifications"
 
 export type NotifyPlugin = Pick<LocalNotificationsPlugin, "requestPermissions" | "schedule">
 
-// Single source of the Capacitor bridge check (api-client re-exports it).
-// Inline sniffing keeps @capacitor/core out of the web bundle.
+// Same bridge detection as api-client (kept inline so @capacitor/core
+// stays out of the web bundle).
 export function isNativeApp(): boolean {
   // SAFETY: DOM Window has no Capacitor bridge keys; the intersection only
   // narrows reads to optional props — no runtime shape is assumed.

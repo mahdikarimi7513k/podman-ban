@@ -25,7 +25,7 @@ import { getAppState } from "../lib/remote-config.js"
 import { logClient, logInfo, logWarn } from "../lib/logger.js"
 import {
   parseBody,
-  studyChallengeSchema,
+  studyDailyChallengeSchema,
   studyJoinSchema,
   studyRoomCreateSchema,
   studySessionStartSchema,
@@ -637,9 +637,9 @@ studyRouter.post("/study/rooms/:id/members/:userId/remove", async (req, res) => 
   res.json({ ok: true })
 })
 
-// ---- POST /study/rooms/:id/challenge (owner only, CSRF) ----
-// The room owner posts the daily challenge (text + minutes goal). Dated
-// with today (Tehran) on every save so clients can tell fresh from stale.
+// ---- POST /study/rooms/:id/challenge (owner or main ADMIN, CSRF) ----
+// Daily challenge: an optional title + minutes goal every member sees.
+// Clearing (both null) removes it.
 
 studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
   const user = await getSession(req)
@@ -656,18 +656,6 @@ studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
     return
   }
 
-  const ip = clientIp(req)
-  const sip = socketIp(req)
-  const rl = rateLimit(`study-challenge:${user.id}`, 20, 300)
-  const rlIp = rateLimit(`study-challenge-ip:${ip}`, 60, 300)
-  const rlSock = rateLimit(`study-challenge-sock:${sip}`, 200, 300)
-
-  if (!rl.ok || !rlIp.ok || !rlSock.ok) {
-    res.status(429).json({ error: "تلاش‌های بیش از حد" })
-
-    return
-  }
-
   const roomId = req.params.id
   const room = await db.select().from(studyRooms).where(eq(studyRooms.id, roomId)).get()
 
@@ -677,32 +665,30 @@ studyRouter.post("/study/rooms/:id/challenge", async (req, res) => {
     return
   }
 
-  if (room.ownerId !== user.id) {
-    res.status(403).json({ error: "فقط سازنده اتاق می‌تواند چالش بگذارد" })
+  const isOwner = room.ownerId === user.id
+  const isMainAdmin = user.role === "ADMIN"
+
+  if (!isOwner && !isMainAdmin) {
+    res.status(403).json({ error: "فقط سازنده اتاق یا مدیر اصلی" })
 
     return
   }
 
-  const data = parseBody(studyChallengeSchema, req.body, res)
+  const data = parseBody(studyDailyChallengeSchema, req.body, res)
 
   if (!data) return
 
   const updated = await db
     .update(studyRooms)
     .set({
-      challengeText: data.text,
-      challengeGoalMin: data.goalMin,
-      challengeDate: tehranDayKey(new Date()),
+      dailyTitle: data.title?.trim() ? data.title.trim() : null,
+      dailyGoalMin: data.goalMin ?? null,
     })
     .where(eq(studyRooms.id, roomId))
-    .returning({
-      challengeText: studyRooms.challengeText,
-      challengeGoalMin: studyRooms.challengeGoalMin,
-      challengeDate: studyRooms.challengeDate,
-    })
+    .returning({ dailyTitle: studyRooms.dailyTitle, dailyGoalMin: studyRooms.dailyGoalMin })
     .get()
 
-  logInfo("[study] challenge posted", { roomId, by: user.id })
+  logInfo("[study] daily challenge set", { roomId, by: user.id })
 
   res.json({ challenge: updated })
 })
@@ -810,7 +796,6 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
   }
 
   const roomWeekMin = leaderboard.reduce((a, m) => a + m.weekMin, 0)
-  const roomTodayMin = leaderboard.reduce((a, m) => a + m.todayMin, 0)
 
   res.json({
     room: {
@@ -835,16 +820,13 @@ studyRouter.get("/study/rooms/:id", async (req, res) => {
         serverNow: new Date(nowMs).toISOString(),
       }
       : null,
-    dailyChallenge: room.challengeText
-      ? {
-        text: room.challengeText,
-        goalMin: room.challengeGoalMin ?? 0,
-        date: room.challengeDate,
-        isToday: room.challengeDate === tehranDayKey(new Date(nowMs)),
-        roomTodayMin,
-      }
-      : null,
     challenge: { weekMin: roomWeekMin, goalMin: weekGoalMin },
+    daily: {
+      title: room.dailyTitle,
+      goalMin: room.dailyGoalMin,
+      todayMin: leaderboard.reduce((a, m) => a + m.todayMin, 0),
+      canEdit: room.ownerId === user.id || user.role === "ADMIN",
+    },
     serverNow: new Date(nowMs).toISOString(),
   })
 })

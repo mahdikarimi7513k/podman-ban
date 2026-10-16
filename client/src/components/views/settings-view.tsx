@@ -41,8 +41,7 @@ import { parseExamPrefs } from "@/lib/exam-prefs"
 import type { ExamPrefs } from "@/lib/exam-prefs"
 import { ChatPanel } from "@/components/chat-panel"
 import { useToast } from "@/hooks/use-toast"
-import { useInstallPrompt } from "@/hooks/use-install-prompt"
-import { isNativeApp } from "@/lib/native-notify"
+import { usePwaInstall } from "@/hooks/use-pwa-install"
 import { cn, ICON_STROKE } from "@/lib/utils";
 
 export function SettingsView() {
@@ -124,8 +123,6 @@ export function SettingsView() {
         </p>
       </div>
 
-      <InstallAppSection />
-
       {/* Profile */}
       <ProfileCard />
 
@@ -177,6 +174,9 @@ export function SettingsView() {
           })}
         </div>
       </section>
+
+      {/* PWA install (web only, only when the browser offers it) */}
+      <PwaInstallSection />
 
       {/* Preferences */}
       <section className="rounded-xl border border-border bg-card divide-y divide-border">
@@ -358,36 +358,6 @@ function ProfileRow({
 
 const AVATAR_MAX_BYTES = 500 * 1024
 
-/** PWA install (web only): guided button, hidden in the APK and when ineligible. */
-function InstallAppSection() {
-  const prompt = useInstallPrompt()
-
-  if (isNativeApp() || !prompt.available) return null
-
-  return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">نصب برنامه</p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            پودمان‌بان را مثل یک برنامه روی گوشی نصب کن — بدون نیاز به کافه‌بازار.
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={prompt.install}
-          disabled={prompt.installing}
-          className="cursor-pointer h-11 shrink-0"
-        >
-          {prompt.installing ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          نصب
-        </Button>
-      </div>
-    </section>
-  )
-}
-
 interface ProfileSaveBody {
   name?: string
   avatarBase64?: string | null
@@ -397,6 +367,40 @@ interface ProfileSaveBody {
  * Social-style profile card: tap the avatar to set/change the photo
  * (pencil badge), pencil button next to the name for inline rename.
  */
+function PwaInstallSection() {
+  const { canInstall, install } = usePwaInstall()
+  const [busy, setBusy] = React.useState(false)
+
+  if (!canInstall) return null
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
+          <Download className="size-5" strokeWidth={ICON_STROKE} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">نصب برنامه روی گوشی</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            بدون نیاز به بازار — مستقیم از مرورگر نصب می‌شود.
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setBusy(true)
+            void install().finally(() => setBusy(false))
+          }}
+          disabled={busy}
+          className="h-11 cursor-pointer shrink-0"
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          نصب
+        </Button>
+      </div>
+    </section>
+  )
+}
+
 function ProfileCard() {
   const user = useApp((s) => s.user)
   const { toast } = useToast()
